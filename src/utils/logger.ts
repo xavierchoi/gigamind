@@ -64,7 +64,35 @@ class Logger {
     return entry;
   }
 
+  /**
+   * Check if terminal supports ANSI color codes
+   * Windows 10+ supports ANSI natively, older Windows may not
+   */
+  private supportsColor(): boolean {
+    // Check for explicit NO_COLOR environment variable
+    if (process.env.NO_COLOR !== undefined) {
+      return false;
+    }
+
+    // Check if stdout is a TTY
+    if (!process.stdout.isTTY) {
+      return false;
+    }
+
+    // Windows 10 build 14931+ supports ANSI natively
+    // For older Windows, check TERM or COLORTERM
+    if (process.platform === "win32") {
+      // Modern Windows Terminal and PowerShell support colors
+      return true;
+    }
+
+    // Unix-like systems: check TERM isn't "dumb"
+    return process.env.TERM !== "dumb";
+  }
+
   private formatConsoleOutput(entry: LogEntry): string {
+    const useColors = this.supportsColor();
+
     const levelColors: Record<LogLevel, string> = {
       debug: "\x1b[36m", // cyan
       info: "\x1b[32m",  // green
@@ -73,7 +101,11 @@ class Logger {
     };
     const reset = "\x1b[0m";
     const levelStr = `[${entry.level.toUpperCase()}]`.padEnd(7);
-    let output = `${levelColors[entry.level]}${levelStr}${reset} ${entry.message}`;
+
+    // Apply color only if terminal supports it
+    let output = useColors
+      ? `${levelColors[entry.level]}${levelStr}${reset} ${entry.message}`
+      : `${levelStr} ${entry.message}`;
 
     if (entry.data !== undefined && !(entry.data instanceof Error)) {
       output += ` ${JSON.stringify(entry.data)}`;

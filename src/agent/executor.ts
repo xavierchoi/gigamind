@@ -10,6 +10,7 @@ import { exec, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { glob } from "glob";
 import { getLogger } from "../utils/logger.js";
+import { expandPath } from "../utils/config.js";
 import type {
   GlobToolInput,
   GrepToolInput,
@@ -61,17 +62,27 @@ export interface ToolResult {
 }
 
 function isSafePath(filePath: string, notesDir: string): boolean {
-  const resolvedPath = path.resolve(filePath);
-  const resolvedNotesDir = path.resolve(notesDir);
+  // Expand tilde in paths before resolving
+  const expandedFilePath = expandPath(filePath);
+  const expandedNotesDir = expandPath(notesDir);
+
+  const resolvedPath = path.resolve(expandedFilePath);
+  const resolvedNotesDir = path.resolve(expandedNotesDir);
 
   // Allow paths within the notes directory
-  if (resolvedPath.startsWith(resolvedNotesDir)) {
+  // Use path.sep for cross-platform compatibility (Windows: \, Unix: /)
+  if (resolvedPath === resolvedNotesDir ||
+      resolvedPath.startsWith(resolvedNotesDir + path.sep)) {
     return true;
   }
 
   // Allow relative paths that stay within notes
+  // Normalize paths for cross-platform comparison
+  const normalizedPath = path.normalize(expandedFilePath);
   for (const allowed of ALLOWED_DIRS) {
-    if (filePath.startsWith(allowed)) {
+    const normalizedAllowed = path.normalize(allowed);
+    if (normalizedPath === normalizedAllowed ||
+        normalizedPath.startsWith(normalizedAllowed + path.sep)) {
       return true;
     }
   }
@@ -89,13 +100,14 @@ export async function executeGlob(
   notesDir: string
 ): Promise<ToolResult> {
   try {
-    const searchPath = input.path || notesDir;
+    const rawSearchPath = input.path || notesDir;
+    const searchPath = expandPath(rawSearchPath);
 
-    if (!isSafePath(searchPath, notesDir)) {
+    if (!isSafePath(rawSearchPath, notesDir)) {
       return {
         success: false,
         output: "",
-        error: `Access denied: ${searchPath} is outside the allowed directory`,
+        error: `Access denied: ${rawSearchPath} is outside the allowed directory`,
       };
     }
 
@@ -151,13 +163,14 @@ export async function executeGrep(
   notesDir: string
 ): Promise<ToolResult> {
   try {
-    const searchPath = input.path || notesDir;
+    const rawSearchPath = input.path || notesDir;
+    const searchPath = expandPath(rawSearchPath);
 
-    if (!isSafePath(searchPath, notesDir)) {
+    if (!isSafePath(rawSearchPath, notesDir)) {
       return {
         success: false,
         output: "",
-        error: `Access denied: ${searchPath} is outside the allowed directory`,
+        error: `Access denied: ${rawSearchPath} is outside the allowed directory`,
       };
     }
 
@@ -223,13 +236,14 @@ export async function executeRead(
   notesDir: string
 ): Promise<ToolResult> {
   try {
-    const filePath = input.file_path;
+    const rawFilePath = input.file_path;
+    const filePath = expandPath(rawFilePath);
 
-    if (!isSafePath(filePath, notesDir)) {
+    if (!isSafePath(rawFilePath, notesDir)) {
       return {
         success: false,
         output: "",
-        error: `Access denied: ${filePath} is outside the allowed directory`,
+        error: `Access denied: ${rawFilePath} is outside the allowed directory`,
       };
     }
 
@@ -257,13 +271,14 @@ export async function executeWrite(
   notesDir: string
 ): Promise<ToolResult> {
   try {
-    const filePath = input.file_path;
+    const rawFilePath = input.file_path;
+    const filePath = expandPath(rawFilePath);
 
-    if (!isSafePath(filePath, notesDir)) {
+    if (!isSafePath(rawFilePath, notesDir)) {
       return {
         success: false,
         output: "",
-        error: `Access denied: ${filePath} is outside the allowed directory`,
+        error: `Access denied: ${rawFilePath} is outside the allowed directory`,
       };
     }
 
@@ -295,13 +310,14 @@ export async function executeEdit(
   notesDir: string
 ): Promise<ToolResult> {
   try {
-    const filePath = input.file_path;
+    const rawFilePath = input.file_path;
+    const filePath = expandPath(rawFilePath);
 
-    if (!isSafePath(filePath, notesDir)) {
+    if (!isSafePath(rawFilePath, notesDir)) {
       return {
         success: false,
         output: "",
-        error: `Access denied: ${filePath} is outside the allowed directory`,
+        error: `Access denied: ${rawFilePath} is outside the allowed directory`,
       };
     }
 
@@ -345,6 +361,7 @@ export async function executeBash(
 ): Promise<ToolResult> {
   try {
     const command = input.command;
+    const expandedNotesDir = expandPath(notesDir);
 
     if (!isSafeCommand(command)) {
       return {
@@ -358,8 +375,8 @@ export async function executeBash(
 
     // Cross-platform: Use appropriate shell based on OS
     const shellOptions = isWindows
-      ? { shell: "cmd.exe" as const, cwd: notesDir, timeout: 30000 }
-      : { shell: "/bin/sh" as const, cwd: notesDir, timeout: 30000 };
+      ? { shell: "cmd.exe" as const, cwd: expandedNotesDir, timeout: 30000 }
+      : { shell: "/bin/sh" as const, cwd: expandedNotesDir, timeout: 30000 };
 
     const { stdout, stderr } = await execAsync(command, shellOptions);
 

@@ -10,7 +10,7 @@ const SLASH_COMMANDS = [
   { command: "/config", description: "설정 보기" },
   { command: "/clear", description: "대화 내역 정리" },
   { command: "/search", description: "노트 검색 (준비 중)" },
-  { command: "/import", description: "외부 노트 가져오기 (준비 중)" },
+  { command: "/import", description: "외부 노트 가져오기 (Obsidian, 마크다운)" },
   { command: "/sync", description: "Git 동기화 (준비 중)" },
 ];
 

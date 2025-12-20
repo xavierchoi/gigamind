@@ -4,6 +4,7 @@ import { Chat, type Message } from "./components/Chat.js";
 import { StatusBar } from "./components/StatusBar.js";
 import { Onboarding, type OnboardingResult } from "./components/Onboarding.js";
 import { ConfigMenu } from "./components/ConfigMenu.js";
+import { Import, type ImportResult } from "./components/Import.js";
 import { GigaMindClient } from "./agent/client.js";
 import { SessionManager } from "./agent/session.js";
 import {
@@ -19,7 +20,7 @@ import {
   type GigaMindConfig,
 } from "./utils/config.js";
 
-type AppState = "loading" | "onboarding" | "chat" | "config";
+type AppState = "loading" | "onboarding" | "chat" | "config" | "import";
 
 // Format error messages to be user-friendly
 function formatErrorMessage(err: unknown): string {
@@ -183,12 +184,24 @@ export function App() {
       await newSessionManager.createSession();
       setSessionManager(newSessionManager);
 
+      // Build welcome message
+      let welcomeMessage = result.userName
+        ? `설정이 완료되었습니다, ${result.userName}님! 이제 GigaMind와 대화를 시작할 수 있어요.`
+        : "설정이 완료되었습니다! 이제 GigaMind와 대화를 시작할 수 있어요.";
+
+      // Add import info if configured during onboarding
+      if (result.importConfig?.sourcePath) {
+        welcomeMessage += `\n\n📥 노트 가져오기가 설정되었어요:\n- 소스: ${result.importConfig.source === "obsidian" ? "Obsidian Vault" : "마크다운 폴더"}\n- 경로: ${result.importConfig.sourcePath}\n\n/import 명령어를 입력해서 가져오기를 시작하세요!`;
+      } else {
+        welcomeMessage += " 무엇을 도와드릴까요?";
+      }
+
+      welcomeMessage += "\n\n💡 /help를 입력하면 사용 가능한 명령어를 볼 수 있어요.";
+
       setMessages([
         {
           role: "assistant",
-          content: result.userName
-            ? `설정이 완료되었습니다, ${result.userName}님! 이제 GigaMind와 대화를 시작할 수 있어요. 무엇을 도와드릴까요?\n\n💡 /help를 입력하면 사용 가능한 명령어를 볼 수 있어요.`
-            : "설정이 완료되었습니다! 이제 GigaMind와 대화를 시작할 수 있어요. 무엇을 도와드릴까요?\n\n💡 /help를 입력하면 사용 가능한 명령어를 볼 수 있어요.",
+          content: welcomeMessage,
         },
       ]);
 
@@ -209,8 +222,8 @@ export function App() {
         const command = parts[0].toLowerCase();
 
         // Known commands
-        const IMPLEMENTED_COMMANDS = ["help", "config", "clear"];
-        const UNIMPLEMENTED_COMMANDS = ["search", "import", "sync"];
+        const IMPLEMENTED_COMMANDS = ["help", "config", "clear", "import"];
+        const UNIMPLEMENTED_COMMANDS = ["search", "sync"];
 
         if (command === "help") {
           setMessages((prev) => [
@@ -222,8 +235,8 @@ export function App() {
 /help - 도움말
 /config - 설정 보기
 /clear - 대화 내역 정리
+/import - 외부 노트 가져오기
 /search <query> - 노트 검색 (준비 중)
-/import - 외부 노트 가져오기 (준비 중)
 /sync - Git 동기화 (준비 중)`,
             },
           ]);
@@ -247,6 +260,14 @@ export function App() {
                 : "안녕하세요! 무엇을 도와드릴까요?\n\n💡 /help를 입력하면 사용 가능한 명령어를 볼 수 있어요.",
             },
           ]);
+          return;
+        }
+        if (command === "import") {
+          setMessages((prev) => [
+            ...prev,
+            { role: "user", content: userMessage },
+          ]);
+          setAppState("import");
           return;
         }
 
@@ -416,6 +437,46 @@ export function App() {
     setAppState("chat");
   }, []);
 
+  const handleImportComplete = useCallback(async (result: ImportResult) => {
+    // Update note stats after import
+    if (config) {
+      const stats = await getNoteStats(config.notesDir);
+      setNoteCount(stats.noteCount);
+      setConnectionCount(stats.connectionCount);
+    }
+
+    let message: string;
+    if (result.cancelled) {
+      const imageInfo = result.imagesImported > 0 ? `\n🖼️ ${result.imagesImported}개 이미지를 복사했어요.` : "";
+      message = `⚠️ 가져오기가 취소되었습니다.\n\n📁 취소 전까지 ${result.filesImported}개 노트를 가져왔어요.${imageInfo}\n📂 소스: ${result.sourcePath}\n📍 저장 위치: ${config?.notesDir}/inbox/`;
+    } else if (result.success) {
+      const imageInfo = result.imagesImported > 0 ? `\n🖼️ ${result.imagesImported}개 이미지를 복사했어요.` : "";
+      message = `✅ 가져오기가 완료되었습니다!\n\n📁 ${result.filesImported}개 노트를 가져왔어요.${imageInfo}\n📂 소스: ${result.sourcePath}\n📍 저장 위치: ${config?.notesDir}/inbox/`;
+    } else {
+      message = `❌ 가져오기에 실패했습니다: ${result.error}`;
+    }
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        role: "assistant",
+        content: message,
+      },
+    ]);
+    setAppState("chat");
+  }, [config]);
+
+  const handleImportCancel = useCallback(() => {
+    setMessages((prev) => [
+      ...prev,
+      {
+        role: "assistant",
+        content: "가져오기가 취소되었습니다.",
+      },
+    ]);
+    setAppState("chat");
+  }, []);
+
   if (error) {
     return (
       <Box flexDirection="column" padding={2}>
@@ -458,6 +519,23 @@ export function App() {
           config={config}
           onSave={handleConfigSave}
           onCancel={handleConfigCancel}
+        />
+      </Box>
+    );
+  }
+
+  if (appState === "import" && config) {
+    return (
+      <Box flexDirection="column">
+        <StatusBar
+          noteCount={noteCount}
+          connectionCount={connectionCount}
+          showStats={config.feedback.showStats}
+        />
+        <Import
+          notesDir={config.notesDir}
+          onComplete={handleImportComplete}
+          onCancel={handleImportCancel}
         />
       </Box>
     );

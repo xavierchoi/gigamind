@@ -5,7 +5,71 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.1] - 2025-12-19
+## [0.2.0] - 2025-12-19
+
+### Added
+
+#### Onboarding Flow Improvements
+- **Import Options**: Added support for importing existing notes from:
+  - Obsidian Vault integration
+  - Generic markdown folder import
+- **API Key Setup Guide**: 4-step detailed guide for API key generation and configuration
+- **Multi-selection UI**: Enhanced selection interface with:
+  - Space key for toggling selections
+  - Enter key for confirmation
+  - Clear visual feedback for selected items
+- **Estimated Time Display**: Shows "약 2분이면 완료됩니다" (Complete in about 2 minutes) on welcome screen
+- **Welcome Screen Enhancement**: Added emoji to welcome screen for better visual appeal
+
+#### Import Feature (`/import` command)
+- **Obsidian Vault Support**: Full integration with Obsidian vaults
+- **Generic Markdown Folder Support**: Import from any markdown folder structure
+- **Automatic Frontmatter Conversion**: Converts imported notes to GigaMind frontmatter format with:
+  - `id`: Unique identifier
+  - `title`: Note title
+  - `type`: Note classification
+  - `created`: Creation timestamp
+  - `modified`: Last modified timestamp
+  - `tags`: Note tags
+- **Wikilink Path Updates**: Automatically updates markdown wikilinks ([[link]]) to maintain correct paths
+- **Image File Handling**:
+  - Automatic image file copying to attachments folder
+  - Path updates in markdown to reference new image locations
+- **Progress Bar**: Visual progress indicator during import process
+- **Cancel Capability**: ESC key support to cancel import operation
+
+#### Cross-Platform Compatibility Enhancements
+- **Windows Support**: Full support for `%USERPROFILE%` environment variable
+- **Path Separator Handling**: Using `path.sep` for proper path construction across platforms
+- **Terminal Color Detection**: Automatic color support detection (supportsColor)
+- **Path Expansion**: `expandPath()` function for handling `~` and `%USERPROFILE%` expansion
+
+#### UX Improvements
+- **Korean Localization**: StatusBar elements translated to Korean:
+  - "노트:" (Notes) label
+  - "연결:" (Connected) label
+- **Consistent Keyboard Shortcuts**: Unified keyboard shortcut guidance across the interface
+- **Error Messaging**: Clear and actionable error messages for all operations
+
+#### Note Directory Structure
+- **Automatic Folder Generation**: Creates standard PARA method folder structure:
+  - `inbox`: Quick capture area
+  - `projects`: Active projects
+  - `areas`: Areas of responsibility
+  - `resources`: Reference materials
+  - `archive`: Completed items
+- **Attachments Folder**: Dedicated folder for image and media file storage
+
+### Changed
+- **Onboarding Workflow**: Extended with import options and API key guidance
+- **File Import Pipeline**: Enhanced to support multiple source formats
+
+### Enhanced
+- **CLI Command System**: Added `/import` command for note importing
+- **Navigation**: ESC key now works to go back to previous onboarding step
+- **Visual Feedback**: Improved progress indicators and status displays
+
+## [0.0.2] - 2025-12-19
 
 ### Added
 - **Interactive Configuration Menu** (`ConfigMenu.tsx`): Interactive TUI menu accessible via `/config` command
@@ -30,7 +94,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Command System**: Expanded slash command support with `/config` and `/clear`
 - **Tab Autocomplete**: Updated to include new commands in suggestion list
 
-## [0.1.0] - 2025-12-19
+## [0.0.1] - 2025-12-19
 
 ### Added
 

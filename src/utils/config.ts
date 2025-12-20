@@ -3,6 +3,29 @@ import path from "node:path";
 import os from "node:os";
 import yaml from "yaml";
 
+/**
+ * Expand tilde (~) to home directory in a path
+ * Also handles Windows %USERPROFILE% environment variable
+ */
+export function expandPath(inputPath: string): string {
+  if (!inputPath) return inputPath;
+
+  // Handle Unix-style tilde expansion
+  if (inputPath.startsWith("~/")) {
+    return path.join(os.homedir(), inputPath.slice(2));
+  }
+  if (inputPath === "~") {
+    return os.homedir();
+  }
+
+  // Handle Windows %USERPROFILE% expansion
+  if (process.platform === "win32" && inputPath.includes("%USERPROFILE%")) {
+    return inputPath.replace(/%USERPROFILE%/gi, os.homedir());
+  }
+
+  return inputPath;
+}
+
 export interface GigaMindConfig {
   notesDir: string;
   userName?: string;
@@ -46,6 +69,9 @@ export function getCredentialsPath(): string {
 export async function saveApiKey(apiKey: string): Promise<void> {
   await ensureConfigDir();
   const credentialsPath = getCredentialsPath();
+  // Note: mode 0o600 (owner read/write only) is Unix-specific.
+  // On Windows, this option is ignored and file permissions are managed
+  // via ACLs. The file will inherit permissions from the parent directory.
   await fs.writeFile(credentialsPath, apiKey, { mode: 0o600 });
 }
 
@@ -114,14 +140,15 @@ export async function configExists(): Promise<boolean> {
 }
 
 export async function ensureNotesDir(notesDir: string): Promise<void> {
+  const expandedDir = expandPath(notesDir);
   const dirs = [
-    notesDir,
-    path.join(notesDir, "inbox"),
-    path.join(notesDir, "projects"),
-    path.join(notesDir, "areas"),
-    path.join(notesDir, "resources"),
-    path.join(notesDir, "resources", "books"),
-    path.join(notesDir, "archive"),
+    expandedDir,
+    path.join(expandedDir, "inbox"),
+    path.join(expandedDir, "projects"),
+    path.join(expandedDir, "areas"),
+    path.join(expandedDir, "resources"),
+    path.join(expandedDir, "resources", "books"),
+    path.join(expandedDir, "archive"),
   ];
 
   for (const dir of dirs) {
@@ -133,6 +160,7 @@ export async function getNoteStats(
   notesDir: string
 ): Promise<{ noteCount: number; connectionCount: number }> {
   try {
+    const expandedDir = expandPath(notesDir);
     const countFiles = async (dir: string): Promise<number> => {
       let count = 0;
       try {
@@ -150,7 +178,7 @@ export async function getNoteStats(
       return count;
     };
 
-    const noteCount = await countFiles(notesDir);
+    const noteCount = await countFiles(expandedDir);
 
     // TODO: Count wiki-links for connections
     const connectionCount = 0;

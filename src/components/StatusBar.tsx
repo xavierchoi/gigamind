@@ -26,10 +26,10 @@ export function StatusBar({
       </Text>
       <Box gap={2}>
         <Text>
-          <Text color="blue">Notes:</Text> {noteCount}
+          <Text color="blue">노트:</Text> {noteCount}
         </Text>
         <Text>
-          <Text color="green">Links:</Text> {connectionCount}
+          <Text color="green">연결:</Text> {connectionCount}
         </Text>
       </Box>
     </Box>

@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from "react";
-import { Box, Text, Newline } from "ink";
+import { Box, Text, Newline, useInput } from "ink";
 import TextInput from "ink-text-input";
 import SelectInput from "ink-select-input";
 import Spinner from "ink-spinner";
@@ -12,10 +12,19 @@ type OnboardingStep =
   | "notesDir"
   | "userName"
   | "useCases"
+  | "existingNotes"
+  | "importSource"
+  | "importPath"
+  | "importing"
   | "complete";
 
 interface OnboardingProps {
   onComplete: (config: OnboardingResult) => void;
+}
+
+export interface ImportConfig {
+  source: "obsidian" | "markdown" | "none";
+  sourcePath?: string;
 }
 
 export interface OnboardingResult {
@@ -23,6 +32,7 @@ export interface OnboardingResult {
   notesDir: string;
   userName?: string;
   useCases: string[];
+  importConfig?: ImportConfig;
 }
 
 const USE_CASE_OPTIONS = [
@@ -39,15 +49,29 @@ const NOTES_DIR_OPTIONS = [
   { label: "직접 입력...", value: "__custom__" },
 ];
 
+const EXISTING_NOTES_OPTIONS = [
+  { label: "네, 가져오고 싶어요", value: "yes" },
+  { label: "아니요, 새로 시작할게요", value: "no" },
+];
+
+const IMPORT_SOURCE_OPTIONS = [
+  { label: "Obsidian Vault", value: "obsidian" },
+  { label: "일반 마크다운 폴더", value: "markdown" },
+];
+
 // Step progress mapping
 const STEP_PROGRESS: Record<OnboardingStep, { current: number; total: number }> = {
-  welcome: { current: 1, total: 5 },
-  apiKey: { current: 2, total: 5 },
-  validating: { current: 2, total: 5 },
-  notesDir: { current: 3, total: 5 },
-  userName: { current: 4, total: 5 },
-  useCases: { current: 5, total: 5 },
-  complete: { current: 5, total: 5 },
+  welcome: { current: 1, total: 6 },
+  apiKey: { current: 2, total: 6 },
+  validating: { current: 2, total: 6 },
+  notesDir: { current: 3, total: 6 },
+  userName: { current: 4, total: 6 },
+  useCases: { current: 5, total: 6 },
+  existingNotes: { current: 6, total: 6 },
+  importSource: { current: 6, total: 6 },
+  importPath: { current: 6, total: 6 },
+  importing: { current: 6, total: 6 },
+  complete: { current: 6, total: 6 },
 };
 
 function StepIndicator({ step }: { step: OnboardingStep }) {
@@ -59,6 +83,17 @@ function StepIndicator({ step }: { step: OnboardingStep }) {
   );
 }
 
+// Previous step mapping for ESC navigation
+const PREVIOUS_STEP: Partial<Record<OnboardingStep, OnboardingStep>> = {
+  apiKey: "welcome",
+  notesDir: "apiKey",
+  userName: "notesDir",
+  useCases: "userName",
+  existingNotes: "useCases",
+  importSource: "existingNotes",
+  importPath: "importSource",
+};
+
 export function Onboarding({ onComplete }: OnboardingProps) {
   const [step, setStep] = useState<OnboardingStep>("welcome");
   const [apiKey, setApiKey] = useState("");
@@ -69,6 +104,58 @@ export function Onboarding({ onComplete }: OnboardingProps) {
   const [userName, setUserName] = useState("");
   const [selectedUseCases, setSelectedUseCases] = useState<string[]>([]);
   const [showCustomInput, setShowCustomInput] = useState(false);
+  const [importSource, setImportSource] = useState<"obsidian" | "markdown" | "none">("none");
+  const [importPath, setImportPath] = useState("");
+  const [importStats, setImportStats] = useState<{ files: number; folders: number } | null>(null);
+  const [useCaseIndex, setUseCaseIndex] = useState(0);
+
+  // Keyboard handler for ESC (back) and useCases navigation
+  useInput((input, key) => {
+    // ESC to go back
+    if (key.escape) {
+      const previousStep = PREVIOUS_STEP[step];
+      if (previousStep) {
+        setStep(previousStep);
+        // Reset relevant state when going back
+        if (previousStep === "apiKey") {
+          setApiKeyError("");
+        }
+        if (previousStep === "notesDir") {
+          setShowCustomInput(false);
+        }
+      }
+      return;
+    }
+
+    // useCases step keyboard navigation
+    if (step === "useCases") {
+      // Up/Down for navigation
+      if (key.upArrow) {
+        setUseCaseIndex((prev) => Math.max(0, prev - 1));
+        return;
+      }
+      if (key.downArrow) {
+        setUseCaseIndex((prev) => Math.min(USE_CASE_OPTIONS.length - 1, prev + 1));
+        return;
+      }
+      // Space to toggle selection
+      if (input === " ") {
+        const currentValue = USE_CASE_OPTIONS[useCaseIndex].value;
+        setSelectedUseCases((prev) => {
+          if (prev.includes(currentValue)) {
+            return prev.filter((v) => v !== currentValue);
+          }
+          return [...prev, currentValue];
+        });
+        return;
+      }
+      // Enter to complete (when not in TextInput)
+      if (key.return) {
+        handleUseCaseDone();
+        return;
+      }
+    }
+  });
 
   const handleWelcome = () => {
     setStep("apiKey");
@@ -155,12 +242,42 @@ export function Onboarding({ onComplete }: OnboardingProps) {
   };
 
   const handleUseCaseDone = () => {
+    setStep("existingNotes");
+  };
+
+  const handleExistingNotesSelect = (item: { value: string }) => {
+    if (item.value === "yes") {
+      setStep("importSource");
+    } else {
+      // No existing notes, complete onboarding
+      finishOnboarding();
+    }
+  };
+
+  const handleImportSourceSelect = (item: { value: string }) => {
+    setImportSource(item.value as "obsidian" | "markdown");
+    setStep("importPath");
+  };
+
+  const handleImportPathSubmit = (value: string) => {
+    const trimmedPath = value.trim();
+    if (trimmedPath) {
+      setImportPath(trimmedPath);
+      // For now, just complete - actual import will happen after onboarding
+      finishOnboarding(trimmedPath);
+    }
+  };
+
+  const finishOnboarding = (sourcePath?: string) => {
     setStep("complete");
     onComplete({
       apiKey,
       notesDir,
       userName: userName || undefined,
       useCases: selectedUseCases,
+      importConfig: importSource !== "none" && sourcePath
+        ? { source: importSource, sourcePath }
+        : undefined,
     });
   };
 
@@ -176,16 +293,14 @@ export function Onboarding({ onComplete }: OnboardingProps) {
           flexDirection="column"
         >
           <Text color="magenta" bold>
-            GigaMind에 오신 것을 환영합니다!
+            GigaMind에 오신 것을 환영합니다! ✨
           </Text>
           <Newline />
-          <Text>당신의 생각과 지식을 관리하는 AI 파트너입니다.</Text>
-          <Text>몇 가지 설정을 도와드릴게요.</Text>
+          <Text>🧠 당신의 생각과 지식을 관리하는 AI 파트너입니다.</Text>
+          <Text>📝 몇 가지 설정을 도와드릴게요.</Text>
           <Newline />
-          <Text color="gray">
-            (언제든 Enter를 눌러 기본값을 사용하거나,
-          </Text>
-          <Text color="gray">'skip'을 입력해 나중에 설정할 수 있어요)</Text>
+          <Text color="gray">약 2분이면 완료됩니다.</Text>
+          <Text color="gray">(언제든 Enter를 눌러 기본값을 사용할 수 있어요)</Text>
         </Box>
         <Box marginTop={1}>
           <Text color="cyan">Enter를 눌러 시작하세요...</Text>
@@ -227,10 +342,16 @@ export function Onboarding({ onComplete }: OnboardingProps) {
         <Text color="yellow" bold>
           ? Anthropic API 키를 입력해주세요
         </Text>
-        <Box marginTop={1}>
+        <Box marginTop={1} flexDirection="column">
           <Text color="gray">
-            API 키는 https://console.anthropic.com 에서 발급받을 수 있어요.
+            API 키는 AI 기능을 사용하기 위해 필요한 인증 키입니다.
           </Text>
+          <Newline />
+          <Text color="gray" bold>발급 방법:</Text>
+          <Text color="gray">  1. https://console.anthropic.com 접속</Text>
+          <Text color="gray">  2. 로그인 후 "API Keys" 메뉴 클릭</Text>
+          <Text color="gray">  3. "Create Key" 버튼으로 새 키 생성</Text>
+          <Text color="gray">  4. 생성된 키(sk-ant-...)를 복사하여 붙여넣기</Text>
         </Box>
         <Box marginTop={1}>
           <Text color="cyan">{"> "}</Text>
@@ -259,8 +380,13 @@ export function Onboarding({ onComplete }: OnboardingProps) {
                 API 사용량이 초과되었습니다. https://console.anthropic.com 에서 확인해주세요.
               </Text>
             )}
+            <Newline />
+            <Text color="gray" dimColor>다시 시도하려면 Enter, 이전으로 돌아가려면 ESC</Text>
           </Box>
         )}
+        <Box marginTop={1}>
+          <Text color="gray" dimColor>ESC: 이전 단계</Text>
+        </Box>
       </Box>
     );
   }
@@ -290,6 +416,9 @@ export function Onboarding({ onComplete }: OnboardingProps) {
             <SelectInput items={NOTES_DIR_OPTIONS} onSelect={handleNotesDirSelect} />
           </Box>
         )}
+        <Box marginTop={1}>
+          <Text color="gray" dimColor>ESC: 이전 단계</Text>
+        </Box>
       </Box>
     );
   }
@@ -310,6 +439,9 @@ export function Onboarding({ onComplete }: OnboardingProps) {
             placeholder="이름 또는 별명..."
           />
         </Box>
+        <Box marginTop={1}>
+          <Text color="gray" dimColor>ESC: 이전 단계</Text>
+        </Box>
       </Box>
     );
   }
@@ -319,33 +451,129 @@ export function Onboarding({ onComplete }: OnboardingProps) {
       <Box flexDirection="column" padding={2}>
         <StepIndicator step={step} />
         <Text color="yellow" bold>
-          ? 주로 어떤 용도로 사용하실 건가요? (선택 후 Enter)
+          ? 주로 어떤 용도로 사용하실 건가요? (복수 선택 가능)
         </Text>
         <Box marginTop={1} flexDirection="column">
-          {USE_CASE_OPTIONS.map((option) => (
-            <Box key={option.value}>
-              <Text color={selectedUseCases.includes(option.value) ? "green" : "gray"}>
-                {selectedUseCases.includes(option.value) ? "[x] " : "[ ] "}
-              </Text>
-              <Text>{option.label}</Text>
-            </Box>
-          ))}
+          {USE_CASE_OPTIONS.map((option, idx) => {
+            const isSelected = selectedUseCases.includes(option.value);
+            const isFocused = idx === useCaseIndex;
+            return (
+              <Box key={option.value}>
+                <Text color={isFocused ? "cyan" : "gray"}>
+                  {isFocused ? "> " : "  "}
+                </Text>
+                <Text color={isSelected ? "green" : "gray"}>
+                  {isSelected ? "[x] " : "[ ] "}
+                </Text>
+                <Text color={isFocused ? "white" : "gray"} bold={isFocused}>
+                  {option.label}
+                </Text>
+              </Box>
+            );
+          })}
+        </Box>
+        <Box marginTop={1} flexDirection="column">
+          <Text color="gray" dimColor>Space: 선택/해제 | Enter: 완료 | ESC: 이전 단계</Text>
+          {selectedUseCases.length > 0 && (
+            <Text color="green" dimColor>
+              선택됨: {selectedUseCases.length}개
+            </Text>
+          )}
+        </Box>
+      </Box>
+    );
+  }
+
+  if (step === "existingNotes") {
+    return (
+      <Box flexDirection="column" padding={2}>
+        <StepIndicator step={step} />
+        <Text color="yellow" bold>
+          ? 기존 마크다운 노트가 있나요? (Obsidian, 일반 마크다운 등)
+        </Text>
+        <Box marginTop={1}>
+          <SelectInput items={EXISTING_NOTES_OPTIONS} onSelect={handleExistingNotesSelect} />
         </Box>
         <Box marginTop={1}>
-          <SelectInput
-            items={[
-              ...USE_CASE_OPTIONS,
-              { label: "--- 완료 ---", value: "__done__" },
-            ]}
-            onSelect={(item) => {
-              if (item.value === "__done__") {
-                handleUseCaseDone();
-              } else {
-                handleUseCaseSelect(item);
-              }
-            }}
+          <Text color="gray" dimColor>ESC: 이전 단계</Text>
+        </Box>
+      </Box>
+    );
+  }
+
+  if (step === "importSource") {
+    return (
+      <Box flexDirection="column" padding={2}>
+        <StepIndicator step={step} />
+        <Box marginBottom={1}>
+          <Text color="cyan">📥 노트 가져오기</Text>
+        </Box>
+        <Text color="yellow" bold>
+          ? 어디서 가져올까요?
+        </Text>
+        <Box marginTop={1}>
+          <SelectInput items={IMPORT_SOURCE_OPTIONS} onSelect={handleImportSourceSelect} />
+        </Box>
+        <Box marginTop={1}>
+          <Text color="gray" dimColor>ESC: 이전 단계</Text>
+        </Box>
+      </Box>
+    );
+  }
+
+  if (step === "importPath") {
+    // Platform-specific placeholder paths
+    const isWindows = process.platform === "win32";
+    const placeholder = importSource === "obsidian"
+      ? (isWindows ? "%USERPROFILE%\\Documents\\ObsidianVault" : "~/Documents/ObsidianVault")
+      : (isWindows ? "%USERPROFILE%\\Documents\\notes" : "~/Documents/notes");
+    const sourceLabel = importSource === "obsidian" ? "Obsidian Vault" : "마크다운 폴더";
+
+    return (
+      <Box flexDirection="column" padding={2}>
+        <StepIndicator step={step} />
+        <Text color="yellow" bold>
+          ? {sourceLabel} 경로를 입력하세요
+        </Text>
+        <Box marginTop={1}>
+          <Text color="cyan">{"> "}</Text>
+          <TextInput
+            value={importPath}
+            onChange={setImportPath}
+            onSubmit={handleImportPathSubmit}
+            placeholder={placeholder}
           />
         </Box>
+        <Box marginTop={1}>
+          <Text color="gray">
+            {process.platform === "win32"
+              ? "%USERPROFILE%은 홈 디렉토리를 의미합니다"
+              : "~ 는 홈 디렉토리를 의미합니다"}
+          </Text>
+        </Box>
+        <Box marginTop={1}>
+          <Text color="gray" dimColor>ESC: 이전 단계</Text>
+        </Box>
+      </Box>
+    );
+  }
+
+  if (step === "importing") {
+    return (
+      <Box flexDirection="column" padding={2}>
+        <StepIndicator step={step} />
+        <Box>
+          <Text color="cyan">
+            <Spinner type="dots" />
+          </Text>
+          <Text> 노트를 분석하는 중...</Text>
+        </Box>
+        {importStats && (
+          <Box marginTop={1} flexDirection="column">
+            <Text color="gray">├─ 마크다운 파일: {importStats.files}개</Text>
+            <Text color="gray">└─ 폴더: {importStats.folders}개</Text>
+          </Box>
+        )}
       </Box>
     );
   }
@@ -366,6 +594,17 @@ export function Onboarding({ onComplete }: OnboardingProps) {
           <Newline />
           <Text>GigaMind가 준비되었어요.</Text>
           {userName && <Text>환영합니다, {userName}님!</Text>}
+          {importPath && (
+            <>
+              <Newline />
+              <Text color="cyan">
+                📥 노트 가져오기가 예약되었어요.
+              </Text>
+              <Text color="gray">
+                채팅에서 "/import" 명령어로 진행 상황을 확인할 수 있어요.
+              </Text>
+            </>
+          )}
           <Newline />
           <Text color="gray">잠시 후 채팅 화면으로 이동합니다...</Text>
         </Box>
