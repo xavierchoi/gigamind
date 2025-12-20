@@ -606,6 +606,11 @@ export function Onboarding({ onComplete }: OnboardingProps) {
             </>
           )}
           <Newline />
+          <Text color="yellow" bold>핵심 기능 3가지:</Text>
+          <Text color="gray">  1. /search - 내 노트에서 정보 검색</Text>
+          <Text color="gray">  2. /clone - 내 노트 기반으로 나처럼 답변</Text>
+          <Text color="gray">  3. 자연어로 "메모해줘"라고 말하면 노트 작성</Text>
+          <Newline />
           <Text color="gray">잠시 후 채팅 화면으로 이동합니다...</Text>
         </Box>
       </Box>

@@ -6,7 +6,8 @@ import { Onboarding, type OnboardingResult } from "./components/Onboarding.js";
 import { ConfigMenu } from "./components/ConfigMenu.js";
 import { Import, type ImportResult } from "./components/Import.js";
 import { GigaMindClient } from "./agent/client.js";
-import { SessionManager } from "./agent/session.js";
+import { SessionManager, type SessionSummary } from "./agent/session.js";
+import { createSubagentInvoker } from "./agent/subagent.js";
 import {
   loadConfig,
   saveConfig,
@@ -20,7 +21,7 @@ import {
   type GigaMindConfig,
 } from "./utils/config.js";
 
-type AppState = "loading" | "onboarding" | "chat" | "config" | "import";
+type AppState = "loading" | "onboarding" | "chat" | "config" | "import" | "session_restore";
 
 // Format error messages to be user-friendly
 function formatErrorMessage(err: unknown): string {
@@ -78,6 +79,49 @@ function ErrorHandler({
   return null;
 }
 
+// 세션 복원 프롬프트 컴포넌트
+function SessionRestorePrompt({
+  session,
+  onRestore,
+  onNewSession,
+}: {
+  session: SessionSummary;
+  onRestore: () => void;
+  onNewSession: () => void;
+}) {
+  useInput((input) => {
+    if (input === "y" || input === "Y") {
+      onRestore();
+    } else if (input === "n" || input === "N") {
+      onNewSession();
+    }
+  });
+
+  const lastTime = new Date(session.updatedAt).toLocaleString("ko-KR");
+  const timeDiff = Math.floor((Date.now() - new Date(session.updatedAt).getTime()) / (1000 * 60));
+
+  return (
+    <Box flexDirection="column" padding={2}>
+      <Text color="cyan" bold>이전 세션이 발견되었습니다</Text>
+      <Box marginTop={1} flexDirection="column">
+        <Text color="gray">마지막 활동: {lastTime} ({timeDiff}분 전)</Text>
+        <Text color="gray">메시지 수: {session.messageCount}개</Text>
+        {session.firstMessage && (
+          <Text color="gray">첫 메시지: {session.firstMessage}</Text>
+        )}
+        {session.lastMessage && (
+          <Text color="gray">마지막 메시지: {session.lastMessage}</Text>
+        )}
+      </Box>
+      <Box marginTop={1} flexDirection="column">
+        <Text color="yellow">이전 세션을 이어서 진행하시겠습니까?</Text>
+        <Text color="green">[Y] 세션 복원</Text>
+        <Text color="red">[N] 새 세션 시작</Text>
+      </Box>
+    </Box>
+  );
+}
+
 export function App() {
   const { exit } = useApp();
   const [appState, setAppState] = useState<AppState>("loading");
@@ -93,6 +137,7 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [loadingStartTime, setLoadingStartTime] = useState<number | undefined>(undefined);
   const [isFirstSession, setIsFirstSession] = useState(false);
+  const [pendingRestoreSession, setPendingRestoreSession] = useState<SessionSummary | null>(null);
 
   // Initialize app
   useEffect(() => {
@@ -121,13 +166,27 @@ export function App() {
           sessionsDir: getSessionsDir(),
         });
         await newSessionManager.init();
-        await newSessionManager.createSession();
         setSessionManager(newSessionManager);
 
         // Load stats
         const stats = await getNoteStats(loadedConfig.notesDir);
         setNoteCount(stats.noteCount);
         setConnectionCount(stats.connectionCount);
+
+        // 마지막 세션이 최근 30분 이내인지 확인
+        const latestSession = await newSessionManager.loadLatestSession();
+        if (latestSession && latestSession.messages.length > 0 && newSessionManager.isSessionRecent(latestSession, 30)) {
+          // 세션 요약 정보 가져오기
+          const summary = newSessionManager.getCurrentSessionSummary();
+          if (summary) {
+            setPendingRestoreSession(summary);
+            setAppState("session_restore");
+            return;
+          }
+        }
+
+        // 새 세션 시작
+        await newSessionManager.createSession();
 
         // Add welcome message with /help hint
         setMessages([
@@ -196,7 +255,14 @@ export function App() {
         welcomeMessage += " 무엇을 도와드릴까요?";
       }
 
-      welcomeMessage += "\n\n💡 /help를 입력하면 사용 가능한 명령어를 볼 수 있어요.";
+      welcomeMessage += `
+
+**이런 것들을 할 수 있어요:**
+- "오늘 배운 것을 정리해줘" - 대화로 노트 작성
+- "내 노트에서 프로젝트 아이디어 찾아줘" - 노트 검색
+- /clone 질문 - 내 노트 기반으로 나처럼 답변
+
+💡 /help를 입력하면 모든 명령어를 볼 수 있어요.`;
 
       setMessages([
         {
@@ -222,8 +288,8 @@ export function App() {
         const command = parts[0].toLowerCase();
 
         // Known commands
-        const IMPLEMENTED_COMMANDS = ["help", "config", "clear", "import"];
-        const UNIMPLEMENTED_COMMANDS = ["search", "sync"];
+        const IMPLEMENTED_COMMANDS = ["help", "config", "clear", "import", "session", "search", "clone", "me"];
+        const UNIMPLEMENTED_COMMANDS = ["sync"];
 
         if (command === "help") {
           setMessages((prev) => [
@@ -231,13 +297,30 @@ export function App() {
             { role: "user", content: userMessage },
             {
               role: "assistant",
-              content: `사용 가능한 명령어:
+              content: `**사용 가능한 명령어:**
 /help - 도움말
 /config - 설정 보기
 /clear - 대화 내역 정리
 /import - 외부 노트 가져오기
-/search <query> - 노트 검색 (준비 중)
-/sync - Git 동기화 (준비 중)`,
+/session list - 최근 세션 목록 보기
+/session export - 현재 세션 마크다운으로 저장
+/search <query> - 노트 검색
+/clone <질문> - 내 노트 기반으로 나처럼 답변
+/sync - Git 동기화 (준비 중)
+
+---
+
+**이렇게 말해도 돼요:**
+- "프로젝트 관련 노트 찾아줘" -> 노트 검색
+- "내가 이 주제에 대해 어떻게 생각했더라?" -> 클론 모드
+- "내 노트에서 OO 찾아줘" -> 노트 검색
+- "OO에 대해 메모해줘" -> 노트 작성
+- "내 관점에서 설명해줘" -> 클론 모드
+
+**키보드 단축키:**
+- Ctrl+C: 종료
+- Esc: 응답 취소
+- 방향키 위/아래: 입력 히스토리`,
             },
           ]);
           return;
@@ -268,6 +351,286 @@ export function App() {
             { role: "user", content: userMessage },
           ]);
           setAppState("import");
+          return;
+        }
+        if (command === "session") {
+          const subCommand = parts[1]?.toLowerCase();
+
+          if (subCommand === "list") {
+            // 최근 세션 목록 표시
+            if (!sessionManager) {
+              setMessages((prev) => [
+                ...prev,
+                { role: "user", content: userMessage },
+                { role: "assistant", content: "세션 매니저가 초기화되지 않았습니다." },
+              ]);
+              return;
+            }
+
+            const sessions = await sessionManager.listSessionsWithSummary(10);
+            if (sessions.length === 0) {
+              setMessages((prev) => [
+                ...prev,
+                { role: "user", content: userMessage },
+                { role: "assistant", content: "저장된 세션이 없습니다." },
+              ]);
+              return;
+            }
+
+            let listMessage = "**최근 세션 목록**\n\n";
+            for (const session of sessions) {
+              const date = new Date(session.createdAt).toLocaleString("ko-KR");
+              const preview = session.firstMessage || "(메시지 없음)";
+              listMessage += `- **${session.id}** (${date})\n`;
+              listMessage += `  메시지: ${session.messageCount}개 | ${preview}\n\n`;
+            }
+
+            setMessages((prev) => [
+              ...prev,
+              { role: "user", content: userMessage },
+              { role: "assistant", content: listMessage },
+            ]);
+            return;
+          }
+
+          if (subCommand === "export") {
+            // 현재 세션 내보내기
+            if (!sessionManager) {
+              setMessages((prev) => [
+                ...prev,
+                { role: "user", content: userMessage },
+                { role: "assistant", content: "세션 매니저가 초기화되지 않았습니다." },
+              ]);
+              return;
+            }
+
+            const result = await sessionManager.exportSession();
+            if (result.success) {
+              setMessages((prev) => [
+                ...prev,
+                { role: "user", content: userMessage },
+                { role: "assistant", content: `세션이 마크다운으로 저장되었습니다.\n\n저장 위치: ${result.filePath}` },
+              ]);
+            } else {
+              setMessages((prev) => [
+                ...prev,
+                { role: "user", content: userMessage },
+                { role: "assistant", content: `세션 내보내기 실패: ${result.error}` },
+              ]);
+            }
+            return;
+          }
+
+          // /session만 입력한 경우 도움말 표시
+          setMessages((prev) => [
+            ...prev,
+            { role: "user", content: userMessage },
+            {
+              role: "assistant",
+              content: `/session 명령어 사용법:
+- /session list - 최근 세션 목록 보기
+- /session export - 현재 세션을 마크다운으로 저장`,
+            },
+          ]);
+          return;
+        }
+
+        // /search 명령어 처리 - Search 에이전트 호출
+        if (command === "search") {
+          const searchQuery = parts.slice(1).join(" ").trim();
+
+          // 검색어가 없으면 안내 메시지 표시
+          if (!searchQuery) {
+            setMessages((prev) => [
+              ...prev,
+              { role: "user", content: userMessage },
+              {
+                role: "assistant",
+                content: `검색어를 입력해주세요.\n\n사용법: /search <검색어>\n예시: /search 프로젝트 아이디어`,
+              },
+            ]);
+            return;
+          }
+
+          // 사용자 메시지 표시
+          setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
+          setIsLoading(true);
+          setLoadingStartTime(Date.now());
+          setStreamingText("노트를 검색하는 중...");
+
+          try {
+            // API 키 로드
+            const apiKey = await loadApiKey();
+            if (!apiKey) {
+              throw new Error("API 키가 설정되지 않았습니다.");
+            }
+
+            // Search 에이전트 호출
+            const subagent = createSubagentInvoker({
+              apiKey,
+              notesDir: config?.notesDir || "./notes",
+              model: config?.model || "claude-sonnet-4-20250514",
+            });
+
+            const result = await subagent.invoke(
+              "search-agent",
+              `다음 키워드로 노트를 검색해주세요: "${searchQuery}"`,
+              {
+                onThinking: () => {
+                  setStreamingText("노트를 검색하는 중...");
+                },
+                onToolUse: (toolName) => {
+                  setStreamingText(`${toolName} 도구 사용 중...`);
+                },
+                onProgress: (info) => {
+                  if (info.filesMatched !== undefined && info.filesMatched > 0) {
+                    setStreamingText(`노트를 검색하는 중... (${info.filesMatched}개 파일에서 매치)`);
+                  } else if (info.filesFound !== undefined && info.filesFound > 0) {
+                    setStreamingText(`노트를 검색하는 중... (${info.filesFound}개 파일 발견)`);
+                  }
+                },
+                onText: (text) => {
+                  setStreamingText((prev) =>
+                    prev.startsWith("노트를 검색") || prev.includes("도구 사용")
+                      ? text
+                      : prev + text
+                  );
+                },
+              }
+            );
+
+            if (result.success) {
+              setMessages((prev) => [
+                ...prev,
+                { role: "assistant", content: result.response },
+              ]);
+            } else {
+              setMessages((prev) => [
+                ...prev,
+                {
+                  role: "assistant",
+                  content: `검색 중 오류가 발생했습니다: ${result.error}`,
+                },
+              ]);
+            }
+          } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: "assistant",
+                content: `검색 중 오류가 발생했습니다: ${errorMessage}`,
+              },
+            ]);
+          } finally {
+            setIsLoading(false);
+            setLoadingStartTime(undefined);
+            setStreamingText("");
+          }
+          return;
+        }
+
+        // /clone 또는 /me 명령어 처리 - Clone 에이전트 호출
+        if (command === "clone" || command === "me") {
+          const cloneQuery = parts.slice(1).join(" ").trim();
+
+          // 질문이 없으면 안내 메시지 표시
+          if (!cloneQuery) {
+            setMessages((prev) => [
+              ...prev,
+              { role: "user", content: userMessage },
+              {
+                role: "assistant",
+                content: `질문을 입력해주세요.
+
+**사용법:** /clone <질문> 또는 /me <질문>
+
+**예시:**
+- /clone 이 프로젝트에 대해 어떻게 생각해?
+- /me 생산성을 높이는 방법이 뭐야?
+- /clone 최근에 읽은 책 중 추천할 만한 건?
+
+내 노트에 기록된 내용을 바탕으로 나처럼 답변해드릴게요!`,
+              },
+            ]);
+            return;
+          }
+
+          // 사용자 메시지 표시
+          setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
+          setIsLoading(true);
+          setLoadingStartTime(Date.now());
+          setStreamingText("내 노트를 분석하는 중...");
+
+          try {
+            // API 키 로드
+            const apiKey = await loadApiKey();
+            if (!apiKey) {
+              throw new Error("API 키가 설정되지 않았습니다.");
+            }
+
+            // Clone 에이전트 호출
+            const subagent = createSubagentInvoker({
+              apiKey,
+              notesDir: config?.notesDir || "./notes",
+              model: config?.model || "claude-sonnet-4-20250514",
+            });
+
+            const result = await subagent.invoke(
+              "clone-agent",
+              cloneQuery,
+              {
+                onThinking: () => {
+                  setStreamingText("내 노트를 분석하는 중...");
+                },
+                onToolUse: (toolName) => {
+                  setStreamingText(`${toolName} 도구로 노트 탐색 중...`);
+                },
+                onProgress: (info) => {
+                  if (info.filesMatched !== undefined && info.filesMatched > 0) {
+                    setStreamingText(`내 노트를 분석하는 중... (${info.filesMatched}개 파일에서 매치)`);
+                  } else if (info.filesFound !== undefined && info.filesFound > 0) {
+                    setStreamingText(`내 노트를 분석하는 중... (${info.filesFound}개 파일 발견)`);
+                  }
+                },
+                onText: (text) => {
+                  setStreamingText((prev) =>
+                    prev.startsWith("내 노트를") || prev.includes("도구")
+                      ? text
+                      : prev + text
+                  );
+                },
+              }
+            );
+
+            if (result.success) {
+              setMessages((prev) => [
+                ...prev,
+                { role: "assistant", content: result.response },
+              ]);
+            } else {
+              setMessages((prev) => [
+                ...prev,
+                {
+                  role: "assistant",
+                  content: `클론 모드 실행 중 오류가 발생했습니다: ${result.error}`,
+                },
+              ]);
+            }
+          } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: "assistant",
+                content: `클론 모드 실행 중 오류가 발생했습니다: ${errorMessage}`,
+              },
+            ]);
+          } finally {
+            setIsLoading(false);
+            setLoadingStartTime(undefined);
+            setStreamingText("");
+          }
           return;
         }
 
@@ -477,6 +840,58 @@ export function App() {
     setAppState("chat");
   }, []);
 
+  // 세션 복원 핸들러
+  const handleSessionRestore = useCallback(async () => {
+    if (!sessionManager || !client) return;
+
+    // 현재 로드된 세션에서 메시지 복원
+    const session = sessionManager.getCurrentSession();
+    if (session && session.messages.length > 0) {
+      // 클라이언트 히스토리 복원
+      client.restoreHistory(session.messages);
+
+      // UI 메시지 복원
+      const uiMessages: Message[] = session.messages.map((m) => ({
+        role: m.role,
+        content: m.content,
+      }));
+
+      // 복원 메시지 추가
+      uiMessages.push({
+        role: "assistant",
+        content: `세션이 복원되었습니다. (${session.messages.length}개 메시지)\n이어서 대화를 계속하세요!`,
+      });
+
+      setMessages(uiMessages);
+    }
+
+    setPendingRestoreSession(null);
+    setIsFirstSession(false);
+    setAppState("chat");
+  }, [sessionManager, client]);
+
+  // 새 세션 시작 핸들러
+  const handleNewSession = useCallback(async () => {
+    if (!sessionManager) return;
+
+    // 새 세션 생성
+    await sessionManager.createSession();
+
+    // 환영 메시지 설정
+    setMessages([
+      {
+        role: "assistant",
+        content: config?.userName
+          ? `안녕하세요, ${config.userName}님! 무엇을 도와드릴까요?\n\n💡 /help를 입력하면 사용 가능한 명령어를 볼 수 있어요.`
+          : "안녕하세요! 무엇을 도와드릴까요?\n\n💡 /help를 입력하면 사용 가능한 명령어를 볼 수 있어요.",
+      },
+    ]);
+
+    setPendingRestoreSession(null);
+    setIsFirstSession(true);
+    setAppState("chat");
+  }, [sessionManager, config]);
+
   if (error) {
     return (
       <Box flexDirection="column" padding={2}>
@@ -505,6 +920,16 @@ export function App() {
 
   if (appState === "onboarding") {
     return <Onboarding onComplete={handleOnboardingComplete} />;
+  }
+
+  if (appState === "session_restore" && pendingRestoreSession) {
+    return (
+      <SessionRestorePrompt
+        session={pendingRestoreSession}
+        onRestore={handleSessionRestore}
+        onNewSession={handleNewSession}
+      />
+    );
   }
 
   if (appState === "config" && config) {

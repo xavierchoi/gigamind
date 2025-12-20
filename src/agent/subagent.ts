@@ -13,7 +13,7 @@ import type {
 } from "@anthropic-ai/sdk/resources/messages";
 import { getToolsForSubagent } from "./tools.js";
 import { executeTool, type ToolResult } from "./executor.js";
-import { getSubagentPrompt, getSubagentTools, subagents } from "./prompts.js";
+import { getSubagentPrompt, getSubagentTools, subagents, type SubagentContext } from "./prompts.js";
 import { getLogger } from "../utils/logger.js";
 
 const logger = getLogger();
@@ -25,6 +25,12 @@ export interface SubagentConfig {
   maxIterations?: number;
 }
 
+export interface SubagentProgressInfo {
+  filesFound?: number;
+  filesMatched?: number;
+  currentTool?: string;
+}
+
 export interface SubagentCallbacks {
   onThinking?: () => void;
   onToolUse?: (toolName: string, input: unknown) => void;
@@ -32,6 +38,7 @@ export interface SubagentCallbacks {
   onText?: (text: string) => void;
   onComplete?: (result: SubagentResult) => void;
   onError?: (error: Error) => void;
+  onProgress?: (info: SubagentProgressInfo) => void;
 }
 
 export interface SubagentResult {
@@ -56,12 +63,33 @@ export class SubagentInvoker {
     this.maxIterations = config.maxIterations || 10;
   }
 
+  /**
+   * Extract file count from Glob/Grep tool output
+   */
+  private extractFileCount(output: string): number {
+    if (!output || output === "No files found matching pattern") {
+      return 0;
+    }
+    // Count lines (each line is a file path)
+    const lines = output.split("\n").filter((line) => line.trim().length > 0);
+    return lines.length;
+  }
+
   async invoke(
     agentName: string,
     userMessage: string,
     callbacks?: SubagentCallbacks
   ): Promise<SubagentResult> {
-    const systemPrompt = getSubagentPrompt(agentName);
+    // Progress tracking state
+    let totalFilesFound = 0;
+    let totalFilesMatched = 0;
+
+    // Subagent 컨텍스트 생성 (동적 프롬프트 생성에 필요)
+    const context: SubagentContext = {
+      notesDir: this.notesDir,
+    };
+
+    const systemPrompt = getSubagentPrompt(agentName, context);
     const toolNames = getSubagentTools(agentName);
 
     if (!systemPrompt) {
@@ -121,6 +149,26 @@ export class SubagentInvoker {
             const result = await executeTool(block.name, block.input, this.notesDir);
 
             callbacks?.onToolResult?.(block.name, result);
+
+            // Extract file counts for progress reporting
+            if (result.success) {
+              if (block.name === "Glob") {
+                const fileCount = this.extractFileCount(result.output);
+                totalFilesFound += fileCount;
+                callbacks?.onProgress?.({
+                  filesFound: totalFilesFound,
+                  currentTool: block.name,
+                });
+              } else if (block.name === "Grep") {
+                const matchCount = this.extractFileCount(result.output);
+                totalFilesMatched += matchCount;
+                callbacks?.onProgress?.({
+                  filesFound: totalFilesFound,
+                  filesMatched: totalFilesMatched,
+                  currentTool: block.name,
+                });
+              }
+            }
 
             toolsUsed.push({
               name: block.name,
@@ -221,10 +269,26 @@ export function detectSubagentIntent(
 
   // Search agent triggers
   if (
+    // 기존 트리거
     lowerMessage.includes("검색") ||
     lowerMessage.includes("찾아") ||
     lowerMessage.includes("search") ||
-    lowerMessage.includes("find")
+    lowerMessage.includes("find") ||
+    // 노트 검색 관련 표현
+    lowerMessage.includes("노트 검색") ||
+    lowerMessage.includes("노트에서 찾") ||
+    // 기록 위치 찾기
+    lowerMessage.includes("어디에 기록") ||
+    lowerMessage.includes("어디 적었") ||
+    lowerMessage.includes("어디에 적었") ||
+    lowerMessage.includes("어디에 썼") ||
+    // 관련 노트 찾기
+    lowerMessage.includes("관련 노트") ||
+    lowerMessage.includes("비슷한 노트") ||
+    lowerMessage.includes("연관 노트") ||
+    // 특정 주제 노트
+    lowerMessage.includes("에 대한 노트") ||
+    lowerMessage.includes("관련된 노트")
   ) {
     return { agent: "search-agent", task: message };
   }
@@ -241,13 +305,32 @@ export function detectSubagentIntent(
     return { agent: "note-agent", task: message };
   }
 
-  // Clone agent triggers
+  // Clone agent triggers - 사용자의 노트 기반 답변 요청
   if (
+    // 기존 트리거
     lowerMessage.includes("내가 어떻게 생각") ||
     lowerMessage.includes("나라면") ||
     lowerMessage.includes("내 관점") ||
     lowerMessage.includes("what would i think") ||
-    lowerMessage.includes("as me")
+    lowerMessage.includes("as me") ||
+    // 노트 기반 답변 요청
+    lowerMessage.includes("내 노트에서") ||
+    lowerMessage.includes("내가 기록한") ||
+    lowerMessage.includes("내가 작성한") ||
+    lowerMessage.includes("노트 기반으로") ||
+    lowerMessage.includes("내 지식으로") ||
+    // 클론 모드 명시적 요청
+    lowerMessage.includes("클론 모드") ||
+    lowerMessage.includes("나처럼 대답") ||
+    lowerMessage.includes("나처럼 답변") ||
+    // 개인 경험/생각/관점 기반 요청
+    lowerMessage.includes("내 경험에서") ||
+    lowerMessage.includes("내 생각에서") ||
+    lowerMessage.includes("내 관점에서") ||
+    // 영어 추가 트리거
+    lowerMessage.includes("from my notes") ||
+    lowerMessage.includes("based on my knowledge") ||
+    lowerMessage.includes("clone mode")
   ) {
     return { agent: "clone-agent", task: message };
   }

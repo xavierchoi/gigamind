@@ -5,6 +5,71 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2025-12-19
+
+### Added
+
+#### Clone Agent (`/clone`, `/me` commands)
+- **1-in-1 Perspective Responses**: Generates responses based on user's personal notes
+- **Natural Language Triggers**: Automatic detection of clone queries:
+  - "나라면" (If I were you)
+  - "내 관점에서" (From my perspective)
+  - "내 노트에서" (From my notes)
+  - And other natural variations
+- **Seamless Integration**: Works alongside regular chat without command requirement
+
+#### Search Agent (`/search` command)
+- **Enhanced Note Search**: Improved search functionality with:
+  - Keyword-based file matching across note database
+  - Real-time file count display during search ("3개 파일에서 매치" - Matches in 3 files)
+  - Natural language triggers for search queries:
+    - "찾아줘" (Find for me)
+    - "검색" (Search)
+    - "어디에 기록" (Where did I record)
+- **Search Results Enhancement**:
+  - Follow-up guidance for next actions
+  - Friendly message when no results are found
+  - Actionable suggestions for similar searches
+
+#### Session Management
+- **Session List** (`/session list`): View recent sessions with:
+  - Session summary information
+  - First message preview
+  - Last message preview
+  - Easy session identification
+- **Session Export** (`/session export`): Export conversation history to markdown format
+  - Full conversation transcript preservation
+  - Structured markdown output
+  - Ready for archival or sharing
+- **Session Auto-Recovery**:
+  - Automatic prompt to restore sessions within 30 minutes
+  - Smart session management on app startup
+  - Seamless context preservation
+
+#### UX Improvements
+- **Enhanced Help Command**: `/help` now includes natural language trigger examples
+- **Extended Example Prompts**: Expanded from previous set to 5 example prompts including:
+  - Search-based queries
+  - Clone-based queries
+  - Regular note queries
+- **Core Features Introduction**: Post-onboarding introduction of 3 key features
+- **Friendly Empty States**: Better messaging when search returns no results with helpful next steps
+
+#### Cross-Platform Compatibility
+- **Tool Naming**: Renamed `Bash` tool to `Shell` for better Windows compatibility
+- **Import Agent Refactoring**: Removed Shell tool dependency from import-agent for improved cross-platform support
+- **Platform-Independent Path Examples**: Updated path examples to work across Windows, macOS, and Linux
+
+### Changed
+- **Session Management**: Integrated persistent session tracking with recovery prompts
+- **Search Workflow**: Enhanced with natural language detection and better UX
+- **Command System**: Expanded with session management commands
+
+### Enhanced
+- **Chat Experience**: Added context-aware suggestions and follow-up guidance
+- **Error Handling**: Improved messaging for edge cases (empty searches, expired sessions)
+- **Visual Feedback**: Better real-time feedback during search operations
+
 ## [0.2.0] - 2025-12-19
 
 ### Added

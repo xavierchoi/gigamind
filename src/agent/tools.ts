@@ -31,9 +31,12 @@ export interface EditToolInput {
   new_string: string;
 }
 
-export interface BashToolInput {
+export interface ShellToolInput {
   command: string;
 }
+
+// Legacy alias for backward compatibility
+export type BashToolInput = ShellToolInput;
 
 export type ToolInput =
   | GlobToolInput
@@ -41,7 +44,7 @@ export type ToolInput =
   | ReadToolInput
   | WriteToolInput
   | EditToolInput
-  | BashToolInput;
+  | ShellToolInput;
 
 // Tool definitions for Claude API
 export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
@@ -143,15 +146,15 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
     },
   },
   {
-    name: "Bash",
+    name: "Shell",
     description:
-      "Execute a bash command. Use with caution. Only allowed for safe operations like listing files.",
+      "Execute a shell command. Cross-platform: uses /bin/sh on macOS/Linux, cmd.exe on Windows. Use with caution. Only allowed for safe operations like listing files.",
     input_schema: {
       type: "object" as const,
       properties: {
         command: {
           type: "string",
-          description: "The bash command to execute",
+          description: "The shell command to execute (platform-appropriate)",
         },
       },
       required: ["command"],

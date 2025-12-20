@@ -17,7 +17,7 @@ import type {
   ReadToolInput,
   WriteToolInput,
   EditToolInput,
-  BashToolInput,
+  ShellToolInput,
 } from "./tools.js";
 
 const execAsync = promisify(exec);
@@ -353,10 +353,12 @@ export async function executeEdit(
 
 /**
  * Cross-platform shell command execution
- * Uses appropriate shell based on the operating system
+ * Uses appropriate shell based on the operating system:
+ * - macOS/Linux: /bin/sh
+ * - Windows: cmd.exe
  */
-export async function executeBash(
-  input: BashToolInput,
+export async function executeShell(
+  input: ShellToolInput,
   notesDir: string
 ): Promise<ToolResult> {
   try {
@@ -412,8 +414,8 @@ export async function executeTool(
       return executeWrite(toolInput as WriteToolInput, notesDir);
     case "Edit":
       return executeEdit(toolInput as EditToolInput, notesDir);
-    case "Bash":
-      return executeBash(toolInput as BashToolInput, notesDir);
+    case "Shell":
+      return executeShell(toolInput as ShellToolInput, notesDir);
     default:
       return {
         success: false,

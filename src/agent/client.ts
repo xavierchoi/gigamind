@@ -286,6 +286,17 @@ export class GigaMindClient {
     }));
   }
 
+  /**
+   * 외부에서 대화 히스토리 복원
+   * 세션 매니저에서 저장된 히스토리를 클라이언트에 로드
+   */
+  restoreHistory(messages: ChatMessage[]): void {
+    this.conversationHistory = messages.map((msg) => ({
+      role: msg.role,
+      content: msg.content,
+    }));
+  }
+
   clearHistory(): void {
     this.conversationHistory = [];
   }

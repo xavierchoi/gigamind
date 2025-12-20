@@ -9,8 +9,13 @@ const SLASH_COMMANDS = [
   { command: "/help", description: "도움말 보기" },
   { command: "/config", description: "설정 보기" },
   { command: "/clear", description: "대화 내역 정리" },
-  { command: "/search", description: "노트 검색 (준비 중)" },
+  { command: "/search", description: "노트 검색" },
+  { command: "/clone", description: "내 노트 기반으로 나처럼 답변" },
+  { command: "/me", description: "/clone과 동일 (단축 명령)" },
   { command: "/import", description: "외부 노트 가져오기 (Obsidian, 마크다운)" },
+  { command: "/session", description: "세션 관리 (list, export)" },
+  { command: "/session list", description: "최근 세션 목록 보기" },
+  { command: "/session export", description: "현재 세션 마크다운으로 저장" },
   { command: "/sync", description: "Git 동기화 (준비 중)" },
 ];
 
@@ -19,6 +24,8 @@ const EXAMPLE_PROMPTS = [
   { label: "1", text: "오늘 배운 것을 정리해줘" },
   { label: "2", text: "프로젝트 아이디어 브레인스토밍 해줘" },
   { label: "3", text: "이번 주 할 일 목록 만들어줘" },
+  { label: "4", text: "내 노트에서 프로젝트 아이디어 찾아줘" },
+  { label: "5", text: "내가 이 주제에 대해 어떻게 생각했더라?" },
 ];
 
 // Max input history size
