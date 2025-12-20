@@ -3,6 +3,7 @@ import { Box, Text, useApp, useInput } from "ink";
 import { Chat, type Message } from "./components/Chat.js";
 import { StatusBar } from "./components/StatusBar.js";
 import { Onboarding, type OnboardingResult } from "./components/Onboarding.js";
+import { ConfigMenu } from "./components/ConfigMenu.js";
 import { GigaMindClient } from "./agent/client.js";
 import { SessionManager } from "./agent/session.js";
 import {
@@ -18,7 +19,7 @@ import {
   type GigaMindConfig,
 } from "./utils/config.js";
 
-type AppState = "loading" | "onboarding" | "chat";
+type AppState = "loading" | "onboarding" | "chat" | "config";
 
 // Format error messages to be user-friendly
 function formatErrorMessage(err: unknown): string {
@@ -208,7 +209,7 @@ export function App() {
         const command = parts[0].toLowerCase();
 
         // Known commands
-        const IMPLEMENTED_COMMANDS = ["help", "config"];
+        const IMPLEMENTED_COMMANDS = ["help", "config", "clear"];
         const UNIMPLEMENTED_COMMANDS = ["search", "import", "sync"];
 
         if (command === "help") {
@@ -220,6 +221,7 @@ export function App() {
               content: `사용 가능한 명령어:
 /help - 도움말
 /config - 설정 보기
+/clear - 대화 내역 정리
 /search <query> - 노트 검색 (준비 중)
 /import - 외부 노트 가져오기 (준비 중)
 /sync - Git 동기화 (준비 중)`,
@@ -231,13 +233,18 @@ export function App() {
           setMessages((prev) => [
             ...prev,
             { role: "user", content: userMessage },
+          ]);
+          setAppState("config");
+          return;
+        }
+        if (command === "clear") {
+          // Clear all messages and show welcome message
+          setMessages([
             {
               role: "assistant",
-              content: `현재 설정:
-- 노트 디렉토리: ${config?.notesDir}
-- 사용자 이름: ${config?.userName || "(미설정)"}
-- 모델: ${config?.model}
-- 피드백 레벨: ${config?.feedback.level}`,
+              content: config?.userName
+                ? `안녕하세요, ${config.userName}님! 무엇을 도와드릴까요?\n\n💡 /help를 입력하면 사용 가능한 명령어를 볼 수 있어요.`
+                : "안녕하세요! 무엇을 도와드릴까요?\n\n💡 /help를 입력하면 사용 가능한 명령어를 볼 수 있어요.",
             },
           ]);
           return;
@@ -355,6 +362,60 @@ export function App() {
     setAppState("onboarding");
   }, []);
 
+  const handleConfigSave = useCallback(async (newConfig: GigaMindConfig) => {
+    try {
+      await saveConfig(newConfig);
+      setConfig(newConfig);
+
+      // Reinitialize client if model changed
+      if (newConfig.model !== config?.model) {
+        const apiKey = await loadApiKey();
+        const newClient = new GigaMindClient({
+          model: newConfig.model,
+          apiKey: apiKey || undefined,
+        });
+        setClient(newClient);
+      }
+
+      // Update notes directory if changed
+      if (newConfig.notesDir !== config?.notesDir) {
+        await ensureNotesDir(newConfig.notesDir);
+        const stats = await getNoteStats(newConfig.notesDir);
+        setNoteCount(stats.noteCount);
+        setConnectionCount(stats.connectionCount);
+      }
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: "설정이 저장되었습니다.",
+        },
+      ]);
+      setAppState("chat");
+    } catch (err) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: `설정 저장 중 오류가 발생했습니다: ${err instanceof Error ? err.message : String(err)}`,
+        },
+      ]);
+      setAppState("chat");
+    }
+  }, [config]);
+
+  const handleConfigCancel = useCallback(() => {
+    setMessages((prev) => [
+      ...prev,
+      {
+        role: "assistant",
+        content: "설정이 취소되었습니다.",
+      },
+    ]);
+    setAppState("chat");
+  }, []);
+
   if (error) {
     return (
       <Box flexDirection="column" padding={2}>
@@ -383,6 +444,23 @@ export function App() {
 
   if (appState === "onboarding") {
     return <Onboarding onComplete={handleOnboardingComplete} />;
+  }
+
+  if (appState === "config" && config) {
+    return (
+      <Box flexDirection="column">
+        <StatusBar
+          noteCount={noteCount}
+          connectionCount={connectionCount}
+          showStats={config.feedback.showStats}
+        />
+        <ConfigMenu
+          config={config}
+          onSave={handleConfigSave}
+          onCancel={handleConfigCancel}
+        />
+      </Box>
+    );
   }
 
   return (
