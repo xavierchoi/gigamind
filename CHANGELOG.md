@@ -18,6 +18,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Removes all messages except welcome message
   - Provides clean slate for new conversations
   - Integrated with Tab autocomplete system
+- **Markdown Rendering**: Terminal markdown support for AI responses
+  - Bold, Italic, Bold+Italic text formatting
+  - Inline code with gray background
+  - Headings (H1-H6) with level-based colors
+  - Bullet and numbered lists with proper indentation
+  - Fenced code blocks with language labels and borders
+  - Real-time rendering during streaming
 
 ### Enhanced
 - **Command System**: Expanded slash command support with `/config` and `/clear`

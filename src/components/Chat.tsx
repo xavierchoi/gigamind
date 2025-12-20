@@ -1,7 +1,8 @@
-import React, { useState, useCallback, useEffect, useRef } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import { Box, Text, useInput } from "ink";
 import TextInput from "ink-text-input";
 import Spinner from "ink-spinner";
+import { MarkdownText } from "../utils/markdown.js";
 
 // Available slash commands
 const SLASH_COMMANDS = [
@@ -48,7 +49,11 @@ function MessageBubble({ message }: { message: Message }) {
         {isUser ? "> " : ""}
       </Text>
       <Box marginLeft={isUser ? 2 : 0}>
-        <Text wrap="wrap">{message.content}</Text>
+        {isUser ? (
+          <Text wrap="wrap">{message.content}</Text>
+        ) : (
+          <MarkdownText>{message.content}</MarkdownText>
+        )}
       </Box>
     </Box>
   );
@@ -59,8 +64,8 @@ function StreamingMessage({ text }: { text: string }) {
 
   return (
     <Box flexDirection="column" marginBottom={1}>
-      <Box>
-        <Text wrap="wrap">{text}</Text>
+      <Box flexDirection="row">
+        <MarkdownText>{text}</MarkdownText>
         <Text color="gray">_</Text>
       </Box>
     </Box>
