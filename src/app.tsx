@@ -7,7 +7,7 @@ import { ConfigMenu } from "./components/ConfigMenu.js";
 import { Import, type ImportResult } from "./components/Import.js";
 import { GigaMindClient } from "./agent/client.js";
 import { SessionManager, type SessionSummary } from "./agent/session.js";
-import { createSubagentInvoker } from "./agent/subagent.js";
+import { createSubagentInvoker, detectSubagentIntent } from "./agent/subagent.js";
 import {
   loadConfig,
   saveConfig,
@@ -288,7 +288,7 @@ export function App() {
         const command = parts[0].toLowerCase();
 
         // Known commands
-        const IMPLEMENTED_COMMANDS = ["help", "config", "clear", "import", "session", "search", "clone", "me"];
+        const IMPLEMENTED_COMMANDS = ["help", "config", "clear", "import", "session", "search", "clone", "me", "note"];
         const UNIMPLEMENTED_COMMANDS = ["sync"];
 
         if (command === "help") {
@@ -306,6 +306,7 @@ export function App() {
 /session export - 현재 세션 마크다운으로 저장
 /search <query> - 노트 검색
 /clone <질문> - 내 노트 기반으로 나처럼 답변
+/note <내용> - 새 노트 작성
 /sync - Git 동기화 (준비 중)
 
 ---
@@ -634,6 +635,115 @@ export function App() {
           return;
         }
 
+        // /note 명령어 처리 - Note 에이전트 호출
+        if (command === "note") {
+          const noteContent = parts.slice(1).join(" ").trim();
+
+          // 내용이 없으면 안내 메시지 표시
+          if (!noteContent) {
+            setMessages((prev) => [
+              ...prev,
+              { role: "user", content: userMessage },
+              {
+                role: "assistant",
+                content: `노트 내용을 입력해주세요.
+
+**사용법:** /note <내용>
+
+**예시:**
+- /note 오늘 회의에서 새로운 프로젝트 아이디어가 나왔다
+- /note React 18의 Suspense 기능 정리
+- /note 독서 메모: "원씽" - 핵심은 가장 중요한 한 가지에 집중하는 것
+
+입력하신 내용을 바탕으로 노트를 작성해드릴게요!`,
+              },
+            ]);
+            return;
+          }
+
+          // 사용자 메시지 표시
+          setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
+          setIsLoading(true);
+          setLoadingStartTime(Date.now());
+          setStreamingText("노트를 작성하는 중...");
+
+          try {
+            // API 키 로드
+            const apiKey = await loadApiKey();
+            if (!apiKey) {
+              throw new Error("API 키가 설정되지 않았습니다.");
+            }
+
+            // Note 에이전트 호출
+            const subagent = createSubagentInvoker({
+              apiKey,
+              notesDir: config?.notesDir || "./notes",
+              model: config?.model || "claude-sonnet-4-20250514",
+            });
+
+            const result = await subagent.invoke(
+              "note-agent",
+              `다음 내용으로 노트를 작성해주세요: "${noteContent}"`,
+              {
+                onThinking: () => {
+                  setStreamingText("노트를 작성하는 중...");
+                },
+                onToolUse: (toolName) => {
+                  setStreamingText(`${toolName} 도구 사용 중...`);
+                },
+                onProgress: (info) => {
+                  if (info.filesFound !== undefined && info.filesFound > 0) {
+                    setStreamingText(`노트를 작성하는 중... (${info.filesFound}개 관련 파일 확인)`);
+                  }
+                },
+                onText: (text) => {
+                  setStreamingText((prev) =>
+                    prev.startsWith("노트를 작성") || prev.includes("도구 사용")
+                      ? text
+                      : prev + text
+                  );
+                },
+              }
+            );
+
+            if (result.success) {
+              // 노트 통계 업데이트
+              if (config) {
+                const stats = await getNoteStats(config.notesDir);
+                setNoteCount(stats.noteCount);
+                setConnectionCount(stats.connectionCount);
+              }
+
+              setMessages((prev) => [
+                ...prev,
+                { role: "assistant", content: result.response },
+              ]);
+            } else {
+              setMessages((prev) => [
+                ...prev,
+                {
+                  role: "assistant",
+                  content: `노트 작성 중 오류가 발생했습니다: ${result.error}`,
+                },
+              ]);
+            }
+          } catch (err) {
+            const friendlyMessage = formatErrorMessage(err);
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: "assistant",
+                content: `노트 작성 중 문제가 발생했습니다.\n\n${friendlyMessage}`,
+              },
+            ]);
+          } finally {
+            setIsLoading(false);
+            setLoadingStartTime(undefined);
+            setStreamingText("");
+          }
+          return;
+        }
+
         // Handle unimplemented commands
         if (UNIMPLEMENTED_COMMANDS.includes(command)) {
           setMessages((prev) => [
@@ -659,6 +769,174 @@ export function App() {
           ]);
           return;
         }
+      }
+
+      // 자연어에서 subagent intent 감지
+      const intent = detectSubagentIntent(userMessage);
+      if (intent && intent.agent === "note-agent") {
+        // 노트 작성 intent 감지 - Note 에이전트 호출
+        setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
+        setIsLoading(true);
+        setLoadingStartTime(Date.now());
+        setStreamingText("노트를 작성하는 중...");
+
+        try {
+          const apiKey = await loadApiKey();
+          if (!apiKey) {
+            throw new Error("API 키가 설정되지 않았습니다.");
+          }
+
+          const subagent = createSubagentInvoker({
+            apiKey,
+            notesDir: config?.notesDir || "./notes",
+            model: config?.model || "claude-sonnet-4-20250514",
+          });
+
+          const result = await subagent.invoke(
+            "note-agent",
+            intent.task,
+            {
+              onThinking: () => {
+                setStreamingText("노트를 작성하는 중...");
+              },
+              onToolUse: (toolName) => {
+                setStreamingText(`${toolName} 도구 사용 중...`);
+              },
+              onProgress: (info) => {
+                if (info.filesFound !== undefined && info.filesFound > 0) {
+                  setStreamingText(`노트를 작성하는 중... (${info.filesFound}개 관련 파일 확인)`);
+                }
+              },
+              onText: (text) => {
+                setStreamingText((prev) =>
+                  prev.startsWith("노트를 작성") || prev.includes("도구 사용")
+                    ? text
+                    : prev + text
+                );
+              },
+            }
+          );
+
+          if (result.success) {
+            if (config) {
+              const stats = await getNoteStats(config.notesDir);
+              setNoteCount(stats.noteCount);
+              setConnectionCount(stats.connectionCount);
+            }
+
+            setMessages((prev) => [
+              ...prev,
+              { role: "assistant", content: result.response },
+            ]);
+          } else {
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: "assistant",
+                content: `노트 작성 중 오류가 발생했습니다: ${result.error}`,
+              },
+            ]);
+          }
+        } catch (err) {
+          const friendlyMessage = formatErrorMessage(err);
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "assistant",
+              content: `노트 작성 중 문제가 발생했습니다.\n\n${friendlyMessage}`,
+            },
+          ]);
+        } finally {
+          setIsLoading(false);
+          setLoadingStartTime(undefined);
+          setStreamingText("");
+        }
+        return;
+      }
+
+      // search-agent와 clone-agent intent도 처리
+      if (intent && (intent.agent === "search-agent" || intent.agent === "clone-agent")) {
+        setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
+        setIsLoading(true);
+        setLoadingStartTime(Date.now());
+
+        const isSearch = intent.agent === "search-agent";
+        setStreamingText(isSearch ? "노트를 검색하는 중..." : "내 노트를 분석하는 중...");
+
+        try {
+          const apiKey = await loadApiKey();
+          if (!apiKey) {
+            throw new Error("API 키가 설정되지 않았습니다.");
+          }
+
+          const subagent = createSubagentInvoker({
+            apiKey,
+            notesDir: config?.notesDir || "./notes",
+            model: config?.model || "claude-sonnet-4-20250514",
+          });
+
+          const result = await subagent.invoke(
+            intent.agent,
+            intent.task,
+            {
+              onThinking: () => {
+                setStreamingText(isSearch ? "노트를 검색하는 중..." : "내 노트를 분석하는 중...");
+              },
+              onToolUse: (toolName) => {
+                setStreamingText(isSearch ? `${toolName} 도구 사용 중...` : `${toolName} 도구로 노트 탐색 중...`);
+              },
+              onProgress: (info) => {
+                if (info.filesMatched !== undefined && info.filesMatched > 0) {
+                  setStreamingText(isSearch
+                    ? `노트를 검색하는 중... (${info.filesMatched}개 파일에서 매치)`
+                    : `내 노트를 분석하는 중... (${info.filesMatched}개 파일에서 매치)`
+                  );
+                } else if (info.filesFound !== undefined && info.filesFound > 0) {
+                  setStreamingText(isSearch
+                    ? `노트를 검색하는 중... (${info.filesFound}개 파일 발견)`
+                    : `내 노트를 분석하는 중... (${info.filesFound}개 파일 발견)`
+                  );
+                }
+              },
+              onText: (text) => {
+                setStreamingText((prev) =>
+                  prev.startsWith("노트를 검색") || prev.startsWith("내 노트를") || prev.includes("도구")
+                    ? text
+                    : prev + text
+                );
+              },
+            }
+          );
+
+          if (result.success) {
+            setMessages((prev) => [
+              ...prev,
+              { role: "assistant", content: result.response },
+            ]);
+          } else {
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: "assistant",
+                content: `${isSearch ? "검색" : "클론 모드"} 중 오류가 발생했습니다: ${result.error}`,
+              },
+            ]);
+          }
+        } catch (err) {
+          const errorMessage = err instanceof Error ? err.message : String(err);
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "assistant",
+              content: `${isSearch ? "검색" : "클론 모드"} 중 오류가 발생했습니다: ${errorMessage}`,
+            },
+          ]);
+        } finally {
+          setIsLoading(false);
+          setLoadingStartTime(undefined);
+          setStreamingText("");
+        }
+        return;
       }
 
       setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
@@ -939,6 +1217,7 @@ export function App() {
           noteCount={noteCount}
           connectionCount={connectionCount}
           showStats={config.feedback.showStats}
+          currentAction={isLoading ? streamingText || "처리 중..." : undefined}
         />
         <ConfigMenu
           config={config}
@@ -956,6 +1235,7 @@ export function App() {
           noteCount={noteCount}
           connectionCount={connectionCount}
           showStats={config.feedback.showStats}
+          currentAction={isLoading ? streamingText || "처리 중..." : undefined}
         />
         <Import
           notesDir={config.notesDir}
@@ -972,6 +1252,7 @@ export function App() {
         noteCount={noteCount}
         connectionCount={connectionCount}
         showStats={config?.feedback.showStats ?? true}
+        currentAction={isLoading ? streamingText || "처리 중..." : undefined}
       />
       <Chat
         messages={messages}

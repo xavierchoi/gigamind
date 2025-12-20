@@ -5,7 +5,98 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.3.0] - 2025-12-19
+## [0.0.5] - 2025-12-19
+
+### Added
+
+#### Smart Note Creation (`/note` command)
+- **Note Creation Command**: `/note <content>` for creating new notes
+  - Natural language note content input
+  - Automatic frontmatter generation
+  - Intelligent save location determination
+  - Empty input validation with helpful usage guide
+  - Tab autocomplete support
+
+#### Note Agent
+- **Specialized Note Agent**: Dedicated agent for note creation and management
+  - Dynamic prompt injection with `notesDir` path
+  - Automatic frontmatter generation with YAML format:
+    - `id`: Unique note identifier (format: `note_YYYYMMDD_HHMMSSmmm`)
+    - `title`: Note title
+    - `type`: Note classification
+    - `created`: Creation timestamp
+    - `modified`: Last modified timestamp
+    - `tags`: Note tags
+  - Smart save location detection (inbox, projects, resources)
+  - Automatic wikilink detection and creation
+  - Integration with PARA method folder structure
+
+#### Tool-Based Intent Detection
+- **LLM-Powered Intent Recognition**: Natural language understanding for note creation
+  - `delegate_to_subagent` tool integration
+  - Language-independent detection (Korean, English, Japanese, etc.)
+  - Context-aware intent parsing with conversation history
+  - Replaces keyword-based detection system
+  - Supports natural variations:
+    - "노트 작성해줘" (Create a note)
+    - "메모 남기자" (Let's leave a memo)
+    - "기록해" (Record this)
+    - And other natural expressions
+
+#### Frontmatter Utilities (`src/utils/frontmatter.ts`)
+- **`generateNoteId()`**: Generate unique note IDs with millisecond precision
+- **`generateFrontmatter()`**: Create YAML frontmatter for notes
+- **`parseNote()`**: Parse notes with gray-matter
+- **`extractWikilinks()`**: Extract wikilinks from note content
+- **`updateModifiedDate()`**: Update note modification timestamps
+- **`addTags()`**: Add tags to note frontmatter
+- **Type-safe implementations**: Full TypeScript support with proper types
+
+### Enhanced
+
+#### StatusBar Improvements
+- **`currentAction` Prop**: Display current operation status
+  - Real-time action feedback
+  - User-friendly action descriptions
+- **`lastSync` Prop**: Show last synchronization time
+  - Relative time display (e.g., "2분 전" - 2 minutes ago)
+  - Automatic time formatting
+- **Loading State Integration**: Connected with streaming text display
+
+#### Error Handling
+- **Improved Error Messages**: Applied `formatErrorMessage()` to `/note` command
+  - User-friendly Korean error messages
+  - Actionable error guidance
+  - Consistent error formatting across the application
+
+#### System Prompt
+- **Specialized Agent Guidance**: Enhanced system prompt with agent delegation examples
+  - Clear delegation patterns
+  - Multi-language trigger examples
+  - Context-aware intent detection guidance
+
+### Changed
+- **Intent Detection System**: Migrated from keyword-based to LLM tool-based detection
+- **Note Creation Flow**: Streamlined with automatic frontmatter and location detection
+
+### Technical Details
+
+#### New Dependencies
+- `gray-matter`: ^4.0.3 - Frontmatter parsing (already included)
+- `yaml`: ^2.3.0 - YAML handling (already included)
+
+#### File Structure
+```
+src/
+├── utils/
+│   └── frontmatter.ts      # New: Frontmatter utilities
+├── agents/
+│   └── note-agent.ts       # New: Note creation agent
+└── components/
+    └── StatusBar.tsx       # Enhanced: Added currentAction and lastSync
+```
+
+## [0.0.4] - 2025-12-19
 
 ### Added
 
@@ -70,7 +161,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Error Handling**: Improved messaging for edge cases (empty searches, expired sessions)
 - **Visual Feedback**: Better real-time feedback during search operations
 
-## [0.2.0] - 2025-12-19
+## [0.0.3] - 2025-12-19
 
 ### Added
 

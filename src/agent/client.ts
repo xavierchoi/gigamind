@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
+import type { MessageParam, Tool, ToolUseBlock, TextBlock } from "@anthropic-ai/sdk/resources/messages";
 import { SYSTEM_PROMPT } from "./prompts.js";
 import {
   SubagentInvoker,
@@ -8,6 +8,32 @@ import {
   type SubagentResult,
 } from "./subagent.js";
 import { getLogger } from "../utils/logger.js";
+
+// delegate_to_subagent tool definition
+const DELEGATE_TOOL: Tool = {
+  name: "delegate_to_subagent",
+  description: "전문 에이전트에게 작업을 위임합니다. 노트 검색, 노트 생성, 사용자 관점 답변 등 전문 작업이 필요할 때 사용하세요.",
+  input_schema: {
+    type: "object" as const,
+    properties: {
+      agent: {
+        type: "string",
+        enum: ["search-agent", "note-agent", "clone-agent"],
+        description: "호출할 에이전트. search-agent: 노트 검색/찾기, note-agent: 노트 생성/기록, clone-agent: 사용자 관점 답변",
+      },
+      task: {
+        type: "string",
+        description: "에이전트에게 전달할 작업 내용",
+      },
+    },
+    required: ["agent", "task"],
+  },
+};
+
+interface DelegateToolInput {
+  agent: "search-agent" | "note-agent" | "clone-agent";
+  task: string;
+}
 
 const logger = getLogger();
 
@@ -75,16 +101,6 @@ export class GigaMindClient {
   }
 
   /**
-   * Check if message should be handled by a subagent
-   */
-  private shouldUseSubagent(message: string): { agent: string; task: string } | null {
-    if (!this.enableSubagents || !this.subagentInvoker) {
-      return null;
-    }
-    return detectSubagentIntent(message);
-  }
-
-  /**
    * Handle message with subagent
    */
   private async handleWithSubagent(
@@ -131,38 +147,7 @@ export class GigaMindClient {
   }
 
   async chat(userMessage: string, callbacks?: StreamCallbacks): Promise<string> {
-    // Check if this should be handled by a subagent
-    const subagentIntent = this.shouldUseSubagent(userMessage);
-
-    if (subagentIntent) {
-      try {
-        this.conversationHistory.push({
-          role: "user",
-          content: userMessage,
-        });
-
-        const response = await this.handleWithSubagent(
-          subagentIntent.agent,
-          subagentIntent.task,
-          callbacks
-        );
-
-        this.conversationHistory.push({
-          role: "assistant",
-          content: response,
-        });
-
-        callbacks?.onComplete?.(response);
-        return response;
-      } catch (error) {
-        const err = error instanceof Error ? error : new Error(String(error));
-        logger.error("Subagent execution failed", error);
-        callbacks?.onError?.(err);
-        throw err;
-      }
-    }
-
-    // Regular chat without subagent
+    // Add user message to history
     this.conversationHistory.push({
       role: "user",
       content: userMessage,
@@ -171,22 +156,56 @@ export class GigaMindClient {
     let fullResponse = "";
 
     try {
-      const stream = this.client.messages.stream({
+      // Use tool-based approach: let Claude decide if delegation is needed
+      const response = await this.client.messages.create({
         model: this.model,
         max_tokens: 4096,
         system: SYSTEM_PROMPT,
+        tools: [DELEGATE_TOOL],
         messages: this.conversationHistory,
       });
 
-      for await (const event of stream) {
-        if (
-          event.type === "content_block_delta" &&
-          event.delta.type === "text_delta"
-        ) {
-          const text = event.delta.text;
-          fullResponse += text;
-          callbacks?.onText?.(text);
+      // Check if Claude decided to use the delegate tool
+      const toolUseBlock = response.content.find(
+        (block): block is ToolUseBlock => block.type === "tool_use"
+      );
+
+      if (toolUseBlock && toolUseBlock.name === "delegate_to_subagent") {
+        // Claude decided to delegate to a subagent
+        const input = toolUseBlock.input as DelegateToolInput;
+        logger.debug(`Claude delegating to subagent: ${input.agent}`, { task: input.task });
+
+        try {
+          const subagentResponse = await this.handleWithSubagent(
+            input.agent,
+            input.task,
+            callbacks
+          );
+
+          // Add the subagent response to history
+          this.conversationHistory.push({
+            role: "assistant",
+            content: subagentResponse,
+          });
+
+          callbacks?.onComplete?.(subagentResponse);
+          return subagentResponse;
+        } catch (subagentError) {
+          const err = subagentError instanceof Error ? subagentError : new Error(String(subagentError));
+          logger.error("Subagent execution failed", subagentError);
+          callbacks?.onError?.(err);
+          throw err;
         }
+      }
+
+      // No delegation - extract text response
+      const textBlocks = response.content.filter(
+        (block): block is TextBlock => block.type === "text"
+      );
+
+      for (const block of textBlocks) {
+        fullResponse += block.text;
+        callbacks?.onText?.(block.text);
       }
 
       this.conversationHistory.push({
@@ -204,43 +223,47 @@ export class GigaMindClient {
   }
 
   async chatSync(userMessage: string): Promise<string> {
-    // Check if this should be handled by a subagent
-    const subagentIntent = this.shouldUseSubagent(userMessage);
-
-    if (subagentIntent) {
-      this.conversationHistory.push({
-        role: "user",
-        content: userMessage,
-      });
-
-      const response = await this.handleWithSubagent(
-        subagentIntent.agent,
-        subagentIntent.task
-      );
-
-      this.conversationHistory.push({
-        role: "assistant",
-        content: response,
-      });
-
-      return response;
-    }
-
-    // Regular chat without subagent
+    // Add user message to history
     this.conversationHistory.push({
       role: "user",
       content: userMessage,
     });
 
+    // Use tool-based approach: let Claude decide if delegation is needed
     const response = await this.client.messages.create({
       model: this.model,
       max_tokens: 4096,
       system: SYSTEM_PROMPT,
+      tools: [DELEGATE_TOOL],
       messages: this.conversationHistory,
     });
 
+    // Check if Claude decided to use the delegate tool
+    const toolUseBlock = response.content.find(
+      (block): block is ToolUseBlock => block.type === "tool_use"
+    );
+
+    if (toolUseBlock && toolUseBlock.name === "delegate_to_subagent") {
+      // Claude decided to delegate to a subagent
+      const input = toolUseBlock.input as DelegateToolInput;
+      logger.debug(`Claude delegating to subagent: ${input.agent}`, { task: input.task });
+
+      const subagentResponse = await this.handleWithSubagent(
+        input.agent,
+        input.task
+      );
+
+      this.conversationHistory.push({
+        role: "assistant",
+        content: subagentResponse,
+      });
+
+      return subagentResponse;
+    }
+
+    // No delegation - extract text response
     const textContent = response.content.find(
-      (block): block is Anthropic.TextBlock => block.type === "text"
+      (block): block is TextBlock => block.type === "text"
     );
     const assistantMessage = textContent?.text || "";
 
