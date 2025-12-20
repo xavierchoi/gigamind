@@ -1,12 +1,14 @@
 /**
  * Tool executor for GigaMind subagents
  * Handles actual execution of file system and shell operations
+ * Cross-platform compatible (Windows, macOS, Linux)
  */
 
 import fs from "node:fs/promises";
 import path from "node:path";
-import { exec } from "node:child_process";
+import { exec, spawn } from "node:child_process";
 import { promisify } from "node:util";
+import { glob } from "glob";
 import { getLogger } from "../utils/logger.js";
 import type {
   GlobToolInput,
@@ -19,10 +21,13 @@ import type {
 
 const execAsync = promisify(exec);
 const logger = getLogger();
+const isWindows = process.platform === "win32";
 
 // Safety: restrict operations to notes directory
 const ALLOWED_DIRS = ["./notes", "notes"];
-const BLOCKED_COMMANDS = [
+
+// Unix dangerous commands
+const BLOCKED_COMMANDS_UNIX = [
   "rm -rf",
   "rm -r /",
   "sudo",
@@ -32,6 +37,22 @@ const BLOCKED_COMMANDS = [
   "mkfs",
   "dd if=",
 ];
+
+// Windows dangerous commands
+const BLOCKED_COMMANDS_WINDOWS = [
+  "del /s",
+  "rd /s",
+  "rmdir /s",
+  "format",
+  "diskpart",
+  "reg delete",
+  "shutdown",
+  "taskkill /f",
+];
+
+const BLOCKED_COMMANDS = isWindows
+  ? BLOCKED_COMMANDS_WINDOWS
+  : BLOCKED_COMMANDS_UNIX;
 
 export interface ToolResult {
   success: boolean;
@@ -80,16 +101,25 @@ export async function executeGlob(
 
     logger.debug("Executing Glob", { pattern: input.pattern, path: searchPath });
 
-    // Use find command for glob matching
-    const { stdout } = await execAsync(
-      `find "${searchPath}" -type f -name "${input.pattern}" 2>/dev/null | head -100`
-    );
+    // Cross-platform: Use glob package instead of Unix find command
+    const pattern = input.pattern.includes("/") || input.pattern.includes("\\")
+      ? input.pattern
+      : `**/${input.pattern}`;
 
-    const files = stdout.trim().split("\n").filter(Boolean);
+    const files = await glob(pattern, {
+      cwd: searchPath,
+      nodir: true, // Only match files, not directories
+      absolute: true,
+      windowsPathsNoEscape: isWindows,
+      maxDepth: 10, // Limit depth for safety
+    });
+
+    // Limit results to prevent overwhelming output
+    const limitedFiles = files.slice(0, 100);
 
     return {
       success: true,
-      output: files.length > 0 ? files.join("\n") : "No files found matching pattern",
+      output: limitedFiles.length > 0 ? limitedFiles.join("\n") : "No files found matching pattern",
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -99,6 +129,20 @@ export async function executeGlob(
       output: "",
       error: message,
     };
+  }
+}
+
+/**
+ * Cross-platform grep implementation using pure JavaScript
+ * Searches file contents using regex pattern matching
+ */
+async function grepFile(filePath: string, pattern: RegExp): Promise<boolean> {
+  try {
+    const content = await fs.readFile(filePath, "utf-8");
+    return pattern.test(content);
+  } catch {
+    // Skip files that cannot be read (binary, permission issues, etc.)
+    return false;
   }
 }
 
@@ -119,30 +163,51 @@ export async function executeGrep(
 
     logger.debug("Executing Grep", { pattern: input.pattern, path: searchPath });
 
-    // Build grep command
-    let grepCmd = `grep -r -l "${input.pattern}" "${searchPath}"`;
-    if (input.glob) {
-      grepCmd = `grep -r -l --include="${input.glob}" "${input.pattern}" "${searchPath}"`;
-    }
-    grepCmd += " 2>/dev/null | head -50";
+    // Cross-platform: Use glob + fs.readFile instead of Unix grep command
+    const globPattern = input.glob || "**/*";
+    const files = await glob(globPattern, {
+      cwd: searchPath,
+      nodir: true,
+      absolute: true,
+      windowsPathsNoEscape: isWindows,
+      maxDepth: 10,
+    });
 
-    const { stdout } = await execAsync(grepCmd);
-    const files = stdout.trim().split("\n").filter(Boolean);
+    // Create regex from pattern (escape special chars if needed)
+    let searchRegex: RegExp;
+    try {
+      searchRegex = new RegExp(input.pattern, "i");
+    } catch {
+      // If regex is invalid, treat as literal string
+      searchRegex = new RegExp(input.pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+    }
+
+    // Search files in parallel with concurrency limit
+    const matchingFiles: string[] = [];
+    const BATCH_SIZE = 10;
+
+    for (let i = 0; i < files.length && matchingFiles.length < 50; i += BATCH_SIZE) {
+      const batch = files.slice(i, i + BATCH_SIZE);
+      const results = await Promise.all(
+        batch.map(async (file) => ({
+          file,
+          matches: await grepFile(file, searchRegex),
+        }))
+      );
+
+      for (const { file, matches } of results) {
+        if (matches && matchingFiles.length < 50) {
+          matchingFiles.push(file);
+        }
+      }
+    }
 
     return {
       success: true,
       output:
-        files.length > 0 ? files.join("\n") : "No files found matching pattern",
+        matchingFiles.length > 0 ? matchingFiles.join("\n") : "No files found matching pattern",
     };
   } catch (error) {
-    // grep returns exit code 1 when no matches found
-    if (error instanceof Error && "code" in error && error.code === 1) {
-      return {
-        success: true,
-        output: "No files found matching pattern",
-      };
-    }
-
     const message = error instanceof Error ? error.message : String(error);
     logger.error("Grep execution failed", error);
     return {
@@ -270,6 +335,10 @@ export async function executeEdit(
   }
 }
 
+/**
+ * Cross-platform shell command execution
+ * Uses appropriate shell based on the operating system
+ */
 export async function executeBash(
   input: BashToolInput,
   notesDir: string
@@ -285,13 +354,14 @@ export async function executeBash(
       };
     }
 
-    logger.debug("Executing Bash", { command });
+    logger.debug("Executing shell command", { command, platform: process.platform });
 
-    // Set working directory to notes directory for safety
-    const { stdout, stderr } = await execAsync(command, {
-      cwd: notesDir,
-      timeout: 30000, // 30 second timeout
-    });
+    // Cross-platform: Use appropriate shell based on OS
+    const shellOptions = isWindows
+      ? { shell: "cmd.exe" as const, cwd: notesDir, timeout: 30000 }
+      : { shell: "/bin/sh" as const, cwd: notesDir, timeout: 30000 };
+
+    const { stdout, stderr } = await execAsync(command, shellOptions);
 
     return {
       success: true,
@@ -299,7 +369,7 @@ export async function executeBash(
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    logger.error("Bash execution failed", error);
+    logger.error("Shell execution failed", error);
     return {
       success: false,
       output: "",
