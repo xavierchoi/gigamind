@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2025-12-19
+
+### Added
+- **Interactive Configuration Menu** (`ConfigMenu.tsx`): Interactive TUI menu accessible via `/config` command
+  - Edit user name, notes directory, AI model selection, and feedback level
+  - Arrow key navigation for field selection
+  - Enter key to edit selected field
+  - Esc key to cancel changes
+  - Visual feedback with highlighted selection states
+- **Clear Command**: `/clear` command to reset conversation history
+  - Removes all messages except welcome message
+  - Provides clean slate for new conversations
+  - Integrated with Tab autocomplete system
+
+### Enhanced
+- **Command System**: Expanded slash command support with `/config` and `/clear`
+- **Tab Autocomplete**: Updated to include new commands in suggestion list
+
 ## [0.1.0] - 2025-12-19
 
 ### Added
