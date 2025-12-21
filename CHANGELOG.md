@@ -5,6 +5,66 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2025-12-20
+
+### Added
+
+#### 세션 시작 시 현재 시각 표시
+- **시간 유틸리티 모듈** (`src/utils/time.ts`): 글로벌 사용자를 위한 타임존 인식 시간 처리
+  - `getCurrentTime()`: UTC, 로컬 시간, 타임존, 오프셋 반환
+  - `formatTimeDisplay()`: "2025-12-20 오후 3:45 (Asia/Seoul, UTC+09:00)" 형식 포맷
+  - `formatLocalTime()`: 사용자 친화적 로컬 시간 포맷
+  - `getTimezoneInfo()`: 타임존 이름과 오프셋 반환
+  - `formatRelativeTime()`: "방금 전", "5분 전" 등 한국어 상대 시간
+- **웰컴 메시지에 현재 시각 표시**: 세션 시작 시 🕐 현재 시각 표시
+- **세션에 타임존 정보 저장**: `Session` 인터페이스에 `timezone`, `timezoneOffset` 필드 추가
+
+#### ESC 키로 API 요청 완전 중단
+- **AbortController 패턴 적용**: 모든 API 호출에 abort signal 전달
+- **Request Generation Counter**: 취소된 요청의 콜백 무효화로 race condition 방지
+- **Anthropic SDK APIUserAbortError 처리**: `error.message === "Request was aborted."` 패턴 감지
+- **친근한 취소 메시지**: "요청이 취소되었습니다. 다른 걸 부탁하시겠어요?"
+
+### Fixed
+
+#### 노트 생성 시 정확한 날짜 처리
+- **LLM에게 현재 날짜 명시**: note-agent, research-agent 프롬프트에 현재 시각 섹션 추가
+- **하드코딩된 예시 날짜 제거**: `2024-01-15` → 동적으로 현재 날짜 생성
+- **SubagentContext에 currentTime 필드 추가**: 모든 서브에이전트에 정확한 시간 정보 전달
+
+#### 테스트 격리 문제 수정
+- **테스트가 실제 config 덮어쓰는 문제 해결**: `GIGAMIND_TEST_CONFIG_DIR` 환경변수 도입
+- **임시 디렉토리 사용**: 테스트 시 `~/.gigamind/` 대신 임시 디렉토리 사용
+- **테스트 후 정리**: 임시 디렉토리 자동 정리
+
+#### 디렉토리 없을 때 크래시 방지
+- **analyzer.ts 개선**: 노트 디렉토리가 없을 때 graceful하게 빈 배열 반환
+- **사전 존재 여부 체크**: `fs.access(dir)` 호출로 디렉토리 존재 확인
+
+### Technical Details
+
+#### 새로운 파일
+```
+src/utils/time.ts              # 타임존 인식 시간 유틸리티
+```
+
+#### 수정된 파일
+- `src/app.tsx`: 웰컴 메시지에 시간 표시, ESC 중단 기능, request generation counter
+- `src/agent/client.ts`: AbortError 처리, result.aborted 체크, APIUserAbortError 감지
+- `src/agent/subagent.ts`: AbortError 처리, aborted 플래그 반환
+- `src/agent/session.ts`: timezone, timezoneOffset 필드 추가
+- `src/agent/prompts.ts`: currentTime 컨텍스트, 동적 날짜 프롬프트
+- `src/utils/config.ts`: GIGAMIND_TEST_CONFIG_DIR 환경변수 지원
+- `src/utils/graph/analyzer.ts`: 디렉토리 존재 체크 추가
+- `tests/utils/config.test.ts`: 테스트 격리 적용
+
+### Tests
+
+- 전체 테스트: 279개 통과
+- 테스트 격리: 실제 사용자 config 보호
+
+---
+
 ## [0.1.0] - 2025-12-20
 
 ### Added

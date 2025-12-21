@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Box, Text, useApp, useInput } from "ink";
 import { Chat, type Message } from "./components/Chat.js";
 import { StatusBar } from "./components/StatusBar.js";
 import { Onboarding, type OnboardingResult } from "./components/Onboarding.js";
 import { ConfigMenu } from "./components/ConfigMenu.js";
 import { Import, type ImportResult } from "./components/Import.js";
-import { GigaMindClient } from "./agent/client.js";
+import { GigaMindClient, AbortError } from "./agent/client.js";
 import { SessionManager, type SessionSummary } from "./agent/session.js";
 import { createSubagentInvoker, detectSubagentIntent } from "./agent/subagent.js";
 import {
@@ -141,6 +141,12 @@ export function App() {
   const [loadingStartTime, setLoadingStartTime] = useState<number | undefined>(undefined);
   const [isFirstSession, setIsFirstSession] = useState(false);
   const [pendingRestoreSession, setPendingRestoreSession] = useState<SessionSummary | null>(null);
+
+  // AbortController ref for cancelling ongoing API requests
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Request generation counter to invalidate callbacks from cancelled/stale requests
+  const requestGenerationRef = useRef<number>(0);
 
   // Initialize app
   useEffect(() => {
@@ -304,6 +310,9 @@ export function App() {
   const handleSubmit = useCallback(
     async (userMessage: string) => {
       if (!client || isLoading) return;
+
+      // Increment generation for this new request
+      const currentGeneration = ++requestGenerationRef.current;
 
       // Handle special commands
       if (userMessage.startsWith("/")) {
@@ -482,6 +491,10 @@ export function App() {
           setLoadingStartTime(Date.now());
           setStreamingText("노트를 검색하는 중...");
 
+          // Create AbortController for this request
+          const controller = new AbortController();
+          abortControllerRef.current = controller;
+
           try {
             // API 키 로드
             const apiKey = await loadApiKey();
@@ -505,12 +518,15 @@ export function App() {
               `다음 키워드로 노트를 검색해주세요: "${searchQuery}"`,
               {
                 onThinking: () => {
+                  if (requestGenerationRef.current !== currentGeneration) return;
                   setStreamingText("노트를 검색하는 중...");
                 },
                 onToolUse: (toolName) => {
+                  if (requestGenerationRef.current !== currentGeneration) return;
                   setStreamingText(`${toolName} 도구 사용 중...`);
                 },
                 onProgress: (info) => {
+                  if (requestGenerationRef.current !== currentGeneration) return;
                   if (info.filesMatched !== undefined && info.filesMatched > 0) {
                     setStreamingText(`노트를 검색하는 중... (${info.filesMatched}개 파일에서 매치)`);
                   } else if (info.filesFound !== undefined && info.filesFound > 0) {
@@ -518,6 +534,7 @@ export function App() {
                   }
                 },
                 onText: (text) => {
+                  if (requestGenerationRef.current !== currentGeneration) return;
                   setStreamingText((prev) =>
                     prev.startsWith("노트를 검색") || prev.includes("도구 사용")
                       ? text
@@ -525,8 +542,14 @@ export function App() {
                   );
                 },
               },
-              { conversationHistory }
+              { conversationHistory, signal: controller.signal }
             );
+
+            // Handle aborted result
+            if (result.aborted) {
+              abortControllerRef.current = null;
+              return;
+            }
 
             if (result.success) {
               // Sync to client conversation history
@@ -563,6 +586,11 @@ export function App() {
               ]);
             }
           } catch (err) {
+            // Abort는 오류가 아님 - 사용자가 의도적으로 취소한 것
+            if (err instanceof AbortError || (err instanceof Error && err.name === "AbortError")) {
+              return;
+            }
+
             const errorMessage = err instanceof Error ? err.message : String(err);
             const errorResponse = `검색 중 오류가 발생했습니다: ${errorMessage}`;
 
@@ -583,6 +611,7 @@ export function App() {
               },
             ]);
           } finally {
+            abortControllerRef.current = null;
             setIsLoading(false);
             setLoadingStartTime(undefined);
             setStreamingText("");
@@ -622,6 +651,10 @@ export function App() {
           setLoadingStartTime(Date.now());
           setStreamingText("내 노트를 분석하는 중...");
 
+          // Create AbortController for this request
+          const controller = new AbortController();
+          abortControllerRef.current = controller;
+
           try {
             // API 키 로드
             const apiKey = await loadApiKey();
@@ -645,12 +678,15 @@ export function App() {
               cloneQuery,
               {
                 onThinking: () => {
+                  if (requestGenerationRef.current !== currentGeneration) return;
                   setStreamingText("내 노트를 분석하는 중...");
                 },
                 onToolUse: (toolName) => {
+                  if (requestGenerationRef.current !== currentGeneration) return;
                   setStreamingText(`${toolName} 도구로 노트 탐색 중...`);
                 },
                 onProgress: (info) => {
+                  if (requestGenerationRef.current !== currentGeneration) return;
                   if (info.filesMatched !== undefined && info.filesMatched > 0) {
                     setStreamingText(`내 노트를 분석하는 중... (${info.filesMatched}개 파일에서 매치)`);
                   } else if (info.filesFound !== undefined && info.filesFound > 0) {
@@ -658,6 +694,7 @@ export function App() {
                   }
                 },
                 onText: (text) => {
+                  if (requestGenerationRef.current !== currentGeneration) return;
                   setStreamingText((prev) =>
                     prev.startsWith("내 노트를") || prev.includes("도구")
                       ? text
@@ -665,8 +702,14 @@ export function App() {
                   );
                 },
               },
-              { conversationHistory }
+              { conversationHistory, signal: controller.signal }
             );
+
+            // Handle aborted result
+            if (result.aborted) {
+              abortControllerRef.current = null;
+              return;
+            }
 
             if (result.success) {
               // Sync to client conversation history
@@ -703,6 +746,11 @@ export function App() {
               ]);
             }
           } catch (err) {
+            // Abort는 오류가 아님 - 사용자가 의도적으로 취소한 것
+            if (err instanceof AbortError || (err instanceof Error && err.name === "AbortError")) {
+              return;
+            }
+
             const errorMessage = err instanceof Error ? err.message : String(err);
             const errorResponse = `클론 모드 실행 중 오류가 발생했습니다: ${errorMessage}`;
 
@@ -723,6 +771,7 @@ export function App() {
               },
             ]);
           } finally {
+            abortControllerRef.current = null;
             setIsLoading(false);
             setLoadingStartTime(undefined);
             setStreamingText("");
@@ -762,6 +811,10 @@ export function App() {
           setLoadingStartTime(Date.now());
           setStreamingText("노트를 작성하는 중...");
 
+          // Create AbortController for this request
+          const controller = new AbortController();
+          abortControllerRef.current = controller;
+
           try {
             // API 키 로드
             const apiKey = await loadApiKey();
@@ -785,17 +838,21 @@ export function App() {
               `다음 내용으로 노트를 작성해주세요: "${noteContent}"`,
               {
                 onThinking: () => {
+                  if (requestGenerationRef.current !== currentGeneration) return;
                   setStreamingText("노트를 작성하는 중...");
                 },
                 onToolUse: (toolName) => {
+                  if (requestGenerationRef.current !== currentGeneration) return;
                   setStreamingText(`${toolName} 도구 사용 중...`);
                 },
                 onProgress: (info) => {
+                  if (requestGenerationRef.current !== currentGeneration) return;
                   if (info.filesFound !== undefined && info.filesFound > 0) {
                     setStreamingText(`노트를 작성하는 중... (${info.filesFound}개 관련 파일 확인)`);
                   }
                 },
                 onText: (text) => {
+                  if (requestGenerationRef.current !== currentGeneration) return;
                   setStreamingText((prev) =>
                     prev.startsWith("노트를 작성") || prev.includes("도구 사용")
                       ? text
@@ -803,8 +860,14 @@ export function App() {
                   );
                 },
               },
-              { conversationHistory }
+              { conversationHistory, signal: controller.signal }
             );
+
+            // Handle aborted result
+            if (result.aborted) {
+              abortControllerRef.current = null;
+              return;
+            }
 
             if (result.success) {
               // 노트 통계 업데이트
@@ -850,6 +913,11 @@ export function App() {
               ]);
             }
           } catch (err) {
+            // Abort는 오류가 아님 - 사용자가 의도적으로 취소한 것
+            if (err instanceof AbortError || (err instanceof Error && err.name === "AbortError")) {
+              return;
+            }
+
             const friendlyMessage = formatErrorMessage(err);
             const errorResponse = `노트 작성 중 문제가 발생했습니다.\n\n${friendlyMessage}`;
 
@@ -870,6 +938,7 @@ export function App() {
               },
             ]);
           } finally {
+            abortControllerRef.current = null;
             setIsLoading(false);
             setLoadingStartTime(undefined);
             setStreamingText("");
@@ -913,6 +982,10 @@ export function App() {
         setLoadingStartTime(Date.now());
         setStreamingText("노트를 작성하는 중...");
 
+        // Create AbortController for this request
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
+
         try {
           const apiKey = await loadApiKey();
           if (!apiKey) {
@@ -934,17 +1007,21 @@ export function App() {
             intent.task,
             {
               onThinking: () => {
+                if (requestGenerationRef.current !== currentGeneration) return;
                 setStreamingText("노트를 작성하는 중...");
               },
               onToolUse: (toolName) => {
+                if (requestGenerationRef.current !== currentGeneration) return;
                 setStreamingText(`${toolName} 도구 사용 중...`);
               },
               onProgress: (info) => {
+                if (requestGenerationRef.current !== currentGeneration) return;
                 if (info.filesFound !== undefined && info.filesFound > 0) {
                   setStreamingText(`노트를 작성하는 중... (${info.filesFound}개 관련 파일 확인)`);
                 }
               },
               onText: (text) => {
+                if (requestGenerationRef.current !== currentGeneration) return;
                 setStreamingText((prev) =>
                   prev.startsWith("노트를 작성") || prev.includes("도구 사용")
                     ? text
@@ -952,8 +1029,14 @@ export function App() {
                 );
               },
             },
-            { conversationHistory }
+            { conversationHistory, signal: controller.signal }
           );
+
+          // Handle aborted result
+          if (result.aborted) {
+            abortControllerRef.current = null;
+            return;
+          }
 
           if (result.success) {
             if (config) {
@@ -998,6 +1081,11 @@ export function App() {
             ]);
           }
         } catch (err) {
+          // Abort는 오류가 아님 - 사용자가 의도적으로 취소한 것
+          if (err instanceof AbortError || (err instanceof Error && err.name === "AbortError")) {
+            return;
+          }
+
           const friendlyMessage = formatErrorMessage(err);
           const errorResponse = `노트 작성 중 문제가 발생했습니다.\n\n${friendlyMessage}`;
 
@@ -1018,6 +1106,7 @@ export function App() {
             },
           ]);
         } finally {
+          abortControllerRef.current = null;
           setIsLoading(false);
           setLoadingStartTime(undefined);
           setStreamingText("");
@@ -1033,6 +1122,10 @@ export function App() {
 
         const isSearch = intent.agent === "search-agent";
         setStreamingText(isSearch ? "노트를 검색하는 중..." : "내 노트를 분석하는 중...");
+
+        // Create AbortController for this request
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
 
         try {
           const apiKey = await loadApiKey();
@@ -1055,12 +1148,15 @@ export function App() {
             intent.task,
             {
               onThinking: () => {
+                if (requestGenerationRef.current !== currentGeneration) return;
                 setStreamingText(isSearch ? "노트를 검색하는 중..." : "내 노트를 분석하는 중...");
               },
               onToolUse: (toolName) => {
+                if (requestGenerationRef.current !== currentGeneration) return;
                 setStreamingText(isSearch ? `${toolName} 도구 사용 중...` : `${toolName} 도구로 노트 탐색 중...`);
               },
               onProgress: (info) => {
+                if (requestGenerationRef.current !== currentGeneration) return;
                 if (info.filesMatched !== undefined && info.filesMatched > 0) {
                   setStreamingText(isSearch
                     ? `노트를 검색하는 중... (${info.filesMatched}개 파일에서 매치)`
@@ -1074,6 +1170,7 @@ export function App() {
                 }
               },
               onText: (text) => {
+                if (requestGenerationRef.current !== currentGeneration) return;
                 setStreamingText((prev) =>
                   prev.startsWith("노트를 검색") || prev.startsWith("내 노트를") || prev.includes("도구")
                     ? text
@@ -1081,8 +1178,14 @@ export function App() {
                 );
               },
             },
-            { conversationHistory }
+            { conversationHistory, signal: controller.signal }
           );
+
+          // Handle aborted result
+          if (result.aborted) {
+            abortControllerRef.current = null;
+            return;
+          }
 
           if (result.success) {
             // Sync to client conversation history
@@ -1119,6 +1222,11 @@ export function App() {
             ]);
           }
         } catch (err) {
+          // Abort는 오류가 아님 - 사용자가 의도적으로 취소한 것
+          if (err instanceof AbortError || (err instanceof Error && err.name === "AbortError")) {
+            return;
+          }
+
           const errorMessage = err instanceof Error ? err.message : String(err);
           const errorResponse = `${isSearch ? "검색" : "클론 모드"} 중 오류가 발생했습니다: ${errorMessage}`;
 
@@ -1139,6 +1247,7 @@ export function App() {
             },
           ]);
         } finally {
+          abortControllerRef.current = null;
           setIsLoading(false);
           setLoadingStartTime(undefined);
           setStreamingText("");
@@ -1152,38 +1261,71 @@ export function App() {
       setStreamingText("");
       setIsFirstSession(false); // After first message, no longer first session
 
-      try {
-        await client.chat(userMessage, {
-          onText: (text) => {
-            setStreamingText((prev) => prev + text);
-          },
-          onComplete: (fullText) => {
-            setMessages((prev) => [...prev, { role: "assistant", content: fullText }]);
-            setStreamingText("");
-            setIsLoading(false);
-            setLoadingStartTime(undefined);
+      // Create a new AbortController for this request
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
 
-            // Save to session
-            sessionManager?.addMessage({ role: "user", content: userMessage });
-            sessionManager?.addMessage({ role: "assistant", content: fullText });
-            sessionManager?.saveCurrentSession();
+      try {
+        await client.chat(
+          userMessage,
+          {
+            onText: (text) => {
+              // Ignore if this is from an old request
+              if (requestGenerationRef.current !== currentGeneration) return;
+              setStreamingText((prev) => prev + text);
+            },
+            onComplete: (fullText) => {
+              // Ignore if this is from an old request
+              if (requestGenerationRef.current !== currentGeneration) return;
+              abortControllerRef.current = null;
+              setMessages((prev) => [...prev, { role: "assistant", content: fullText }]);
+              setStreamingText("");
+              setIsLoading(false);
+              setLoadingStartTime(undefined);
+
+              // Save to session
+              sessionManager?.addMessage({ role: "user", content: userMessage });
+              sessionManager?.addMessage({ role: "assistant", content: fullText });
+              sessionManager?.saveCurrentSession();
+            },
+            onError: (err) => {
+              // Ignore if this is from an old request
+              if (requestGenerationRef.current !== currentGeneration) return;
+
+              // Don't show error for aborts - handled in handleCancel
+              if (err instanceof AbortError || (err instanceof Error && err.name === "AbortError")) {
+                return;
+              }
+
+              abortControllerRef.current = null;
+              const friendlyMessage = formatErrorMessage(err);
+              setMessages((prev) => [
+                ...prev,
+                {
+                  role: "assistant",
+                  content: friendlyMessage,
+                },
+              ]);
+              setIsLoading(false);
+              setLoadingStartTime(undefined);
+            },
+            onAbort: () => {
+              // Abort is handled in handleCancel, just clean up
+              abortControllerRef.current = null;
+            },
           },
-          onError: (err) => {
-            const friendlyMessage = formatErrorMessage(err);
-            setMessages((prev) => [
-              ...prev,
-              {
-                role: "assistant",
-                content: friendlyMessage,
-              },
-            ]);
-            setIsLoading(false);
-            setLoadingStartTime(undefined);
-          },
-        });
+          { signal: controller.signal }
+        );
       } catch (err) {
+        abortControllerRef.current = null;
         setIsLoading(false);
         setLoadingStartTime(undefined);
+
+        // Don't show error message for abort - it's intentional cancellation
+        if (err instanceof AbortError || (err instanceof Error && err.name === "AbortError")) {
+          // Abort was already handled in handleCancel
+          return;
+        }
 
         const friendlyMessage = formatErrorMessage(err);
         setMessages((prev) => [
@@ -1198,19 +1340,46 @@ export function App() {
     [client, isLoading, config, sessionManager]
   );
 
-  // Cancel handler - UI only cancellation (API call continues in background)
+  // Cancel handler - aborts ongoing API requests completely
   const handleCancel = useCallback(() => {
     if (isLoading) {
+      // Increment generation to invalidate all callbacks from cancelled request
+      requestGenerationRef.current++;
+
+      // Abort the ongoing API request
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+
       setIsLoading(false);
       setLoadingStartTime(undefined);
       setStreamingText("");
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: "응답을 건너뛰었습니다. (백그라운드에서 처리 중일 수 있습니다)",
-        },
-      ]);
+
+      // Remove the pending user message that was added before the API call
+      // and add a cancellation message instead
+      setMessages((prev) => {
+        // Find and remove the last user message (the cancelled request)
+        const lastUserIndex = prev.map(m => m.role).lastIndexOf("user");
+        if (lastUserIndex !== -1) {
+          const withoutLastUser = [...prev.slice(0, lastUserIndex), ...prev.slice(lastUserIndex + 1)];
+          return [
+            ...withoutLastUser,
+            {
+              role: "assistant",
+              content: "요청이 취소되었습니다. 다른 걸 부탁하시겠어요?",
+            },
+          ];
+        }
+        // If no user message found, just add the cancellation message
+        return [
+          ...prev,
+          {
+            role: "assistant",
+            content: "요청이 취소되었습니다. 다른 걸 부탁하시겠어요?",
+          },
+        ];
+      });
     }
   }, [isLoading]);
 

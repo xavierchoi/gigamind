@@ -56,7 +56,16 @@ const DEFAULT_CONFIG: GigaMindConfig = {
   noteDetail: "balanced",
 };
 
+/**
+ * Get the configuration directory path.
+ * In test mode (GIGAMIND_TEST_CONFIG_DIR env var set), uses the test directory.
+ * Otherwise uses ~/.gigamind
+ */
 export function getConfigDir(): string {
+  // Allow tests to override config directory to avoid touching real user config
+  if (process.env.GIGAMIND_TEST_CONFIG_DIR) {
+    return process.env.GIGAMIND_TEST_CONFIG_DIR;
+  }
   return path.join(os.homedir(), ".gigamind");
 }
 

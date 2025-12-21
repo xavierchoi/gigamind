@@ -12,7 +12,7 @@ import {
   openFolderDialog,
   isFolderDialogSupported,
 } from "../utils/folderDialog/index.js";
-import { extractWikilinks } from "../utils/graph/wikilinks.js";
+import { generateNoteId } from "../utils/frontmatter.js";
 
 type ImportStep =
   | "source"
@@ -37,20 +37,52 @@ export interface ImportResult {
   sourcePath: string;
   error?: string;
   cancelled?: boolean;
+  rolledBack?: boolean;
 }
 
-// Generate note ID in the format: note_YYYY_NNN
-let noteCounter = 0;
-function generateNoteId(): string {
-  const year = new Date().getFullYear();
-  noteCounter++;
-  const paddedCounter = String(noteCounter).padStart(3, "0");
-  return `note_${year}_${paddedCounter}`;
+// Import session for rollback support
+interface ImportSession {
+  createdFiles: string[];
+  createdImages: string[];
 }
 
-// Reset counter (call at start of import session)
-function resetNoteCounter(): void {
-  noteCounter = 0;
+// Wikilink mapping for alias preservation
+interface WikilinkMapping {
+  originalTitle: string;
+  originalFileName: string;
+  newFileName: string;
+  newId: string;
+  targetFolder: string;
+}
+
+// Folder mapping rules for hybrid folder strategy
+interface FolderMappingRule {
+  patterns: string[];
+  target: string;
+}
+
+const FOLDER_MAPPING_RULES: FolderMappingRule[] = [
+  { patterns: ["books", "reading", "literature", "독서", "책"], target: "resources/books" },
+  { patterns: ["projects", "project", "work", "프로젝트"], target: "projects" },
+  { patterns: ["archive", "archived", "old", "보관"], target: "archive" },
+  { patterns: ["concepts", "definitions", "reference", "개념", "참고"], target: "resources/concepts" },
+  { patterns: ["areas", "area", "영역", "분야"], target: "areas" },
+];
+
+// Map source folder to target folder based on patterns
+function mapFolderToTarget(sourcePath: string, sourceRoot: string): string {
+  const relativePath = path.relative(sourceRoot, path.dirname(sourcePath));
+  const folders = relativePath.split(path.sep).filter(Boolean);
+
+  for (const folder of folders) {
+    const lowerFolder = folder.toLowerCase();
+    for (const rule of FOLDER_MAPPING_RULES) {
+      if (rule.patterns.some((p) => lowerFolder.includes(p))) {
+        return rule.target;
+      }
+    }
+  }
+  return "inbox"; // Default fallback
 }
 
 // Image extensions to look for
@@ -80,30 +112,101 @@ function extractImageRefs(content: string): string[] {
   return images;
 }
 
-// Update wikilinks in content to point to new locations
-function updateWikilinks(
+// Update wikilinks with aliases to preserve original titles
+function updateWikilinksWithAliases(
   content: string,
-  fileMapping: Map<string, string>
+  wikilinkMapping: Map<string, WikilinkMapping>
 ): string {
-  // Update [[wikilinks]]
   return content.replace(
-    /\[\[([^\]|]+)(\|[^\]]+)?\]\]/g,
-    (match, link, alias) => {
-      // Remove file extension for matching
-      const linkWithoutExt = link.replace(/\.md$/, "");
+    /\[\[([^\]|#]+)(#[^\]|]+)?(\|[^\]]+)?\]\]/g,
+    (match, target, section, existingAlias) => {
+      const normalizedTarget = target.trim().toLowerCase();
 
-      // Look for matching file in mapping
-      for (const [oldPath, newPath] of fileMapping) {
-        const oldBasename = path.basename(oldPath, ".md");
-        if (oldBasename === linkWithoutExt || oldPath.includes(linkWithoutExt)) {
-          const newBasename = path.basename(newPath, ".md");
-          return `[[${newBasename}${alias || ""}]]`;
+      for (const [key, mapping] of wikilinkMapping) {
+        const normalizedKey = key.toLowerCase().replace(/\.md$/, "");
+        if (
+          normalizedKey === normalizedTarget ||
+          normalizedKey === normalizedTarget.replace(/\.md$/, "")
+        ) {
+          const newBasename = mapping.newFileName.replace(/\.md$/, "");
+          // Keep existing alias if present, otherwise add original title as alias
+          const alias = existingAlias || `|${mapping.originalTitle}`;
+          const sectionPart = section || "";
+
+          return `[[${newBasename}${sectionPart}${alias}]]`;
         }
       }
       // Keep original if no match found
       return match;
     }
   );
+}
+
+// Rollback import session - delete all created files
+async function rollbackImport(session: ImportSession): Promise<void> {
+  // Delete files in reverse order
+  for (const filePath of session.createdFiles.reverse()) {
+    try {
+      await fs.unlink(filePath);
+    } catch {
+      // Ignore errors during rollback
+    }
+  }
+  for (const imagePath of session.createdImages.reverse()) {
+    try {
+      await fs.unlink(imagePath);
+    } catch {
+      // Ignore errors during rollback
+    }
+  }
+}
+
+// Minimum title length for auto-linking (to avoid false positives)
+const MIN_TITLE_LENGTH_FOR_AUTO_LINK = 3;
+
+// Auto-generate wikilinks for text matching other note titles
+function autoGenerateWikilinks(
+  content: string,
+  wikilinkMapping: Map<string, WikilinkMapping>,
+  currentNoteTitle: string
+): string {
+  // Build a list of titles to search for (sorted by length descending to match longer titles first)
+  const titlesToMatch: Array<{ title: string; mapping: WikilinkMapping }> = [];
+
+  for (const [key, mapping] of wikilinkMapping) {
+    // Skip if it's the current note's title (avoid self-linking)
+    if (key.toLowerCase() === currentNoteTitle.toLowerCase()) continue;
+
+    // Only use original titles (skip filename keys)
+    if (key === mapping.originalTitle && key.length >= MIN_TITLE_LENGTH_FOR_AUTO_LINK) {
+      titlesToMatch.push({ title: key, mapping });
+    }
+  }
+
+  // Sort by length descending (longer matches first)
+  titlesToMatch.sort((a, b) => b.title.length - a.title.length);
+
+  let result = content;
+
+  for (const { title, mapping } of titlesToMatch) {
+    // Escape special regex characters in the title
+    const escapedTitle = title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+    // Create regex to find the title in text, but not inside existing wikilinks
+    // Negative lookbehind for [[ and negative lookahead for ]]
+    // Also check for word boundaries for better matching
+    const regex = new RegExp(
+      `(?<!\\[\\[[^\\]]*?)\\b(${escapedTitle})\\b(?![^\\[]*?\\]\\])`,
+      "gi"
+    );
+
+    result = result.replace(regex, (match) => {
+      const newBasename = mapping.newFileName.replace(/\.md$/, "");
+      return `[[${newBasename}|${match}]]`;
+    });
+  }
+
+  return result;
 }
 
 // Update image paths in content
@@ -251,15 +354,20 @@ export function Import({ notesDir, onComplete, onCancel }: ImportProps) {
     const trimmedPath = value.trim();
     if (!trimmedPath) return;
 
-    // Reset cancellation flag and note counter
+    // Reset cancellation flag
     cancelledRef.current = false;
-    resetNoteCounter();
 
     // Expand ~ to home directory (Unix) and %USERPROFILE% (Windows)
     const expandedPath = expandPath(trimmedPath);
     setSourcePath(expandedPath);
     setStep("importing");
     setImportStatus("노트를 분석하는 중...");
+
+    // Import session for rollback support
+    const importSession: ImportSession = {
+      createdFiles: [],
+      createdImages: [],
+    };
 
     try {
       // Check if source path exists
@@ -284,7 +392,7 @@ export function Import({ notesDir, onComplete, onCancel }: ImportProps) {
 
       // Find image files
       setImportStatus("이미지 파일 검색 중...");
-      const imagePatterns = IMAGE_EXTENSIONS.map(ext => `**/*${ext}`);
+      const imagePatterns = IMAGE_EXTENSIONS.map((ext) => `**/*${ext}`);
       const allImageFiles: string[] = [];
       for (const pattern of imagePatterns) {
         const images = await glob(pattern, {
@@ -298,37 +406,73 @@ export function Import({ notesDir, onComplete, onCancel }: ImportProps) {
 
       setImportProgress({ files: files.length, images: allImageFiles.length, current: 0 });
 
-      // Ensure inbox and attachments directories exist
+      // Ensure base directories exist
       const expandedNotesDir = expandPath(notesDir);
-      const inboxDir = path.join(expandedNotesDir, "inbox");
       const attachmentsDir = path.join(expandedNotesDir, "attachments");
-      await fs.mkdir(inboxDir, { recursive: true });
       await fs.mkdir(attachmentsDir, { recursive: true });
 
-      // Build file mapping (old path -> new path) for wikilink updates
-      const fileMapping = new Map<string, string>();
+      // Collect unique target folders and create them
+      const targetFolders = new Set<string>();
+      for (const filePath of files) {
+        const targetFolder = mapFolderToTarget(filePath, expandedPath);
+        targetFolders.add(targetFolder);
+      }
+      for (const folder of targetFolders) {
+        await fs.mkdir(path.join(expandedNotesDir, folder), { recursive: true });
+      }
+
       const imageMapping = new Map<string, string>();
 
-      // First pass: determine new filenames and build mappings
+      // ============================================
+      // PASS 1: Build wikilink mapping (collect all file info first)
+      // ============================================
+      setImportStatus("위키링크 매핑 구축 중...");
+      const wikilinkMapping = new Map<string, WikilinkMapping>();
       const fileInfos: Array<{
         oldPath: string;
         newPath: string;
         id: string;
-        fileName: string;
+        originalTitle: string;
+        targetFolder: string;
       }> = [];
 
       for (const filePath of files) {
+        // Read file to get title from frontmatter
+        const content = await fs.readFile(filePath, "utf-8");
+        const { data: existingFrontmatter } = matter(content);
+
         const fileName = path.basename(filePath);
+        const originalTitle =
+          (existingFrontmatter.title as string) || fileName.replace(/\.md$/, "");
+
         const id = generateNoteId();
-        const targetFileName = `${id}_${fileName}`.replace(/\s+/g, "-");
-        const targetPath = path.join(inboxDir, targetFileName);
+        const targetFolder = mapFolderToTarget(filePath, expandedPath);
+        const targetFileName = `${id}.md`;
+        const targetPath = path.join(expandedNotesDir, targetFolder, targetFileName);
 
-        fileMapping.set(filePath, targetPath);
-        // Also map by just the filename for wikilink matching
-        fileMapping.set(fileName, targetPath);
-        fileMapping.set(fileName.replace(/\.md$/, ""), targetPath);
+        const mapping: WikilinkMapping = {
+          originalTitle,
+          originalFileName: fileName,
+          newFileName: targetFileName,
+          newId: id,
+          targetFolder,
+        };
 
-        fileInfos.push({ oldPath: filePath, newPath: targetPath, id, fileName });
+        // Map by multiple keys for flexible matching
+        wikilinkMapping.set(originalTitle, mapping);
+        wikilinkMapping.set(fileName, mapping);
+        wikilinkMapping.set(fileName.replace(/\.md$/, ""), mapping);
+
+        fileInfos.push({
+          oldPath: filePath,
+          newPath: targetPath,
+          id,
+          originalTitle,
+          targetFolder,
+        });
+
+        // Delay 1ms to prevent ID collision
+        await new Promise((resolve) => setTimeout(resolve, 1));
       }
 
       // Build image mapping
@@ -339,14 +483,16 @@ export function Import({ notesDir, onComplete, onCancel }: ImportProps) {
         imageMapping.set(imageFileName, targetImagePath);
       }
 
-      // Copy images first
+      // ============================================
+      // Copy images
+      // ============================================
       let imagesImported = 0;
       setImportStatus("이미지 파일 복사 중...");
       for (const imagePath of allImageFiles) {
         if (cancelledRef.current) break;
 
         const imageFileName = path.basename(imagePath);
-        const targetImagePath = path.join(attachmentsDir, imageFileName);
+        let targetImagePath = path.join(attachmentsDir, imageFileName);
 
         try {
           // Check if file already exists to avoid overwriting
@@ -356,14 +502,14 @@ export function Import({ notesDir, onComplete, onCancel }: ImportProps) {
             const ext = path.extname(imageFileName);
             const baseName = path.basename(imageFileName, ext);
             const uniqueName = `${baseName}_${Date.now()}${ext}`;
-            const uniquePath = path.join(attachmentsDir, uniqueName);
-            await fs.copyFile(imagePath, uniquePath);
-            imageMapping.set(imagePath, uniquePath);
-            imageMapping.set(imageFileName, uniquePath);
+            targetImagePath = path.join(attachmentsDir, uniqueName);
           } catch {
-            // File doesn't exist, copy normally
-            await fs.copyFile(imagePath, targetImagePath);
+            // File doesn't exist, use original path
           }
+          await fs.copyFile(imagePath, targetImagePath);
+          importSession.createdImages.push(targetImagePath);
+          imageMapping.set(imagePath, targetImagePath);
+          imageMapping.set(imageFileName, targetImagePath);
           imagesImported++;
         } catch (imgError) {
           // Skip images that can't be copied
@@ -371,32 +517,37 @@ export function Import({ notesDir, onComplete, onCancel }: ImportProps) {
         }
       }
 
-      // Process each markdown file
+      // ============================================
+      // PASS 2: Process each markdown file
+      // ============================================
       let importedCount = 0;
       for (let i = 0; i < fileInfos.length; i++) {
-        // Check for cancellation
+        // Check for cancellation with rollback
         if (cancelledRef.current) {
+          setImportStatus("롤백 중...");
+          await rollbackImport(importSession);
           const cancelResult: ImportResult = {
             success: false,
-            filesImported: importedCount,
-            imagesImported,
+            filesImported: 0,
+            imagesImported: 0,
             source,
             sourcePath: expandedPath,
             cancelled: true,
+            rolledBack: true,
           };
           setResult(cancelResult);
           setStep("cancelled");
           return;
         }
 
-        const { oldPath, newPath, id, fileName } = fileInfos[i];
+        const { oldPath, newPath, id, originalTitle, targetFolder } = fileInfos[i];
 
-        setImportStatus(`노트 처리 중: ${fileName}`);
+        setImportStatus(`노트 처리 중: ${originalTitle}`);
         setImportProgress({
           files: files.length,
           images: allImageFiles.length,
           current: i + 1,
-          currentFile: fileName,
+          currentFile: originalTitle,
         });
 
         try {
@@ -406,41 +557,58 @@ export function Import({ notesDir, onComplete, onCancel }: ImportProps) {
           // Parse existing frontmatter
           const { data: existingFrontmatter, content: bodyContent } = matter(content);
 
-          // Generate GigaMind frontmatter
+          // Generate new GigaMind frontmatter (complete replacement)
           const now = new Date();
-          const title = existingFrontmatter.title || fileName.replace(/\.md$/, "");
+          const tags = Array.isArray(existingFrontmatter.tags)
+            ? existingFrontmatter.tags.filter((t: unknown) => typeof t === "string")
+            : [];
 
           const newFrontmatter = {
-            id: existingFrontmatter.id || id,
-            title,
-            type: existingFrontmatter.type || "note",
-            created: existingFrontmatter.created || existingFrontmatter.date || now.toISOString(),
+            id,
+            title: originalTitle,
+            type: "note" as const,
+            created: now.toISOString(),
             modified: now.toISOString(),
-            tags: existingFrontmatter.tags || [],
+            tags,
             source: {
               type: source,
-              path: oldPath,
+              originalPath: oldPath,
+              originalTitle,
               imported: now.toISOString(),
             },
           };
 
-          // Update wikilinks and image paths in body content
-          let updatedBodyContent = updateWikilinks(bodyContent, fileMapping);
-          updatedBodyContent = updateImagePaths(updatedBodyContent, new Map(
-            Array.from(imageMapping.entries()).map(([k, v]) => [
-              k,
-              path.relative(inboxDir, v),
-            ])
-          ));
+          // Update wikilinks with aliases
+          let updatedBodyContent = updateWikilinksWithAliases(bodyContent, wikilinkMapping);
+
+          // Auto-generate wikilinks for text matching other note titles
+          updatedBodyContent = autoGenerateWikilinks(
+            updatedBodyContent,
+            wikilinkMapping,
+            originalTitle
+          );
+
+          // Update image paths relative to target folder
+          const targetDir = path.join(expandedNotesDir, targetFolder);
+          updatedBodyContent = updateImagePaths(
+            updatedBodyContent,
+            new Map(
+              Array.from(imageMapping.entries()).map(([k, v]) => [
+                k,
+                path.relative(targetDir, v),
+              ])
+            )
+          );
 
           // Reconstruct file with new frontmatter
           const newContent = matter.stringify(updatedBodyContent, newFrontmatter);
 
           await fs.writeFile(newPath, newContent, "utf-8");
+          importSession.createdFiles.push(newPath);
           importedCount++;
         } catch (fileError) {
           // Skip files that can't be processed
-          console.error(`Failed to import ${fileName}:`, fileError);
+          console.error(`Failed to import ${originalTitle}:`, fileError);
         }
       }
 
@@ -455,6 +623,10 @@ export function Import({ notesDir, onComplete, onCancel }: ImportProps) {
       setStep("complete");
       onComplete(importResult);
     } catch (err) {
+      // Rollback on error
+      if (importSession.createdFiles.length > 0 || importSession.createdImages.length > 0) {
+        await rollbackImport(importSession);
+      }
       const errorMessage = err instanceof Error ? err.message : String(err);
       setError(errorMessage);
       setStep("error");
@@ -616,7 +788,7 @@ export function Import({ notesDir, onComplete, onCancel }: ImportProps) {
           )}
           <Newline />
           <Text color="gray">소스: {result.sourcePath}</Text>
-          <Text color="gray">노트 저장 위치: {notesDir}/inbox/</Text>
+          <Text color="gray">노트 저장 위치: {notesDir}/ (폴더별 자동 분류)</Text>
           {result.imagesImported > 0 && (
             <Text color="gray">이미지 저장 위치: {notesDir}/attachments/</Text>
           )}
@@ -642,13 +814,18 @@ export function Import({ notesDir, onComplete, onCancel }: ImportProps) {
             ⚠️ 가져오기가 취소되었어요
           </Text>
           <Newline />
-          <Text>취소 전까지 {result.filesImported}개 노트를 가져왔어요.</Text>
-          {result.imagesImported > 0 && (
-            <Text>취소 전까지 {result.imagesImported}개 이미지를 복사했어요.</Text>
+          {result.rolledBack ? (
+            <Text>생성된 파일들이 롤백되었어요. 변경사항 없음.</Text>
+          ) : (
+            <>
+              <Text>취소 전까지 {result.filesImported}개 노트를 가져왔어요.</Text>
+              {result.imagesImported > 0 && (
+                <Text>취소 전까지 {result.imagesImported}개 이미지를 복사했어요.</Text>
+              )}
+            </>
           )}
           <Newline />
           <Text color="gray">소스: {result.sourcePath}</Text>
-          <Text color="gray">저장 위치: {notesDir}/inbox/</Text>
         </Box>
         <Box marginTop={1}>
           <Text color="gray">Enter를 눌러 계속...</Text>

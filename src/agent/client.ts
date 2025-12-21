@@ -60,6 +60,18 @@ export interface StreamCallbacks {
   onToolResult?: (toolName: string, success: boolean) => void;
   /** Get user-friendly error message at specified detail level */
   onFormattedError?: (formattedMessage: string, isRecoverable: boolean) => void;
+  /** Called when request is aborted by user */
+  onAbort?: () => void;
+}
+
+/**
+ * Custom error for aborted requests
+ */
+export class AbortError extends Error {
+  constructor(message = "Request aborted by user") {
+    super(message);
+    this.name = "AbortError";
+  }
 }
 
 export interface GigaMindClientOptions {
@@ -181,7 +193,8 @@ export class GigaMindClient {
   private async handleWithSubagent(
     agentName: string,
     task: string,
-    callbacks?: StreamCallbacks
+    callbacks?: StreamCallbacks,
+    signal?: AbortSignal
   ): Promise<string> {
     if (!this.subagentInvoker) {
       throw new SubagentError(
@@ -189,6 +202,11 @@ export class GigaMindClient {
         undefined,
         { agentName }
       );
+    }
+
+    // Check if already aborted
+    if (signal?.aborted) {
+      throw new AbortError();
     }
 
     logger.debug(`Delegating to subagent: ${agentName}`, { task });
@@ -219,8 +237,13 @@ export class GigaMindClient {
       agentName,
       task,
       subagentCallbacks,
-      { conversationHistory: recentHistory }
+      { conversationHistory: recentHistory, signal }
     );
+
+    // Check for abort FIRST - throw AbortError for proper handling upstream
+    if (result.aborted) {
+      throw new AbortError();
+    }
 
     if (!result.success) {
       throw new SubagentError(
@@ -233,7 +256,11 @@ export class GigaMindClient {
     return result.response;
   }
 
-  async chat(userMessage: string, callbacks?: StreamCallbacks): Promise<string> {
+  async chat(
+    userMessage: string,
+    callbacks?: StreamCallbacks,
+    options?: { signal?: AbortSignal }
+  ): Promise<string> {
     // Add user message to history
     this.conversationHistory.push({
       role: "user",
@@ -242,15 +269,36 @@ export class GigaMindClient {
 
     let fullResponse = "";
 
+    // Check if already aborted before starting
+    if (options?.signal?.aborted) {
+      // Remove the user message we just added
+      this.conversationHistory.pop();
+      const abortError = new AbortError();
+      callbacks?.onAbort?.();
+      throw abortError;
+    }
+
     try {
       // Use tool-based approach: let Claude decide if delegation is needed
-      const response = await this.client.messages.create({
-        model: this.model,
-        max_tokens: 4096,
-        system: SYSTEM_PROMPT,
-        tools: [DELEGATE_TOOL],
-        messages: this.conversationHistory,
-      });
+      const response = await this.client.messages.create(
+        {
+          model: this.model,
+          max_tokens: 4096,
+          system: SYSTEM_PROMPT,
+          tools: [DELEGATE_TOOL],
+          messages: this.conversationHistory,
+        },
+        { signal: options?.signal }
+      );
+
+      // Check if aborted after API call
+      if (options?.signal?.aborted) {
+        // Remove the user message we added
+        this.conversationHistory.pop();
+        const abortError = new AbortError();
+        callbacks?.onAbort?.();
+        throw abortError;
+      }
 
       // Check if Claude decided to use the delegate tool
       const toolUseBlock = response.content.find(
@@ -266,7 +314,8 @@ export class GigaMindClient {
           const subagentResponse = await this.handleWithSubagent(
             input.agent,
             input.task,
-            callbacks
+            callbacks,
+            options?.signal
           );
 
           // Add the subagent response to history
@@ -278,6 +327,13 @@ export class GigaMindClient {
           callbacks?.onComplete?.(subagentResponse);
           return subagentResponse;
         } catch (subagentError) {
+          // Handle abort errors from subagent
+          if (subagentError instanceof AbortError) {
+            // Remove the user message we added
+            this.conversationHistory.pop();
+            callbacks?.onAbort?.();
+            throw subagentError;
+          }
           throw this.handleError(subagentError, callbacks);
         }
       }
@@ -300,6 +356,29 @@ export class GigaMindClient {
       callbacks?.onComplete?.(fullResponse);
       return fullResponse;
     } catch (error) {
+      // Handle abort error - remove user message from history and notify
+      if (error instanceof AbortError) {
+        // Remove the user message we added at the start
+        this.conversationHistory.pop();
+        callbacks?.onAbort?.();
+        throw error;
+      }
+
+      // Check for native AbortError from fetch/SDK
+      // Also check for Anthropic SDK's APIUserAbortError (which has name="Error" but message="Request was aborted.")
+      if (
+        error instanceof Error &&
+        (error.name === "AbortError" ||
+         error.constructor.name === "APIUserAbortError" ||
+         error.message === "Request was aborted.")
+      ) {
+        // Remove the user message we added
+        this.conversationHistory.pop();
+        const abortError = new AbortError();
+        callbacks?.onAbort?.();
+        throw abortError;
+      }
+
       // Re-throw if already handled (SubagentError case)
       if (error instanceof SubagentError) {
         throw error;

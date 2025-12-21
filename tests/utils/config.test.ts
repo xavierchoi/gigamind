@@ -1,38 +1,63 @@
 /**
  * Tests for Config utility
  *
- * IMPORTANT: Tests that modify config use mocked paths to prevent
- * overwriting the user's real ~/.gigamind/ directory.
+ * IMPORTANT: Tests that modify config use the GIGAMIND_TEST_CONFIG_DIR
+ * environment variable to prevent overwriting the user's real ~/.gigamind/ directory.
  */
 
-import { describe, it, expect, jest, beforeEach, afterEach, beforeAll, afterAll } from "@jest/globals";
+import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from "@jest/globals";
 import path from "node:path";
 import os from "node:os";
 import fs from "node:fs/promises";
-import * as configModule from "../../src/utils/config.js";
+import {
+  getConfigDir,
+  getConfigPath,
+  getSessionsDir,
+  getCredentialsPath,
+  loadConfig,
+  saveConfig,
+  updateConfig,
+  configExists,
+  saveApiKey,
+  loadApiKey,
+  hasApiKey,
+  getNoteStats,
+  type GigaMindConfig,
+} from "../../src/utils/config.js";
 import { clearCache } from "../../src/utils/graph/cache.js";
 
-// Re-export types we need
-type GigaMindConfig = configModule.GigaMindConfig;
+describe("Config paths (default)", () => {
+  // Save and clear test env var to test default behavior
+  let originalTestDir: string | undefined;
 
-describe("Config paths", () => {
+  beforeAll(() => {
+    originalTestDir = process.env.GIGAMIND_TEST_CONFIG_DIR;
+    delete process.env.GIGAMIND_TEST_CONFIG_DIR;
+  });
+
+  afterAll(() => {
+    if (originalTestDir) {
+      process.env.GIGAMIND_TEST_CONFIG_DIR = originalTestDir;
+    }
+  });
+
   it("should return config directory in home folder", () => {
-    const configDir = configModule.getConfigDir();
+    const configDir = getConfigDir();
     expect(configDir).toBe(path.join(os.homedir(), ".gigamind"));
   });
 
   it("should return config file path", () => {
-    const configPath = configModule.getConfigPath();
+    const configPath = getConfigPath();
     expect(configPath).toBe(path.join(os.homedir(), ".gigamind", "config.yaml"));
   });
 
   it("should return sessions directory path", () => {
-    const sessionsDir = configModule.getSessionsDir();
+    const sessionsDir = getSessionsDir();
     expect(sessionsDir).toBe(path.join(os.homedir(), ".gigamind", "sessions"));
   });
 
   it("should return credentials file path", () => {
-    const credentialsPath = configModule.getCredentialsPath();
+    const credentialsPath = getCredentialsPath();
     expect(credentialsPath).toBe(path.join(os.homedir(), ".gigamind", "credentials"));
   });
 });
@@ -44,31 +69,28 @@ describe("Config operations", () => {
   const testSessionsDir = path.join(testConfigDir, "sessions");
   const testCredentialsPath = path.join(testConfigDir, "credentials");
 
-  // Store original functions to restore later
-  let getConfigDirSpy: jest.SpiedFunction<typeof configModule.getConfigDir>;
-  let getConfigPathSpy: jest.SpiedFunction<typeof configModule.getConfigPath>;
-  let getSessionsDirSpy: jest.SpiedFunction<typeof configModule.getSessionsDir>;
-  let getCredentialsPathSpy: jest.SpiedFunction<typeof configModule.getCredentialsPath>;
+  // Store original env var
+  let originalTestDir: string | undefined;
 
   beforeAll(async () => {
+    // Save original env var
+    originalTestDir = process.env.GIGAMIND_TEST_CONFIG_DIR;
+
+    // Set test config directory
+    process.env.GIGAMIND_TEST_CONFIG_DIR = testConfigDir;
+
     // Create temp directory structure
     await fs.mkdir(testConfigDir, { recursive: true });
     await fs.mkdir(testSessionsDir, { recursive: true });
-
-    // Mock all path functions to use temp directory
-    // This prevents tests from touching the real ~/.gigamind/ directory
-    getConfigDirSpy = jest.spyOn(configModule, "getConfigDir").mockReturnValue(testConfigDir);
-    getConfigPathSpy = jest.spyOn(configModule, "getConfigPath").mockReturnValue(testConfigPath);
-    getSessionsDirSpy = jest.spyOn(configModule, "getSessionsDir").mockReturnValue(testSessionsDir);
-    getCredentialsPathSpy = jest.spyOn(configModule, "getCredentialsPath").mockReturnValue(testCredentialsPath);
   });
 
   afterAll(async () => {
-    // Restore original functions
-    getConfigDirSpy.mockRestore();
-    getConfigPathSpy.mockRestore();
-    getSessionsDirSpy.mockRestore();
-    getCredentialsPathSpy.mockRestore();
+    // Restore original env var
+    if (originalTestDir) {
+      process.env.GIGAMIND_TEST_CONFIG_DIR = originalTestDir;
+    } else {
+      delete process.env.GIGAMIND_TEST_CONFIG_DIR;
+    }
 
     // Clean up temp directory
     try {
@@ -87,9 +109,16 @@ describe("Config operations", () => {
     }
   });
 
+  describe("getConfigDir with GIGAMIND_TEST_CONFIG_DIR", () => {
+    it("should return test config directory when env var is set", () => {
+      const configDir = getConfigDir();
+      expect(configDir).toBe(testConfigDir);
+    });
+  });
+
   describe("loadConfig", () => {
     it("should return config with expected structure", async () => {
-      const config = await configModule.loadConfig();
+      const config = await loadConfig();
 
       expect(config).toBeDefined();
       // Config should have the required fields (may be default or user-configured)
@@ -115,13 +144,44 @@ describe("Config operations", () => {
         noteDetail: "balanced",
       };
 
-      await configModule.saveConfig(testConfig);
-      const loaded = await configModule.loadConfig();
+      await saveConfig(testConfig);
+      const loaded = await loadConfig();
 
       expect(loaded.notesDir).toBe(testConfig.notesDir);
       expect(loaded.userName).toBe(testConfig.userName);
       expect(loaded.useCases).toEqual(testConfig.useCases);
       expect(loaded.feedback.level).toBe(testConfig.feedback.level);
+    });
+
+    it("should save to temp directory, not real config", async () => {
+      const testConfig: GigaMindConfig = {
+        notesDir: "./test-notes",
+        useCases: [],
+        feedback: {
+          level: "minimal",
+          showTips: false,
+          showStats: false,
+        },
+        model: "test-model",
+        noteDetail: "concise",
+      };
+
+      await saveConfig(testConfig);
+
+      // Verify the config was saved to the temp directory
+      const savedContent = await fs.readFile(testConfigPath, "utf-8");
+      expect(savedContent).toContain("test-notes");
+      expect(savedContent).toContain("test-model");
+
+      // Verify the real config was NOT touched
+      const realConfigPath = path.join(os.homedir(), ".gigamind", "config.yaml");
+      try {
+        const realContent = await fs.readFile(realConfigPath, "utf-8");
+        // Real config should NOT contain our test values
+        expect(realContent).not.toContain("test-model");
+      } catch {
+        // Real config might not exist, which is also fine
+      }
     });
   });
 
@@ -139,9 +199,9 @@ describe("Config operations", () => {
         noteDetail: "balanced",
       };
 
-      await configModule.saveConfig(initialConfig);
+      await saveConfig(initialConfig);
 
-      const updated = await configModule.updateConfig({
+      const updated = await updateConfig({
         userName: "NewUser",
         notesDir: "./new-notes",
       });
@@ -162,7 +222,7 @@ describe("Config operations", () => {
         // Already doesn't exist
       }
 
-      const exists = await configModule.configExists();
+      const exists = await configExists();
       expect(exists).toBe(false);
     });
 
@@ -170,13 +230,58 @@ describe("Config operations", () => {
       // Create a config file
       await fs.writeFile(testConfigPath, "notesDir: ./notes\n");
 
-      const exists = await configModule.configExists();
+      const exists = await configExists();
       expect(exists).toBe(true);
     });
   });
 });
 
 describe("API Key operations", () => {
+  // Use a unique temp directory for test isolation
+  const testConfigDir = path.join(os.tmpdir(), `gigamind-test-apikey-${process.pid}-${Date.now()}`);
+  const testCredentialsPath = path.join(testConfigDir, "credentials");
+  const testSessionsDir = path.join(testConfigDir, "sessions");
+
+  // Store original env var
+  let originalTestDir: string | undefined;
+
+  beforeAll(async () => {
+    // Save original env var
+    originalTestDir = process.env.GIGAMIND_TEST_CONFIG_DIR;
+
+    // Set test config directory
+    process.env.GIGAMIND_TEST_CONFIG_DIR = testConfigDir;
+
+    // Create temp directory structure
+    await fs.mkdir(testConfigDir, { recursive: true });
+    await fs.mkdir(testSessionsDir, { recursive: true });
+  });
+
+  afterAll(async () => {
+    // Restore original env var
+    if (originalTestDir) {
+      process.env.GIGAMIND_TEST_CONFIG_DIR = originalTestDir;
+    } else {
+      delete process.env.GIGAMIND_TEST_CONFIG_DIR;
+    }
+
+    // Clean up temp directory
+    try {
+      await fs.rm(testConfigDir, { recursive: true, force: true });
+    } catch {
+      // Ignore cleanup errors
+    }
+  });
+
+  beforeEach(async () => {
+    // Clean credentials file before each test
+    try {
+      await fs.unlink(testCredentialsPath);
+    } catch {
+      // File may not exist
+    }
+  });
+
   describe("loadApiKey", () => {
     it("should prefer environment variable", async () => {
       const originalEnv = process.env.ANTHROPIC_API_KEY;
@@ -191,10 +296,48 @@ describe("API Key operations", () => {
         delete process.env.ANTHROPIC_API_KEY;
       }
     });
+
+    it("should load from credentials file when env var not set", async () => {
+      const originalEnv = process.env.ANTHROPIC_API_KEY;
+      delete process.env.ANTHROPIC_API_KEY;
+
+      // Write a test API key to the credentials file
+      await fs.writeFile(testCredentialsPath, "sk-ant-file-key");
+
+      const apiKey = await loadApiKey();
+      expect(apiKey).toBe("sk-ant-file-key");
+
+      if (originalEnv) {
+        process.env.ANTHROPIC_API_KEY = originalEnv;
+      }
+    });
+  });
+
+  describe("saveApiKey", () => {
+    it("should save API key to credentials file", async () => {
+      await saveApiKey("sk-ant-saved-key");
+
+      const content = await fs.readFile(testCredentialsPath, "utf-8");
+      expect(content).toBe("sk-ant-saved-key");
+    });
+
+    it("should save to temp directory, not real credentials", async () => {
+      await saveApiKey("sk-ant-test-key-12345");
+
+      // Verify the real credentials file was NOT touched
+      const realCredentialsPath = path.join(os.homedir(), ".gigamind", "credentials");
+      try {
+        const realContent = await fs.readFile(realCredentialsPath, "utf-8");
+        // Real credentials should NOT contain our test key
+        expect(realContent).not.toContain("sk-ant-test-key-12345");
+      } catch {
+        // Real credentials might not exist, which is also fine
+      }
+    });
   });
 
   describe("hasApiKey", () => {
-    it("should return true when API key exists", async () => {
+    it("should return true when API key exists in env", async () => {
       const originalEnv = process.env.ANTHROPIC_API_KEY;
       process.env.ANTHROPIC_API_KEY = "sk-ant-test-key";
 
@@ -208,13 +351,34 @@ describe("API Key operations", () => {
       }
     });
 
+    it("should return true when API key exists in file", async () => {
+      const originalEnv = process.env.ANTHROPIC_API_KEY;
+      delete process.env.ANTHROPIC_API_KEY;
+
+      // Write a test API key to the credentials file
+      await fs.writeFile(testCredentialsPath, "sk-ant-file-key");
+
+      const has = await hasApiKey();
+      expect(has).toBe(true);
+
+      if (originalEnv) {
+        process.env.ANTHROPIC_API_KEY = originalEnv;
+      }
+    });
+
     it("should return false when no API key", async () => {
       const originalEnv = process.env.ANTHROPIC_API_KEY;
       delete process.env.ANTHROPIC_API_KEY;
 
-      // This might still return true if credentials file exists
+      // Ensure credentials file doesn't exist
+      try {
+        await fs.unlink(testCredentialsPath);
+      } catch {
+        // Already doesn't exist
+      }
+
       const has = await hasApiKey();
-      expect(typeof has).toBe("boolean");
+      expect(has).toBe(false);
 
       if (originalEnv) {
         process.env.ANTHROPIC_API_KEY = originalEnv;
@@ -224,16 +388,16 @@ describe("API Key operations", () => {
 });
 
 describe("getNoteStats", () => {
-  const testNotesDir = path.join(os.tmpdir(), "gigamind-test-notes-" + Date.now());
+  const testNotesDir = path.join(os.tmpdir(), `gigamind-test-notes-${process.pid}-${Date.now()}`);
 
   beforeEach(async () => {
-    clearCache(); // 캐시 초기화
+    clearCache();
     await fs.mkdir(testNotesDir, { recursive: true });
   });
 
   afterEach(async () => {
     try {
-      clearCache(); // 캐시 초기화
+      clearCache();
       await fs.rm(testNotesDir, { recursive: true, force: true });
     } catch {
       // Ignore cleanup errors

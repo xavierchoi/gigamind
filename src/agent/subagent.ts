@@ -60,6 +60,18 @@ export interface SubagentResult {
   response: string;
   toolsUsed: Array<{ name: string; input: unknown; output: string }>;
   error?: string;
+  /** True if the request was aborted by user */
+  aborted?: boolean;
+}
+
+/**
+ * Custom error for aborted requests
+ */
+export class SubagentAbortError extends Error {
+  constructor(message = "Subagent request aborted by user") {
+    super(message);
+    this.name = "SubagentAbortError";
+  }
 }
 
 export class SubagentInvoker {
@@ -104,7 +116,7 @@ export class SubagentInvoker {
     agentName: string,
     userMessage: string,
     callbacks?: SubagentCallbacks,
-    options?: { conversationHistory?: MessageParam[] }
+    options?: { conversationHistory?: MessageParam[]; signal?: AbortSignal }
   ): Promise<SubagentResult> {
     // Progress tracking state
     let totalFilesFound = 0;
@@ -174,17 +186,42 @@ export class SubagentInvoker {
     logger.debug(`Starting subagent: ${agentName}`, { userMessage, tools: toolNames });
     callbacks?.onThinking?.();
 
+    // Check if already aborted before starting
+    if (options?.signal?.aborted) {
+      return {
+        success: false,
+        response: "",
+        toolsUsed: [],
+        error: "요청이 취소되었습니다",
+        aborted: true,
+      };
+    }
+
     try {
       while (iterations < this.maxIterations) {
         iterations++;
 
-        const response = await this.client.messages.create({
-          model: this.model,
-          max_tokens: 4096,
-          system: systemPrompt,
-          tools,
-          messages,
-        });
+        // Check for abort at the start of each iteration
+        if (options?.signal?.aborted) {
+          return {
+            success: false,
+            response: finalResponse,
+            toolsUsed,
+            error: "요청이 취소되었습니다",
+            aborted: true,
+          };
+        }
+
+        const response = await this.client.messages.create(
+          {
+            model: this.model,
+            max_tokens: 4096,
+            system: systemPrompt,
+            tools,
+            messages,
+          },
+          { signal: options?.signal }
+        );
 
         logger.debug(`Subagent iteration ${iterations}`, {
           stopReason: response.stop_reason,
@@ -290,6 +327,36 @@ export class SubagentInvoker {
       callbacks?.onComplete?.(result);
       return result;
     } catch (error) {
+      // Handle abort error - user cancelled the request
+      // Check for native AbortError, APIUserAbortError from Anthropic SDK, or abort message
+      if (
+        error instanceof Error &&
+        (error.name === "AbortError" ||
+         error.constructor.name === "APIUserAbortError" ||
+         error.message === "Request was aborted.")
+      ) {
+        logger.debug(`Subagent ${agentName} aborted by user`);
+        return {
+          success: false,
+          response: finalResponse,
+          toolsUsed,
+          error: "요청이 취소되었습니다",
+          aborted: true,
+        };
+      }
+
+      // Handle our custom abort error
+      if (error instanceof SubagentAbortError) {
+        logger.debug(`Subagent ${agentName} aborted by user`);
+        return {
+          success: false,
+          response: finalResponse,
+          toolsUsed,
+          error: "요청이 취소되었습니다",
+          aborted: true,
+        };
+      }
+
       // Check if max iterations reached
       if (iterations >= this.maxIterations) {
         const subagentError = new SubagentError(
