@@ -164,6 +164,11 @@ async function rollbackImport(session: ImportSession): Promise<void> {
 // Minimum title length for auto-linking (to avoid false positives)
 const MIN_TITLE_LENGTH_FOR_AUTO_LINK = 3;
 
+// Word boundary pattern that works for both Korean and English
+// Includes common punctuation, whitespace, and CJK punctuation
+const BOUNDARY_PATTERN =
+  String.raw`[\s,.!?;:"'()\[\]{}。，、！？；：""''「」『』【】（）\n\r]`;
+
 // Auto-generate wikilinks for text matching other note titles
 function autoGenerateWikilinks(
   content: string,
@@ -188,23 +193,52 @@ function autoGenerateWikilinks(
 
   let result = content;
 
+  // Step 1: Protect existing wikilinks and code blocks with placeholders
+  const placeholders: string[] = [];
+
+  // Protect wikilinks
+  result = result.replace(/\[\[[^\]]+\]\]/g, (match) => {
+    const index = placeholders.length;
+    placeholders.push(match);
+    return `\x00PH${index}\x00`;
+  });
+
+  // Protect code blocks
+  result = result.replace(/```[\s\S]*?```/g, (match) => {
+    const index = placeholders.length;
+    placeholders.push(match);
+    return `\x00PH${index}\x00`;
+  });
+
+  // Protect inline code
+  result = result.replace(/`[^`]+`/g, (match) => {
+    const index = placeholders.length;
+    placeholders.push(match);
+    return `\x00PH${index}\x00`;
+  });
+
+  // Step 2: Replace matching titles with wikilinks
   for (const { title, mapping } of titlesToMatch) {
     // Escape special regex characters in the title
     const escapedTitle = title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-    // Create regex to find the title in text, but not inside existing wikilinks
-    // Negative lookbehind for [[ and negative lookahead for ]]
-    // Also check for word boundaries for better matching
+    // Create regex that works for both Korean and English
+    // Use explicit boundary characters instead of \b (which doesn't work for Korean)
     const regex = new RegExp(
-      `(?<!\\[\\[[^\\]]*?)\\b(${escapedTitle})\\b(?![^\\[]*?\\]\\])`,
+      `(^|${BOUNDARY_PATTERN})(${escapedTitle})(?=${BOUNDARY_PATTERN}|$)`,
       "gi"
     );
 
-    result = result.replace(regex, (match) => {
+    result = result.replace(regex, (match, prefix, titleMatch) => {
       const newBasename = mapping.newFileName.replace(/\.md$/, "");
-      return `[[${newBasename}|${match}]]`;
+      return `${prefix}[[${newBasename}|${titleMatch}]]`;
     });
   }
+
+  // Step 3: Restore placeholders
+  result = result.replace(/\x00PH(\d+)\x00/g, (_, index) => {
+    return placeholders[parseInt(index, 10)];
+  });
 
   return result;
 }
@@ -788,10 +822,12 @@ export function Import({ notesDir, onComplete, onCancel }: ImportProps) {
           )}
           <Newline />
           <Text color="gray">소스: {result.sourcePath}</Text>
-          <Text color="gray">노트 저장 위치: {notesDir}/ (폴더별 자동 분류)</Text>
+          <Text color="gray">노트 저장 위치: {expandPath(notesDir)}/ (폴더별 자동 분류)</Text>
           {result.imagesImported > 0 && (
-            <Text color="gray">이미지 저장 위치: {notesDir}/attachments/</Text>
+            <Text color="gray">이미지 저장 위치: {expandPath(notesDir)}/attachments/</Text>
           )}
+          <Newline />
+          <Text color="yellow">💡 새 노트를 인식하려면 gigamind를 다시 실행해주세요.</Text>
         </Box>
         <Box marginTop={1}>
           <Text color="gray">Enter를 눌러 계속...</Text>

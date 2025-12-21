@@ -5,6 +5,90 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] - 2025-12-21
+
+### Added
+
+#### 마크다운 마이그레이션 기능 대폭 개선
+- **파일명 시스템 ID 형식 변환**: 임포트된 파일을 `note_YYYYMMDD_HHMMSSmmm.md` 형식으로 통일
+  - `frontmatter.ts`의 `generateNoteId()` 함수 재사용
+  - 1ms 지연으로 ID 충돌 방지
+- **하이브리드 폴더 매핑**: 소스 폴더 패턴에 따라 자동 분류
+  - `Books/`, `독서/` → `resources/books/`
+  - `Projects/`, `프로젝트/` → `projects/`
+  - `Archive/`, `보관/` → `archive/`
+  - `Concepts/`, `개념/` → `resources/concepts/`
+  - `Areas/`, `영역/` → `areas/`
+  - 매핑되지 않는 폴더 → `inbox/` (폴백)
+- **위키링크 자동 별칭 추가**: 파일명 변경 시 원본 제목 보존
+  - `[[My Note]]` → `[[note_20251221_143052123|My Note]]`
+  - 기존 별칭이 있으면 유지
+- **자동 위키링크 생성**: 본문에서 다른 노트 제목과 일치하는 텍스트 자동 링크
+  - 최소 3글자 이상 제목만 매칭
+  - 긴 제목 우선 매칭
+  - 자기 자신 제외 (자기 링크 방지)
+  - 한글/영어 모두 지원 (명시적 워드 바운더리 패턴)
+  - 코드 블록, 인라인 코드, 기존 위키링크 보호
+- **프론트매터 완전 교체**: 기존 프론트매터 무시, 시스템 형식으로 새로 생성
+  - `source.originalPath`, `source.originalTitle` 필드로 원본 정보 보존
+  - 태그는 선택적 보존
+- **롤백 시스템**: 취소(ESC) 또는 에러 발생 시 생성된 파일 자동 삭제
+  - `ImportSession` 인터페이스로 생성 파일 추적
+  - `rollbackImport()` 함수로 안전한 롤백
+
+#### 설정 경로 개선
+- **기본 노트 디렉토리 변경**: `./notes` → `~/gigamind-notes`
+  - 상대 경로로 인한 혼란 방지
+  - 프로젝트 폴더와 사용자 데이터 분리
+- **Import 완료 화면에서 실제 경로 표시**: `expandPath(notesDir)` 사용
+  - `~/gigamind-notes` 대신 `/Users/username/gigamind-notes` 표시
+- **온보딩 기본 옵션 변경**: `./notes (현재 폴더)` → `~/gigamind-notes (홈 폴더)`
+
+### Enhanced
+
+#### UI/UX 개선
+- **Import 완료 메시지 개선**:
+  - "💡 새 노트를 인식하려면 gigamind를 다시 실행해주세요" 안내 추가
+  - 폴더별 자동 분류 안내
+- **취소 시 롤백 메시지**: "생성된 파일들이 롤백되었어요. 변경사항 없음."
+
+### Fixed
+
+#### 자동 위키링크 한글 지원
+- **`\b` 워드 바운더리 문제 해결**: JavaScript `\b`가 한글에서 작동하지 않는 문제 수정
+  - 명시적 경계 문자 패턴 사용 (공백, 문장부호, CJK 문장부호)
+  - 플레이스홀더 방식으로 기존 위키링크 보호
+
+### Technical Details
+
+#### 수정된 파일
+- `src/components/Import.tsx`: 마이그레이션 로직 전면 개선 (~250줄 변경)
+- `src/utils/config.ts`: `DEFAULT_CONFIG.notesDir` 변경
+- `src/components/Onboarding.tsx`: 기본 노트 디렉토리 옵션 변경
+
+#### 새로운 인터페이스/함수
+```typescript
+interface WikilinkMapping {
+  originalTitle: string;
+  originalFileName: string;
+  newFileName: string;
+  newId: string;
+  targetFolder: string;
+}
+
+interface ImportSession {
+  createdFiles: string[];
+  createdImages: string[];
+}
+
+function mapFolderToTarget(sourcePath, sourceRoot): string;
+function updateWikilinksWithAliases(content, wikilinkMapping): string;
+function autoGenerateWikilinks(content, wikilinkMapping, currentNoteTitle): string;
+function rollbackImport(session): Promise<void>;
+```
+
+---
+
 ## [0.1.1] - 2025-12-20
 
 ### Added

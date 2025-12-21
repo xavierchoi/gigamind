@@ -44,7 +44,7 @@ export interface GigaMindConfig {
 }
 
 const DEFAULT_CONFIG: GigaMindConfig = {
-  notesDir: "./notes",
+  notesDir: "~/gigamind-notes",
   userName: undefined,
   useCases: [],
   feedback: {

@@ -50,7 +50,7 @@ const USE_CASE_OPTIONS = [
 ];
 
 const NOTES_DIR_OPTIONS = [
-  { label: "./notes (현재 폴더) [기본값]", value: "./notes" },
+  { label: "~/gigamind-notes (홈 폴더) [기본값]", value: "~/gigamind-notes" },
   { label: "~/Documents/gigamind", value: "~/Documents/gigamind" },
   { label: "직접 입력...", value: "__custom__" },
 ];
@@ -107,7 +107,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
   const [apiKey, setApiKey] = useState("");
   const [apiKeyError, setApiKeyError] = useState("");
   const [isValidating, setIsValidating] = useState(false);
-  const [notesDir, setNotesDir] = useState("./notes");
+  const [notesDir, setNotesDir] = useState("~/gigamind-notes");
   const [customNotesDir, setCustomNotesDir] = useState("");
   const [userName, setUserName] = useState("");
   const [selectedUseCases, setSelectedUseCases] = useState<string[]>([]);
