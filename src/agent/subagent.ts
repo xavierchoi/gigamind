@@ -15,14 +15,28 @@ import { getToolsForSubagent } from "./tools.js";
 import { executeTool, type ToolResult } from "./executor.js";
 import { getSubagentPrompt, getSubagentTools, subagents, type SubagentContext } from "./prompts.js";
 import { getLogger } from "../utils/logger.js";
+import {
+  SubagentError,
+  ApiError,
+  ErrorCode,
+  formatErrorForUser,
+  isRecoverableError,
+  type ErrorLevel,
+} from "../utils/errors.js";
 
 const logger = getLogger();
+
+import type { NoteDetailLevel } from "../utils/config.js";
 
 export interface SubagentConfig {
   apiKey: string;
   model?: string;
   notesDir: string;
   maxIterations?: number;
+  /** Error message detail level */
+  errorLevel?: ErrorLevel;
+  /** Note summary detail level - controls how much context is preserved when creating notes */
+  noteDetail?: NoteDetailLevel;
 }
 
 export interface SubagentProgressInfo {
@@ -53,6 +67,8 @@ export class SubagentInvoker {
   private model: string;
   private notesDir: string;
   private maxIterations: number;
+  private errorLevel: ErrorLevel;
+  private noteDetail: NoteDetailLevel;
 
   constructor(config: SubagentConfig) {
     this.client = new Anthropic({
@@ -61,6 +77,15 @@ export class SubagentInvoker {
     this.model = config.model || "claude-sonnet-4-20250514";
     this.notesDir = config.notesDir;
     this.maxIterations = config.maxIterations || 10;
+    this.errorLevel = config.errorLevel || "medium";
+    this.noteDetail = config.noteDetail || "balanced";
+  }
+
+  /**
+   * Set error message detail level
+   */
+  setErrorLevel(level: ErrorLevel): void {
+    this.errorLevel = level;
   }
 
   /**
@@ -78,7 +103,8 @@ export class SubagentInvoker {
   async invoke(
     agentName: string,
     userMessage: string,
-    callbacks?: SubagentCallbacks
+    callbacks?: SubagentCallbacks,
+    options?: { conversationHistory?: MessageParam[] }
   ): Promise<SubagentResult> {
     // Progress tracking state
     let totalFilesFound = 0;
@@ -87,29 +113,57 @@ export class SubagentInvoker {
     // Subagent 컨텍스트 생성 (동적 프롬프트 생성에 필요)
     const context: SubagentContext = {
       notesDir: this.notesDir,
+      noteDetail: this.noteDetail,
     };
 
     const systemPrompt = getSubagentPrompt(agentName, context);
     const toolNames = getSubagentTools(agentName);
 
     if (!systemPrompt) {
-      const error = new Error(`Unknown subagent: ${agentName}`);
-      callbacks?.onError?.(error);
+      const subagentError = new SubagentError(
+        ErrorCode.SUBAGENT_UNKNOWN,
+        undefined,
+        { agentName }
+      );
+      callbacks?.onError?.(subagentError);
       return {
         success: false,
         response: "",
         toolsUsed: [],
-        error: error.message,
+        error: formatErrorForUser(subagentError, this.errorLevel),
       };
     }
 
     const tools = getToolsForSubagent(toolNames);
-    const messages: MessageParam[] = [
-      {
-        role: "user",
-        content: userMessage,
-      },
-    ];
+
+    // Build messages array with optional conversation history for context
+    const messages: MessageParam[] = [];
+
+    // Include recent conversation history if provided (for context continuity)
+    if (options?.conversationHistory && options.conversationHistory.length > 0) {
+      // Limit to last 10 messages for token optimization
+      const recentHistory = options.conversationHistory.slice(-10);
+      messages.push(...recentHistory);
+    }
+
+    // Prevent consecutive user messages - API requires alternating roles
+    // If the last message is from user, we need to handle it appropriately
+    const lastMessage = messages[messages.length - 1];
+    if (lastMessage && lastMessage.role === "user") {
+      // Merge with previous user message or add a separator
+      // Option: Add a synthetic assistant acknowledgment to maintain alternation
+      messages.push({
+        role: "assistant",
+        content: "[이전 대화 컨텍스트를 참고하여 작업을 수행합니다]",
+      });
+      logger.debug("Added synthetic assistant message to prevent consecutive user messages");
+    }
+
+    // Add current user message
+    messages.push({
+      role: "user",
+      content: userMessage,
+    });
 
     const toolsUsed: SubagentResult["toolsUsed"] = [];
     let iterations = 0;
@@ -234,15 +288,54 @@ export class SubagentInvoker {
       callbacks?.onComplete?.(result);
       return result;
     } catch (error) {
-      const err = error instanceof Error ? error : new Error(String(error));
-      logger.error(`Subagent ${agentName} failed`, error);
-      callbacks?.onError?.(err);
+      // Check if max iterations reached
+      if (iterations >= this.maxIterations) {
+        const subagentError = new SubagentError(
+          ErrorCode.SUBAGENT_MAX_ITERATIONS,
+          undefined,
+          { agentName, iteration: iterations }
+        );
+        logger.error(`Subagent ${agentName} exceeded max iterations`, subagentError);
+        callbacks?.onError?.(subagentError);
+        return {
+          success: false,
+          response: "",
+          toolsUsed,
+          error: formatErrorForUser(subagentError, this.errorLevel),
+        };
+      }
+
+      // Convert error to appropriate type
+      let subagentError: SubagentError | ApiError;
+
+      if (error instanceof SubagentError) {
+        subagentError = error;
+      } else if (error instanceof ApiError) {
+        subagentError = error;
+      } else {
+        // Try to detect API errors
+        const apiError = ApiError.fromError(error);
+        if (apiError.code !== ErrorCode.API_NETWORK_ERROR) {
+          // It's a recognized API error
+          subagentError = apiError;
+        } else {
+          // Generic subagent error
+          subagentError = new SubagentError(
+            ErrorCode.SUBAGENT_EXECUTION_FAILED,
+            error instanceof Error ? error.message : String(error),
+            { agentName, cause: error instanceof Error ? error : undefined }
+          );
+        }
+      }
+
+      logger.error(`Subagent ${agentName} failed`, subagentError);
+      callbacks?.onError?.(subagentError);
 
       return {
         success: false,
         response: "",
         toolsUsed,
-        error: err.message,
+        error: formatErrorForUser(subagentError, this.errorLevel),
       };
     }
   }
@@ -266,6 +359,22 @@ export function detectSubagentIntent(
   message: string
 ): { agent: string; task: string } | null {
   const lowerMessage = message.toLowerCase();
+
+  // Research agent triggers - 웹 검색
+  if (
+    lowerMessage.includes("웹에서") ||
+    lowerMessage.includes("인터넷에서") ||
+    lowerMessage.includes("온라인에서") ||
+    lowerMessage.includes("리서치") ||
+    lowerMessage.includes("조사해") ||
+    lowerMessage.includes("검색해서 알려") ||
+    lowerMessage.includes("찾아서 정리") ||
+    lowerMessage.includes("research") ||
+    lowerMessage.includes("look up online") ||
+    lowerMessage.includes("search the web")
+  ) {
+    return { agent: "research-agent", task: message };
+  }
 
   // Search agent triggers
   if (

@@ -8,6 +8,15 @@ import {
   type SubagentResult,
 } from "./subagent.js";
 import { getLogger } from "../utils/logger.js";
+import {
+  ApiError,
+  SubagentError,
+  ConfigError,
+  ErrorCode,
+  formatErrorForUser,
+  isRecoverableError,
+  type ErrorLevel,
+} from "../utils/errors.js";
 
 // delegate_to_subagent tool definition
 const DELEGATE_TOOL: Tool = {
@@ -49,6 +58,8 @@ export interface StreamCallbacks {
   onSubagentStart?: (agentName: string) => void;
   onToolUse?: (toolName: string, input: unknown) => void;
   onToolResult?: (toolName: string, success: boolean) => void;
+  /** Get user-friendly error message at specified detail level */
+  onFormattedError?: (formattedMessage: string, isRecoverable: boolean) => void;
 }
 
 export interface GigaMindClientOptions {
@@ -56,6 +67,10 @@ export interface GigaMindClientOptions {
   model?: string;
   notesDir?: string;
   enableSubagents?: boolean;
+  /** Error message detail level for user-facing errors */
+  errorLevel?: ErrorLevel;
+  /** Note summary detail level - controls how much context is preserved when creating notes */
+  noteDetail?: import("../utils/config.js").NoteDetailLevel;
 }
 
 export class GigaMindClient {
@@ -64,6 +79,8 @@ export class GigaMindClient {
   private apiKey: string;
   private notesDir: string;
   private enableSubagents: boolean;
+  private errorLevel: ErrorLevel;
+  private noteDetail: import("../utils/config.js").NoteDetailLevel;
   private conversationHistory: MessageParam[] = [];
   private subagentInvoker: SubagentInvoker | null = null;
 
@@ -75,6 +92,8 @@ export class GigaMindClient {
     this.model = options?.model || "claude-sonnet-4-20250514";
     this.notesDir = options?.notesDir || "./notes";
     this.enableSubagents = options?.enableSubagents ?? true;
+    this.errorLevel = options?.errorLevel || "medium";
+    this.noteDetail = options?.noteDetail || "balanced";
 
     // Initialize subagent invoker if enabled
     if (this.enableSubagents && this.apiKey) {
@@ -82,8 +101,46 @@ export class GigaMindClient {
         apiKey: this.apiKey,
         model: this.model,
         notesDir: this.notesDir,
+        errorLevel: this.errorLevel,
+        noteDetail: this.noteDetail,
       });
     }
+  }
+
+  /**
+   * Set error message detail level
+   */
+  setErrorLevel(level: ErrorLevel): void {
+    this.errorLevel = level;
+  }
+
+  /**
+   * Get current error message detail level
+   */
+  getErrorLevel(): ErrorLevel {
+    return this.errorLevel;
+  }
+
+  /**
+   * Handle and format error for user display
+   */
+  private handleError(error: unknown, callbacks?: StreamCallbacks): Error {
+    // Convert to appropriate error type
+    const gigaMindError = error instanceof ApiError || error instanceof SubagentError
+      ? error
+      : ApiError.fromError(error);
+
+    // Create formatted message
+    const formattedMessage = formatErrorForUser(gigaMindError, this.errorLevel);
+    const recoverable = isRecoverableError(gigaMindError);
+
+    // Notify via callback if available
+    callbacks?.onFormattedError?.(formattedMessage, recoverable);
+    callbacks?.onError?.(gigaMindError);
+
+    logger.error(`Client error: ${gigaMindError.code}`, gigaMindError);
+
+    return gigaMindError;
   }
 
   /**
@@ -96,6 +153,24 @@ export class GigaMindClient {
         apiKey: this.apiKey,
         model: this.model,
         notesDir: this.notesDir,
+        errorLevel: this.errorLevel,
+        noteDetail: this.noteDetail,
+      });
+    }
+  }
+
+  /**
+   * Update note detail level (e.g., after configuration changes)
+   */
+  setNoteDetail(noteDetail: import("../utils/config.js").NoteDetailLevel): void {
+    this.noteDetail = noteDetail;
+    if (this.subagentInvoker && this.apiKey) {
+      this.subagentInvoker = new SubagentInvoker({
+        apiKey: this.apiKey,
+        model: this.model,
+        notesDir: this.notesDir,
+        errorLevel: this.errorLevel,
+        noteDetail: this.noteDetail,
       });
     }
   }
@@ -109,7 +184,11 @@ export class GigaMindClient {
     callbacks?: StreamCallbacks
   ): Promise<string> {
     if (!this.subagentInvoker) {
-      throw new Error("Subagent invoker not initialized");
+      throw new SubagentError(
+        ErrorCode.SUBAGENT_NOT_INITIALIZED,
+        undefined,
+        { agentName }
+      );
     }
 
     logger.debug(`Delegating to subagent: ${agentName}`, { task });
@@ -132,15 +211,23 @@ export class GigaMindClient {
       },
     };
 
+    // Pass recent conversation history to subagent for context continuity
+    // Limit to last 10 messages for token optimization
+    const recentHistory = this.conversationHistory.slice(-10);
+
     const result = await this.subagentInvoker.invoke(
       agentName,
       task,
-      subagentCallbacks
+      subagentCallbacks,
+      { conversationHistory: recentHistory }
     );
 
     if (!result.success) {
-      const errorMessage = result.error || "Subagent execution failed";
-      throw new Error(errorMessage);
+      throw new SubagentError(
+        ErrorCode.SUBAGENT_EXECUTION_FAILED,
+        result.error,
+        { agentName }
+      );
     }
 
     return result.response;
@@ -191,10 +278,7 @@ export class GigaMindClient {
           callbacks?.onComplete?.(subagentResponse);
           return subagentResponse;
         } catch (subagentError) {
-          const err = subagentError instanceof Error ? subagentError : new Error(String(subagentError));
-          logger.error("Subagent execution failed", subagentError);
-          callbacks?.onError?.(err);
-          throw err;
+          throw this.handleError(subagentError, callbacks);
         }
       }
 
@@ -216,9 +300,11 @@ export class GigaMindClient {
       callbacks?.onComplete?.(fullResponse);
       return fullResponse;
     } catch (error) {
-      const err = error instanceof Error ? error : new Error(String(error));
-      callbacks?.onError?.(err);
-      throw err;
+      // Re-throw if already handled (SubagentError case)
+      if (error instanceof SubagentError) {
+        throw error;
+      }
+      throw this.handleError(error, callbacks);
     }
   }
 
@@ -281,7 +367,8 @@ export class GigaMindClient {
   async invokeSubagent(
     agentName: string,
     task: string,
-    callbacks?: SubagentCallbacks
+    callbacks?: SubagentCallbacks,
+    options?: { includeHistory?: boolean }
   ): Promise<SubagentResult> {
     if (!this.subagentInvoker) {
       return {
@@ -292,7 +379,12 @@ export class GigaMindClient {
       };
     }
 
-    return this.subagentInvoker.invoke(agentName, task, callbacks);
+    // Include conversation history if requested
+    const invokeOptions = options?.includeHistory
+      ? { conversationHistory: this.conversationHistory.slice(-10) }
+      : undefined;
+
+    return this.subagentInvoker.invoke(agentName, task, callbacks, invokeOptions);
   }
 
   /**
@@ -307,6 +399,14 @@ export class GigaMindClient {
       role: msg.role as "user" | "assistant",
       content: typeof msg.content === "string" ? msg.content : "",
     }));
+  }
+
+  /**
+   * Get raw conversation history for subagent context
+   * Returns MessageParam[] format suitable for API calls
+   */
+  getRawHistory(): MessageParam[] {
+    return [...this.conversationHistory];
   }
 
   /**
@@ -329,11 +429,23 @@ export class GigaMindClient {
   }
 
   /**
+   * Add a message to conversation history from external code
+   * Used when subagent calls bypass the normal chat flow
+   */
+  addToHistory(role: "user" | "assistant", content: string): void {
+    this.conversationHistory.push({
+      role,
+      content,
+    });
+  }
+
+  /**
    * Validate API key by making a minimal API call
    */
   static async validateApiKey(apiKey: string): Promise<{
     valid: boolean;
     error?: string;
+    errorCode?: ErrorCode;
   }> {
     try {
       const client = new Anthropic({ apiKey });
@@ -347,21 +459,38 @@ export class GigaMindClient {
 
       return { valid: true };
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      // Convert to ApiError for consistent handling
+      const apiError = ApiError.fromError(error);
 
-      // Check for specific error types
-      if (message.includes("invalid_api_key") || message.includes("401")) {
-        return { valid: false, error: "Invalid API key" };
-      }
-      if (message.includes("rate_limit")) {
-        // Rate limited but key is valid
+      // Rate limited but key is valid
+      if (apiError.code === ErrorCode.API_RATE_LIMIT) {
         return { valid: true };
       }
-      if (message.includes("insufficient_quota")) {
-        return { valid: false, error: "Insufficient API quota" };
+
+      // Invalid key
+      if (apiError.code === ErrorCode.API_INVALID_KEY) {
+        return {
+          valid: false,
+          error: apiError.getUserMessage("medium"),
+          errorCode: apiError.code,
+        };
       }
 
-      return { valid: false, error: message };
+      // Quota exceeded
+      if (apiError.code === ErrorCode.API_QUOTA_EXCEEDED) {
+        return {
+          valid: false,
+          error: apiError.getUserMessage("medium"),
+          errorCode: apiError.code,
+        };
+      }
+
+      // Network or other errors - key validity unknown
+      return {
+        valid: false,
+        error: apiError.getUserMessage("medium"),
+        errorCode: apiError.code,
+      };
     }
   }
 }

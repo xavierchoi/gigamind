@@ -23,8 +23,10 @@ export function expandPath(inputPath: string): string {
     return inputPath.replace(/%USERPROFILE%/gi, os.homedir());
   }
 
-  return inputPath;
+  return path.resolve(inputPath);
 }
+
+export type NoteDetailLevel = "verbose" | "balanced" | "concise";
 
 export interface GigaMindConfig {
   notesDir: string;
@@ -36,6 +38,8 @@ export interface GigaMindConfig {
     showStats: boolean;
   };
   model: string;
+  /** Note summary detail level - controls how much context is preserved when creating notes */
+  noteDetail: NoteDetailLevel;
 }
 
 const DEFAULT_CONFIG: GigaMindConfig = {
@@ -48,6 +52,7 @@ const DEFAULT_CONFIG: GigaMindConfig = {
     showStats: true,
   },
   model: "claude-sonnet-4-20250514",
+  noteDetail: "balanced",
 };
 
 export function getConfigDir(): string {
@@ -161,30 +166,55 @@ export async function getNoteStats(
 ): Promise<{ noteCount: number; connectionCount: number }> {
   try {
     const expandedDir = expandPath(notesDir);
-    const countFiles = async (dir: string): Promise<number> => {
-      let count = 0;
+    const countFilesAndLinks = async (
+      dir: string
+    ): Promise<{ files: number; links: number }> => {
+      let files = 0;
+      let links = 0;
       try {
         const entries = await fs.readdir(dir, { withFileTypes: true });
         for (const entry of entries) {
           if (entry.isDirectory()) {
-            count += await countFiles(path.join(dir, entry.name));
+            const subResult = await countFilesAndLinks(
+              path.join(dir, entry.name)
+            );
+            files += subResult.files;
+            links += subResult.links;
           } else if (entry.name.endsWith(".md")) {
-            count++;
+            files++;
+            // Count wikilinks in the markdown file
+            try {
+              const content = await fs.readFile(
+                path.join(dir, entry.name),
+                "utf-8"
+              );
+              const wikilinks = content.match(/\[\[([^\]]+)\]\]/g);
+              if (wikilinks) {
+                links += wikilinks.length;
+              }
+            } catch (readErr) {
+              // File couldn't be read, skip wikilink counting for this file
+              console.debug(
+                `[getNoteStats] Cannot read file: ${entry.name}`,
+                readErr
+              );
+            }
           }
         }
-      } catch {
-        // Directory doesn't exist
+      } catch (err) {
+        // Directory doesn't exist or can't be accessed
+        console.debug(`[getNoteStats] Cannot access directory: ${dir}`, err);
       }
-      return count;
+      return { files, links };
     };
 
-    const noteCount = await countFiles(expandedDir);
-
-    // TODO: Count wiki-links for connections
-    const connectionCount = 0;
+    const result = await countFilesAndLinks(expandedDir);
+    const noteCount = result.files;
+    const connectionCount = result.links;
 
     return { noteCount, connectionCount };
-  } catch {
+  } catch (err) {
+    console.warn(`[getNoteStats] Failed to get stats for ${notesDir}:`, err);
     return { noteCount: 0, connectionCount: 0 };
   }
 }

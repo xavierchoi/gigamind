@@ -159,6 +159,8 @@ export function App() {
         const newClient = new GigaMindClient({
           model: loadedConfig.model,
           apiKey: apiKey || undefined,
+          notesDir: loadedConfig.notesDir,
+          noteDetail: loadedConfig.noteDetail,
         });
         setClient(newClient);
 
@@ -223,16 +225,24 @@ export function App() {
           showStats: true,
         },
         model: "claude-sonnet-4-20250514",
+        noteDetail: "balanced",
       };
 
       await saveConfig(newConfig);
       await ensureNotesDir(result.notesDir);
       setConfig(newConfig);
 
+      // 노트 통계 업데이트
+      const stats = await getNoteStats(result.notesDir);
+      setNoteCount(stats.noteCount);
+      setConnectionCount(stats.connectionCount);
+
       // Setup client with API key
       const newClient = new GigaMindClient({
         model: newConfig.model,
         apiKey: result.apiKey,
+        notesDir: newConfig.notesDir,
+        noteDetail: newConfig.noteDetail,
       });
       setClient(newClient);
 
@@ -471,7 +481,11 @@ export function App() {
               apiKey,
               notesDir: config?.notesDir || "./notes",
               model: config?.model || "claude-sonnet-4-20250514",
+              noteDetail: config?.noteDetail,
             });
+
+            // Get conversation history from client for context continuity
+            const conversationHistory = client?.getRawHistory().slice(-10) || [];
 
             const result = await subagent.invoke(
               "search-agent",
@@ -497,30 +511,62 @@ export function App() {
                       : prev + text
                   );
                 },
-              }
+              },
+              { conversationHistory }
             );
 
             if (result.success) {
+              // Sync to client conversation history
+              client?.addToHistory("user", userMessage);
+              client?.addToHistory("assistant", result.response);
+
+              // Save to session manager
+              sessionManager?.addMessage({ role: "user", content: userMessage });
+              sessionManager?.addMessage({ role: "assistant", content: result.response });
+              sessionManager?.saveCurrentSession();
+
               setMessages((prev) => [
                 ...prev,
                 { role: "assistant", content: result.response },
               ]);
             } else {
+              const errorResponse = `검색 중 오류가 발생했습니다: ${result.error}`;
+
+              // Sync to client conversation history even on error
+              client?.addToHistory("user", userMessage);
+              client?.addToHistory("assistant", errorResponse);
+
+              // Save to session manager
+              sessionManager?.addMessage({ role: "user", content: userMessage });
+              sessionManager?.addMessage({ role: "assistant", content: errorResponse });
+              sessionManager?.saveCurrentSession();
+
               setMessages((prev) => [
                 ...prev,
                 {
                   role: "assistant",
-                  content: `검색 중 오류가 발생했습니다: ${result.error}`,
+                  content: errorResponse,
                 },
               ]);
             }
           } catch (err) {
             const errorMessage = err instanceof Error ? err.message : String(err);
+            const errorResponse = `검색 중 오류가 발생했습니다: ${errorMessage}`;
+
+            // Sync to client conversation history even on error
+            client?.addToHistory("user", userMessage);
+            client?.addToHistory("assistant", errorResponse);
+
+            // Save to session manager
+            sessionManager?.addMessage({ role: "user", content: userMessage });
+            sessionManager?.addMessage({ role: "assistant", content: errorResponse });
+            sessionManager?.saveCurrentSession();
+
             setMessages((prev) => [
               ...prev,
               {
                 role: "assistant",
-                content: `검색 중 오류가 발생했습니다: ${errorMessage}`,
+                content: errorResponse,
               },
             ]);
           } finally {
@@ -575,7 +621,11 @@ export function App() {
               apiKey,
               notesDir: config?.notesDir || "./notes",
               model: config?.model || "claude-sonnet-4-20250514",
+              noteDetail: config?.noteDetail,
             });
+
+            // Get conversation history from client for context continuity
+            const conversationHistory = client?.getRawHistory().slice(-10) || [];
 
             const result = await subagent.invoke(
               "clone-agent",
@@ -601,30 +651,62 @@ export function App() {
                       : prev + text
                   );
                 },
-              }
+              },
+              { conversationHistory }
             );
 
             if (result.success) {
+              // Sync to client conversation history
+              client?.addToHistory("user", userMessage);
+              client?.addToHistory("assistant", result.response);
+
+              // Save to session manager
+              sessionManager?.addMessage({ role: "user", content: userMessage });
+              sessionManager?.addMessage({ role: "assistant", content: result.response });
+              sessionManager?.saveCurrentSession();
+
               setMessages((prev) => [
                 ...prev,
                 { role: "assistant", content: result.response },
               ]);
             } else {
+              const errorResponse = `클론 모드 실행 중 오류가 발생했습니다: ${result.error}`;
+
+              // Sync to client conversation history even on error
+              client?.addToHistory("user", userMessage);
+              client?.addToHistory("assistant", errorResponse);
+
+              // Save to session manager
+              sessionManager?.addMessage({ role: "user", content: userMessage });
+              sessionManager?.addMessage({ role: "assistant", content: errorResponse });
+              sessionManager?.saveCurrentSession();
+
               setMessages((prev) => [
                 ...prev,
                 {
                   role: "assistant",
-                  content: `클론 모드 실행 중 오류가 발생했습니다: ${result.error}`,
+                  content: errorResponse,
                 },
               ]);
             }
           } catch (err) {
             const errorMessage = err instanceof Error ? err.message : String(err);
+            const errorResponse = `클론 모드 실행 중 오류가 발생했습니다: ${errorMessage}`;
+
+            // Sync to client conversation history even on error
+            client?.addToHistory("user", userMessage);
+            client?.addToHistory("assistant", errorResponse);
+
+            // Save to session manager
+            sessionManager?.addMessage({ role: "user", content: userMessage });
+            sessionManager?.addMessage({ role: "assistant", content: errorResponse });
+            sessionManager?.saveCurrentSession();
+
             setMessages((prev) => [
               ...prev,
               {
                 role: "assistant",
-                content: `클론 모드 실행 중 오류가 발생했습니다: ${errorMessage}`,
+                content: errorResponse,
               },
             ]);
           } finally {
@@ -679,7 +761,11 @@ export function App() {
               apiKey,
               notesDir: config?.notesDir || "./notes",
               model: config?.model || "claude-sonnet-4-20250514",
+              noteDetail: config?.noteDetail,
             });
+
+            // Get conversation history from client for context continuity
+            const conversationHistory = client?.getRawHistory().slice(-10) || [];
 
             const result = await subagent.invoke(
               "note-agent",
@@ -703,7 +789,8 @@ export function App() {
                       : prev + text
                   );
                 },
-              }
+              },
+              { conversationHistory }
             );
 
             if (result.success) {
@@ -714,26 +801,57 @@ export function App() {
                 setConnectionCount(stats.connectionCount);
               }
 
+              // Sync to client conversation history
+              client?.addToHistory("user", userMessage);
+              client?.addToHistory("assistant", result.response);
+
+              // Save to session manager
+              sessionManager?.addMessage({ role: "user", content: userMessage });
+              sessionManager?.addMessage({ role: "assistant", content: result.response });
+              sessionManager?.saveCurrentSession();
+
               setMessages((prev) => [
                 ...prev,
                 { role: "assistant", content: result.response },
               ]);
             } else {
+              const errorResponse = `노트 작성 중 오류가 발생했습니다: ${result.error}`;
+
+              // Sync to client conversation history even on error
+              client?.addToHistory("user", userMessage);
+              client?.addToHistory("assistant", errorResponse);
+
+              // Save to session manager
+              sessionManager?.addMessage({ role: "user", content: userMessage });
+              sessionManager?.addMessage({ role: "assistant", content: errorResponse });
+              sessionManager?.saveCurrentSession();
+
               setMessages((prev) => [
                 ...prev,
                 {
                   role: "assistant",
-                  content: `노트 작성 중 오류가 발생했습니다: ${result.error}`,
+                  content: errorResponse,
                 },
               ]);
             }
           } catch (err) {
             const friendlyMessage = formatErrorMessage(err);
+            const errorResponse = `노트 작성 중 문제가 발생했습니다.\n\n${friendlyMessage}`;
+
+            // Sync to client conversation history even on error
+            client?.addToHistory("user", userMessage);
+            client?.addToHistory("assistant", errorResponse);
+
+            // Save to session manager
+            sessionManager?.addMessage({ role: "user", content: userMessage });
+            sessionManager?.addMessage({ role: "assistant", content: errorResponse });
+            sessionManager?.saveCurrentSession();
+
             setMessages((prev) => [
               ...prev,
               {
                 role: "assistant",
-                content: `노트 작성 중 문제가 발생했습니다.\n\n${friendlyMessage}`,
+                content: errorResponse,
               },
             ]);
           } finally {
@@ -790,7 +908,11 @@ export function App() {
             apiKey,
             notesDir: config?.notesDir || "./notes",
             model: config?.model || "claude-sonnet-4-20250514",
+            noteDetail: config?.noteDetail,
           });
+
+          // Get conversation history from client for context continuity
+          const conversationHistory = client?.getRawHistory().slice(-10) || [];
 
           const result = await subagent.invoke(
             "note-agent",
@@ -814,7 +936,8 @@ export function App() {
                     : prev + text
                 );
               },
-            }
+            },
+            { conversationHistory }
           );
 
           if (result.success) {
@@ -824,26 +947,57 @@ export function App() {
               setConnectionCount(stats.connectionCount);
             }
 
+            // Sync to client conversation history
+            client?.addToHistory("user", userMessage);
+            client?.addToHistory("assistant", result.response);
+
+            // Save to session manager
+            sessionManager?.addMessage({ role: "user", content: userMessage });
+            sessionManager?.addMessage({ role: "assistant", content: result.response });
+            sessionManager?.saveCurrentSession();
+
             setMessages((prev) => [
               ...prev,
               { role: "assistant", content: result.response },
             ]);
           } else {
+            const errorResponse = `노트 작성 중 오류가 발생했습니다: ${result.error}`;
+
+            // Sync to client conversation history even on error
+            client?.addToHistory("user", userMessage);
+            client?.addToHistory("assistant", errorResponse);
+
+            // Save to session manager
+            sessionManager?.addMessage({ role: "user", content: userMessage });
+            sessionManager?.addMessage({ role: "assistant", content: errorResponse });
+            sessionManager?.saveCurrentSession();
+
             setMessages((prev) => [
               ...prev,
               {
                 role: "assistant",
-                content: `노트 작성 중 오류가 발생했습니다: ${result.error}`,
+                content: errorResponse,
               },
             ]);
           }
         } catch (err) {
           const friendlyMessage = formatErrorMessage(err);
+          const errorResponse = `노트 작성 중 문제가 발생했습니다.\n\n${friendlyMessage}`;
+
+          // Sync to client conversation history even on error
+          client?.addToHistory("user", userMessage);
+          client?.addToHistory("assistant", errorResponse);
+
+          // Save to session manager
+          sessionManager?.addMessage({ role: "user", content: userMessage });
+          sessionManager?.addMessage({ role: "assistant", content: errorResponse });
+          sessionManager?.saveCurrentSession();
+
           setMessages((prev) => [
             ...prev,
             {
               role: "assistant",
-              content: `노트 작성 중 문제가 발생했습니다.\n\n${friendlyMessage}`,
+              content: errorResponse,
             },
           ]);
         } finally {
@@ -873,7 +1027,11 @@ export function App() {
             apiKey,
             notesDir: config?.notesDir || "./notes",
             model: config?.model || "claude-sonnet-4-20250514",
+            noteDetail: config?.noteDetail,
           });
+
+          // Get conversation history from client for context continuity
+          const conversationHistory = client?.getRawHistory().slice(-10) || [];
 
           const result = await subagent.invoke(
             intent.agent,
@@ -905,30 +1063,62 @@ export function App() {
                     : prev + text
                 );
               },
-            }
+            },
+            { conversationHistory }
           );
 
           if (result.success) {
+            // Sync to client conversation history
+            client?.addToHistory("user", userMessage);
+            client?.addToHistory("assistant", result.response);
+
+            // Save to session manager
+            sessionManager?.addMessage({ role: "user", content: userMessage });
+            sessionManager?.addMessage({ role: "assistant", content: result.response });
+            sessionManager?.saveCurrentSession();
+
             setMessages((prev) => [
               ...prev,
               { role: "assistant", content: result.response },
             ]);
           } else {
+            const errorResponse = `${isSearch ? "검색" : "클론 모드"} 중 오류가 발생했습니다: ${result.error}`;
+
+            // Sync to client conversation history even on error
+            client?.addToHistory("user", userMessage);
+            client?.addToHistory("assistant", errorResponse);
+
+            // Save to session manager
+            sessionManager?.addMessage({ role: "user", content: userMessage });
+            sessionManager?.addMessage({ role: "assistant", content: errorResponse });
+            sessionManager?.saveCurrentSession();
+
             setMessages((prev) => [
               ...prev,
               {
                 role: "assistant",
-                content: `${isSearch ? "검색" : "클론 모드"} 중 오류가 발생했습니다: ${result.error}`,
+                content: errorResponse,
               },
             ]);
           }
         } catch (err) {
           const errorMessage = err instanceof Error ? err.message : String(err);
+          const errorResponse = `${isSearch ? "검색" : "클론 모드"} 중 오류가 발생했습니다: ${errorMessage}`;
+
+          // Sync to client conversation history even on error
+          client?.addToHistory("user", userMessage);
+          client?.addToHistory("assistant", errorResponse);
+
+          // Save to session manager
+          sessionManager?.addMessage({ role: "user", content: userMessage });
+          sessionManager?.addMessage({ role: "assistant", content: errorResponse });
+          sessionManager?.saveCurrentSession();
+
           setMessages((prev) => [
             ...prev,
             {
               role: "assistant",
-              content: `${isSearch ? "검색" : "클론 모드"} 중 오류가 발생했습니다: ${errorMessage}`,
+              content: errorResponse,
             },
           ]);
         } finally {
@@ -1029,12 +1219,14 @@ export function App() {
       await saveConfig(newConfig);
       setConfig(newConfig);
 
-      // Reinitialize client if model changed
-      if (newConfig.model !== config?.model) {
+      // Reinitialize client if model or noteDetail changed
+      if (newConfig.model !== config?.model || newConfig.noteDetail !== config?.noteDetail) {
         const apiKey = await loadApiKey();
         const newClient = new GigaMindClient({
           model: newConfig.model,
           apiKey: apiKey || undefined,
+          notesDir: newConfig.notesDir,
+          noteDetail: newConfig.noteDetail,
         });
         setClient(newClient);
       }
@@ -1045,6 +1237,11 @@ export function App() {
         const stats = await getNoteStats(newConfig.notesDir);
         setNoteCount(stats.noteCount);
         setConnectionCount(stats.connectionCount);
+
+        // Also update client's notesDir if client exists
+        if (client && newConfig.model === config?.model && newConfig.noteDetail === config?.noteDetail) {
+          client.setNotesDir(newConfig.notesDir);
+        }
       }
 
       setMessages((prev) => [

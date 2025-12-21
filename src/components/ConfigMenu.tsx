@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from "react";
 import { Box, Text, useInput } from "ink";
 import TextInput from "ink-text-input";
-import type { GigaMindConfig } from "../utils/config.js";
+import type { GigaMindConfig, NoteDetailLevel } from "../utils/config.js";
 
 // Available models
 const AVAILABLE_MODELS = [
@@ -16,7 +16,14 @@ const FEEDBACK_LEVELS: Array<{ label: string; value: "minimal" | "medium" | "det
   { label: "Detailed", value: "detailed" },
 ];
 
-type MenuItemType = "userName" | "notesDir" | "model" | "feedbackLevel" | "save" | "cancel";
+// Note detail levels
+const NOTE_DETAIL_LEVELS: Array<{ label: string; value: NoteDetailLevel; description: string }> = [
+  { label: "상세 (Verbose)", value: "verbose", description: "대화 내용을 거의 그대로 기록" },
+  { label: "균형 (Balanced)", value: "balanced", description: "핵심 위주로 정리, 맥락 보존" },
+  { label: "간결 (Concise)", value: "concise", description: "핵심만 간결하게 요약" },
+];
+
+type MenuItemType = "userName" | "notesDir" | "model" | "feedbackLevel" | "noteDetail" | "save" | "cancel";
 
 interface MenuItem {
   key: MenuItemType;
@@ -57,6 +64,15 @@ const MENU_ITEMS: MenuItem[] = [
     editable: true,
   },
   {
+    key: "noteDetail",
+    label: "노트 상세 수준",
+    getValue: (c) => {
+      const level = NOTE_DETAIL_LEVELS.find((l) => l.value === c.noteDetail);
+      return level?.label || c.noteDetail || "균형 (Balanced)";
+    },
+    editable: true,
+  },
+  {
     key: "save",
     label: "저장하고 나가기",
     getValue: () => "",
@@ -76,7 +92,7 @@ interface ConfigMenuProps {
   onCancel: () => void;
 }
 
-type EditMode = null | "userName" | "notesDir" | "model" | "feedbackLevel";
+type EditMode = null | "userName" | "notesDir" | "model" | "feedbackLevel" | "noteDetail";
 
 export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -154,6 +170,32 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
       return;
     }
 
+    if (editMode === "noteDetail") {
+      if (key.escape) {
+        setEditMode(null);
+        return;
+      }
+      if (key.upArrow) {
+        setSelectIndex((prev) => Math.max(0, prev - 1));
+        return;
+      }
+      if (key.downArrow) {
+        setSelectIndex((prev) => Math.min(NOTE_DETAIL_LEVELS.length - 1, prev + 1));
+        return;
+      }
+      if (key.return) {
+        const selected = NOTE_DETAIL_LEVELS[selectIndex];
+        setTempConfig((prev) => ({
+          ...prev,
+          noteDetail: selected.value,
+        }));
+        setEditMode(null);
+        setMessage({ text: "노트 상세 수준이 변경되었습니다", type: "success" });
+        return;
+      }
+      return;
+    }
+
     // Normal menu navigation
     if (key.upArrow) {
       setSelectedIndex((prev) => Math.max(0, prev - 1));
@@ -192,6 +234,12 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
         setEditMode("feedbackLevel");
         setSelectIndex(
           FEEDBACK_LEVELS.findIndex((l) => l.value === tempConfig.feedback.level) || 0
+        );
+        break;
+      case "noteDetail":
+        setEditMode("noteDetail");
+        setSelectIndex(
+          NOTE_DETAIL_LEVELS.findIndex((l) => l.value === tempConfig.noteDetail) || 1
         );
         break;
       case "save":
@@ -277,6 +325,53 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
                 </Text>
                 {level.value === tempConfig.feedback.level && (
                   <Text color="green"> (현재)</Text>
+                )}
+              </Box>
+            ))}
+          </Box>
+        </Box>
+        <Box marginTop={1}>
+          <Text color="gray">
+            ↑↓: 이동 | Enter: 선택 | Esc: 취소
+          </Text>
+        </Box>
+      </Box>
+    );
+  }
+
+  // Render note detail level selection
+  if (editMode === "noteDetail") {
+    return (
+      <Box flexDirection="column" padding={1}>
+        <Box
+          borderStyle="round"
+          borderColor="cyan"
+          paddingX={2}
+          paddingY={1}
+          flexDirection="column"
+        >
+          <Text color="cyan" bold>
+            노트 상세 수준 선택
+          </Text>
+          <Text color="gray" dimColor>
+            노트 작성 시 대화 내용을 얼마나 상세하게 기록할지 설정합니다.
+          </Text>
+          <Box marginTop={1} flexDirection="column">
+            {NOTE_DETAIL_LEVELS.map((level, idx) => (
+              <Box key={level.value} flexDirection="column">
+                <Box>
+                  <Text color={idx === selectIndex ? "yellow" : "white"}>
+                    {idx === selectIndex ? "> " : "  "}
+                    {level.label}
+                  </Text>
+                  {level.value === tempConfig.noteDetail && (
+                    <Text color="green"> (현재)</Text>
+                  )}
+                </Box>
+                {idx === selectIndex && (
+                  <Box marginLeft={4}>
+                    <Text color="gray" dimColor>{level.description}</Text>
+                  </Box>
                 )}
               </Box>
             ))}

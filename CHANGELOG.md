@@ -5,6 +5,209 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.8] - 2025-12-20
+
+### Added
+
+#### 노트 요약 감도(Note Detail Level) 설정 기능
+- **동적 요약 상세도 조절**: 사용자가 노트 생성 시 요약의 상세도를 선택할 수 있는 기능
+  - `/config` 메뉴에서 "노트 상세도" 옵션 선택 가능
+  - 3가지 레벨 지원:
+    - **상세 (Verbose)**: 대화 내용을 거의 그대로 기록, 맥락 최대한 유지
+    - **균형 (Balanced)**: 핵심 내용 + 주요 맥락 보존 (기본값)
+    - **간결 (Concise)**: 핵심만 간결하게 요약
+- **note-agent 동적 프롬프트 생성**: 설정에 따라 노트 생성 방식을 자동으로 조절
+- **설정 저장 및 복원**: 사용자 설정이 config 파일에 저장되어 세션 간 유지
+
+### Enhanced
+
+#### 노트 생성 워크플로우 개선
+- **설정 기반 프롬프트 구성**: 선택된 상세도 레벨에 따라 프롬프트 동적 생성
+- **사용자 경험 개선**: 설정 메뉴에서 직관적인 노트 상세도 선택
+
+### Technical Details
+
+#### 수정된 파일
+- `src/utils/config.ts`: NoteDetailLevel 타입 추가 및 설정 통합
+- `src/agent/prompts.ts`: note-agent의 동적 프롬프트 생성 로직
+- `src/agent/subagent.ts`: noteDetail 컨텍스트 전달
+- `src/agent/client.ts`: 클라이언트에 noteDetail 통합
+- `src/components/ConfigMenu.tsx`: 노트 상세도 설정 UI
+- `src/app.tsx`: noteDetail 설정 연동 로직
+
+#### 새로운 타입 정의
+```typescript
+type NoteDetailLevel = 'verbose' | 'balanced' | 'concise';
+
+interface Config {
+  // ... 기존 필드
+  noteDetail: NoteDetailLevel;  // 기본값: 'balanced'
+}
+```
+
+## [0.0.7] - 2025-12-20
+
+### Fixed
+
+#### 노트 통계 표시 버그 수정
+- **"노트: 0, 연결: 0" 표시 문제 해결**: 온보딩 완료 후 노트 통계가 올바르게 표시되지 않던 문제 수정
+  - `handleOnboardingComplete()`에서 `getNoteStats()` 호출 누락 → 호출 추가
+  - `expandPath()`에서 상대경로(`./notes`)를 절대경로로 변환하지 않는 문제 → `path.resolve()` 적용
+  - `getNoteStats()`의 Silent fail 에러 처리 → `console.debug`/`console.warn` 로깅 추가하여 디버깅 개선
+
+#### 연결 수 계산 기능 구현
+- **connectionCount 미구현 수정**: 마크다운 파일에서 wikilink 연결 수를 계산하는 기능 추가
+  - wikilink 패턴(`[[...]]`) 파싱을 통한 연결 수 계산
+  - 모든 노트 파일의 wikilink를 스캔하여 총 연결 수 산출
+  - StatusBar에 정확한 연결 수 표시
+
+### Added
+
+#### OS 네이티브 폴더 선택 다이얼로그
+- **크로스 플랫폼 폴더 선택 지원**: 각 OS의 네이티브 다이얼로그를 사용한 폴더 선택 기능
+  - **macOS**: `osascript` (AppleScript)를 통한 Finder 다이얼로그
+  - **Windows**: PowerShell `FolderBrowserDialog`를 통한 Windows 폴더 선택
+  - **Linux**: `zenity` (GTK) 또는 `kdialog` (KDE)를 통한 폴더 선택
+- **Import 화면에서 `[B]` 키 지원**: 폴더 경로 입력 중 `[B]` 키로 폴더 선택 다이얼로그 열기
+- **Onboarding 화면에서도 동일 지원**: 노트 디렉토리 설정 시 `[B]` 키로 폴더 선택 다이얼로그 사용 가능
+- **사용자 친화적 경험**: 터미널에서 경로를 직접 입력하는 대신 GUI 다이얼로그로 쉽게 폴더 선택
+
+### Enhanced
+
+#### 에러 처리 및 로깅 개선
+- **노트 통계 수집 시 상세 로깅**: `getNoteStats()`에서 발생하는 에러를 적절한 로그 레벨로 기록
+  - 디버그 정보: `console.debug`로 통계 수집 시작/완료 로깅
+  - 경고 정보: `console.warn`으로 에러 상황 로깅
+  - Silent fail 방지로 문제 디버깅 용이성 향상
+
+#### 크로스 플랫폼 호환성
+- **경로 처리 개선**: 상대경로를 절대경로로 변환하는 로직 강화
+  - `path.resolve()`를 사용한 안정적인 경로 변환
+  - 모든 플랫폼에서 일관된 경로 처리
+
+### Technical Details
+
+#### 수정된 파일
+- `src/app.tsx`: `handleOnboardingComplete()` 및 `expandPath()` 수정
+- `src/utils/stats.ts`: `getNoteStats()` 및 `getConnectionCount()` 구현 개선
+- `src/screens/ImportScreen.tsx`: 폴더 선택 다이얼로그 기능 추가
+- `src/screens/OnboardingScreen.tsx`: 폴더 선택 다이얼로그 기능 추가
+
+#### 새로운 유틸리티 함수
+- `openFolderDialog()`: OS별 네이티브 폴더 선택 다이얼로그 실행
+  - 플랫폼 감지 및 적절한 명령어 실행
+  - 에러 처리 및 사용자 취소 처리
+  - 선택된 경로 반환
+
+#### wikilink 파싱 로직
+- 정규표현식 패턴: `/\[\[([^\]]+)\]\]/g`
+- 모든 `.md` 파일 스캔하여 wikilink 추출
+- 중복 제거 및 총 연결 수 계산
+
+## [0.0.6] - 2025-12-20
+
+### Fixed
+
+#### Subagent History Synchronization
+- **Critical Bug Fix**: Fixed history synchronization issue where direct subagent calls bypassed conversation history saving
+  - `detectSubagentIntent()` calls now properly save history through new `addToHistory()` method
+  - Fixed 6 code paths in `app.tsx` that previously skipped history saving:
+    - `/search` command execution
+    - `/clone` and `/me` command execution
+    - `/note` command execution
+    - Note agent intent detection flow
+    - Search agent intent detection flow
+    - Clone agent intent detection flow
+  - Prevents conversation context loss between agent interactions
+  - Ensures consistent chat history across all interaction modes
+
+#### API Compatibility
+- **Consecutive User Messages Prevention**: Added validation in `subagent.ts` to prevent consecutive user messages
+  - Claude API requires alternating user/assistant message roles
+  - Automatic detection and prevention of invalid message sequences
+  - Improved error handling for edge cases
+
+### Added
+
+#### Session Scaling and Organization
+- **Monthly Directory Structure**: Implemented hierarchical session storage for improved scalability
+  - Sessions organized by month: `~/.gigamind/sessions/YYYY-MM/DD_HHMMSS.json`
+  - Prevents filesystem slowdown with large session counts
+  - Easier navigation and management of session history
+  - Automatic directory creation for new months
+
+#### Session Metadata Indexing
+- **Index System**: O(1) session lookups with comprehensive metadata tracking
+  - `index.json` maintains session metadata without reading individual files
+  - Tracks session paths, creation/modification times, message counts
+  - Enables fast session queries and filtering
+  - Automatic index updates on session operations
+
+#### Session Tagging System
+- **Manual Tagging**:
+  - `tagSession(sessionId, tags[])`: Add custom tags to sessions
+  - `removeTagFromSession(sessionId, tag)`: Remove specific tags
+  - `getSessionsByTag(tag)`: Query sessions by tag
+  - Support for multiple tags per session
+- **Automatic Tagging**:
+  - `autoTagCurrentSession()`: Intelligently tags based on session activity
+  - Automatic detection of subagent usage (search, clone, note)
+  - Tracks command usage patterns
+  - Session type classification (normal, onboarding, config)
+
+#### Index Management Tools
+- **Index Operations**:
+  - `loadIndex()`: Load session index from disk
+  - `saveIndex()`: Persist index changes
+  - `rebuildIndex()`: Reconstruct index from session files
+  - `getIndexStats()`: Get statistics about indexed sessions
+- **Automatic Migration**:
+  - Old flat-structure sessions automatically migrated to monthly directories
+  - Preserves all session data during migration
+  - Index automatically built for migrated sessions
+  - No manual intervention required
+
+### Enhanced
+- **Session Management**: Improved performance and scalability with indexing system
+- **File Organization**: Better structure for long-term session history management
+- **Backward Compatibility**: Seamless migration from old session structure to new format
+
+### Technical Details
+
+#### New Methods in `session.ts`
+- `addToHistory()`: External history management for subagent calls
+- `tagSession()`: Add tags to sessions
+- `removeTagFromSession()`: Remove tags from sessions
+- `getSessionsByTag()`: Query sessions by tag
+- `autoTagCurrentSession()`: Automatic tagging based on usage
+- `loadIndex()`: Load session index
+- `saveIndex()`: Save session index
+- `rebuildIndex()`: Rebuild index from files
+- `getIndexStats()`: Get index statistics
+
+#### Session Index Schema
+```typescript
+{
+  sessions: {
+    [sessionId]: {
+      path: string;           // Relative path to session file
+      created: string;        // ISO timestamp
+      modified: string;       // ISO timestamp
+      messageCount: number;   // Number of messages
+      tags: string[];         // Session tags
+    }
+  }
+}
+```
+
+#### Migration Process
+- Detects old flat-structure sessions on startup
+- Creates monthly directory structure as needed
+- Moves sessions to appropriate YYYY-MM directories
+- Updates index with migrated session metadata
+- Preserves original creation timestamps
+- No data loss during migration
+
 ## [0.0.5] - 2025-12-19
 
 ### Added
