@@ -1,58 +1,76 @@
 /**
  * Tests for Config utility
+ *
+ * IMPORTANT: Tests that modify config use mocked paths to prevent
+ * overwriting the user's real ~/.gigamind/ directory.
  */
 
-import { describe, it, expect, jest, beforeEach, afterEach } from "@jest/globals";
+import { describe, it, expect, jest, beforeEach, afterEach, beforeAll, afterAll } from "@jest/globals";
 import path from "node:path";
 import os from "node:os";
 import fs from "node:fs/promises";
-import {
-  getConfigDir,
-  getConfigPath,
-  getSessionsDir,
-  getCredentialsPath,
-  loadConfig,
-  saveConfig,
-  updateConfig,
-  configExists,
-  saveApiKey,
-  loadApiKey,
-  hasApiKey,
-  getNoteStats,
-  type GigaMindConfig,
-} from "../../src/utils/config.js";
+import * as configModule from "../../src/utils/config.js";
+import { clearCache } from "../../src/utils/graph/cache.js";
+
+// Re-export types we need
+type GigaMindConfig = configModule.GigaMindConfig;
 
 describe("Config paths", () => {
   it("should return config directory in home folder", () => {
-    const configDir = getConfigDir();
+    const configDir = configModule.getConfigDir();
     expect(configDir).toBe(path.join(os.homedir(), ".gigamind"));
   });
 
   it("should return config file path", () => {
-    const configPath = getConfigPath();
+    const configPath = configModule.getConfigPath();
     expect(configPath).toBe(path.join(os.homedir(), ".gigamind", "config.yaml"));
   });
 
   it("should return sessions directory path", () => {
-    const sessionsDir = getSessionsDir();
+    const sessionsDir = configModule.getSessionsDir();
     expect(sessionsDir).toBe(path.join(os.homedir(), ".gigamind", "sessions"));
   });
 
   it("should return credentials file path", () => {
-    const credentialsPath = getCredentialsPath();
+    const credentialsPath = configModule.getCredentialsPath();
     expect(credentialsPath).toBe(path.join(os.homedir(), ".gigamind", "credentials"));
   });
 });
 
 describe("Config operations", () => {
-  const testConfigDir = path.join(os.tmpdir(), "gigamind-test-config");
+  // Use a unique temp directory for test isolation
+  const testConfigDir = path.join(os.tmpdir(), `gigamind-test-config-${process.pid}-${Date.now()}`);
   const testConfigPath = path.join(testConfigDir, "config.yaml");
+  const testSessionsDir = path.join(testConfigDir, "sessions");
+  const testCredentialsPath = path.join(testConfigDir, "credentials");
 
-  beforeEach(async () => {
+  // Store original functions to restore later
+  let getConfigDirSpy: jest.SpiedFunction<typeof configModule.getConfigDir>;
+  let getConfigPathSpy: jest.SpiedFunction<typeof configModule.getConfigPath>;
+  let getSessionsDirSpy: jest.SpiedFunction<typeof configModule.getSessionsDir>;
+  let getCredentialsPathSpy: jest.SpiedFunction<typeof configModule.getCredentialsPath>;
+
+  beforeAll(async () => {
+    // Create temp directory structure
     await fs.mkdir(testConfigDir, { recursive: true });
+    await fs.mkdir(testSessionsDir, { recursive: true });
+
+    // Mock all path functions to use temp directory
+    // This prevents tests from touching the real ~/.gigamind/ directory
+    getConfigDirSpy = jest.spyOn(configModule, "getConfigDir").mockReturnValue(testConfigDir);
+    getConfigPathSpy = jest.spyOn(configModule, "getConfigPath").mockReturnValue(testConfigPath);
+    getSessionsDirSpy = jest.spyOn(configModule, "getSessionsDir").mockReturnValue(testSessionsDir);
+    getCredentialsPathSpy = jest.spyOn(configModule, "getCredentialsPath").mockReturnValue(testCredentialsPath);
   });
 
-  afterEach(async () => {
+  afterAll(async () => {
+    // Restore original functions
+    getConfigDirSpy.mockRestore();
+    getConfigPathSpy.mockRestore();
+    getSessionsDirSpy.mockRestore();
+    getCredentialsPathSpy.mockRestore();
+
+    // Clean up temp directory
     try {
       await fs.rm(testConfigDir, { recursive: true, force: true });
     } catch {
@@ -60,9 +78,18 @@ describe("Config operations", () => {
     }
   });
 
+  beforeEach(async () => {
+    // Clean any existing config file before each test
+    try {
+      await fs.unlink(testConfigPath);
+    } catch {
+      // File may not exist, that's OK
+    }
+  });
+
   describe("loadConfig", () => {
     it("should return config with expected structure", async () => {
-      const config = await loadConfig();
+      const config = await configModule.loadConfig();
 
       expect(config).toBeDefined();
       // Config should have the required fields (may be default or user-configured)
@@ -88,8 +115,8 @@ describe("Config operations", () => {
         noteDetail: "balanced",
       };
 
-      await saveConfig(testConfig);
-      const loaded = await loadConfig();
+      await configModule.saveConfig(testConfig);
+      const loaded = await configModule.loadConfig();
 
       expect(loaded.notesDir).toBe(testConfig.notesDir);
       expect(loaded.userName).toBe(testConfig.userName);
@@ -112,9 +139,9 @@ describe("Config operations", () => {
         noteDetail: "balanced",
       };
 
-      await saveConfig(initialConfig);
+      await configModule.saveConfig(initialConfig);
 
-      const updated = await updateConfig({
+      const updated = await configModule.updateConfig({
         userName: "NewUser",
         notesDir: "./new-notes",
       });
@@ -128,15 +155,23 @@ describe("Config operations", () => {
 
   describe("configExists", () => {
     it("should return false when config does not exist", async () => {
-      // Create a fresh temp directory without config
-      const emptyDir = path.join(os.tmpdir(), "gigamind-empty-config");
-      await fs.mkdir(emptyDir, { recursive: true });
+      // Ensure config file doesn't exist in our temp directory
+      try {
+        await fs.unlink(testConfigPath);
+      } catch {
+        // Already doesn't exist
+      }
 
-      const exists = await configExists();
-      // This tests the actual config path, which may or may not exist
-      expect(typeof exists).toBe("boolean");
+      const exists = await configModule.configExists();
+      expect(exists).toBe(false);
+    });
 
-      await fs.rm(emptyDir, { recursive: true, force: true });
+    it("should return true when config exists", async () => {
+      // Create a config file
+      await fs.writeFile(testConfigPath, "notesDir: ./notes\n");
+
+      const exists = await configModule.configExists();
+      expect(exists).toBe(true);
     });
   });
 });
@@ -189,14 +224,16 @@ describe("API Key operations", () => {
 });
 
 describe("getNoteStats", () => {
-  const testNotesDir = path.join(os.tmpdir(), "gigamind-test-notes");
+  const testNotesDir = path.join(os.tmpdir(), "gigamind-test-notes-" + Date.now());
 
   beforeEach(async () => {
+    clearCache(); // 캐시 초기화
     await fs.mkdir(testNotesDir, { recursive: true });
   });
 
   afterEach(async () => {
     try {
+      clearCache(); // 캐시 초기화
       await fs.rm(testNotesDir, { recursive: true, force: true });
     } catch {
       // Ignore cleanup errors

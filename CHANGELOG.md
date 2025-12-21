@@ -5,6 +5,118 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0] - 2025-12-20
+
+### Added
+
+#### 온톨로지 그래프 시스템 (Note Graph Analytics)
+- **새로운 그래프 분석 모듈** (`src/utils/graph/`): 통합 그래프 분석 엔진 구현
+  - 통합 위키링크 파서 (`wikilinks.ts`): 정규식 기반 wikilink 추출 및 파싱
+  - 그래프 분석 엔진 (`analyzer.ts`): 연결 통계 및 그래프 구조 분석
+  - 5분 TTL 메모리 캐시 (`cache.ts`): 성능 최적화를 위한 캐싱 시스템
+  - 타입 정의 및 인덱스 모듈: `types.ts`, `index.ts`
+
+#### 정확한 연결 통계
+- **고유 연결 수 카운팅**: 중복 제거된 정확한 연결 수 계산
+  - 동일한 타겟으로의 중복 링크는 1회만 카운트
+  - 총 언급 횟수와 고유 연결 수 별도 추적
+- **양방향 연결 분석**: Source 및 Target 기반 연결 맵핑
+
+#### Backlink 추적 (역참조)
+- **노트별 역참조 조회 API**: 특정 노트를 참조하는 모든 노트 검색
+- **컨텍스트 추출**: 역참조가 포함된 주변 텍스트 스니펫 제공
+- **효율적인 조회**: 캐시 기반 빠른 역참조 검색
+
+#### Dangling Link 감지
+- **미생성 링크 탐지**: 존재하지 않는 노트로의 wikilink 자동 식별
+- **메타데이터 추적**: 소스 노트 및 발생 횟수 기록
+- **사용자 경고**: StatusBar에 미생성 링크 경고 표시 (`⚠️ 미생성: 3`)
+
+#### Orphan Note 감지
+- **고립된 노트 식별**: 들어오고 나가는 연결이 모두 없는 노트 감지
+- **Status Bar 통계**: 고립된 노트 수 표시 (`📋 고립: 2`)
+
+#### 확장된 StatusBar 통계
+- **향상된 노트 통계 표시**: `노트: 42 | 연결: 15 | ⚠️ 미생성: 3 | 📋 고립: 2`
+  - 노트 총 개수
+  - 고유 연결 수
+  - Dangling link 개수
+  - Orphan note 개수
+
+### Enhanced
+
+#### 코드 품질 개선
+- **코드 중복 제거**: 위키링크 추출 로직 2곳에서 1곳 통합
+  - `extractWikilinks()` 함수로 단일화
+  - DRY 원칙 준수로 유지보수성 향상
+- **정규식 개선**: 섹션 링크(`[[Note#section]]`) 및 별칭(`[[Note|alias]]`) 지원
+  - 더 정확한 wikilink 파싱
+  - 다양한 마크다운 링크 형식 호환
+
+#### 성능 최적화
+- **메모리 캐싱**: 5분 TTL을 가진 메모리 캐시로 반복 조회 최적화
+- **지연 로딩**: 필요시에만 그래프 분석 실행
+- **효율적인 인덱싱**: O(1) 시간 복잡도의 노트 조회
+
+### Technical Details
+
+#### 새로운 파일
+```
+src/utils/graph/
+├── types.ts              # 그래프 타입 정의
+├── wikilinks.ts          # Wikilink 파싱 유틸리티
+├── analyzer.ts           # 그래프 분석 엔진
+├── cache.ts              # 메모리 캐시 시스템
+└── index.ts              # 모듈 엔트리포인트
+
+tests/utils/graph/
+├── wikilinks.test.ts     # Wikilink 파싱 테스트 (33개)
+└── analyzer.test.ts      # 그래프 분석 엔진 테스트 (26개)
+```
+
+#### 수정된 파일
+- `src/utils/config.ts`: 그래프 모듈 통합
+- `src/utils/frontmatter.ts`: Wikilink 추출 로직 통합
+- `src/components/Import.tsx`: 그래프 초기화 추가
+- `src/components/StatusBar.tsx`: Dangling link 및 Orphan note 표시
+- `src/app.tsx`: 그래프 분석 모듈 초기화
+
+#### 핵심 타입 정의
+```typescript
+interface GraphStats {
+  totalNotes: number;           // 총 노트 개수
+  uniqueConnections: number;    // 고유 연결 수 (중복 제거)
+  totalMentions: number;        // 총 언급 횟수
+  danglingLinks: DanglingLink[];
+  orphanNotes: string[];
+}
+
+interface DanglingLink {
+  target: string;
+  sources: { source: string; count: number }[];
+}
+
+interface WikiLink {
+  target: string;
+  lineNumber: number;
+  context: string;
+}
+```
+
+#### Wikilink 파싱 패턴
+- 기본 링크: `[[Note]]`
+- 섹션 링크: `[[Note#section]]`
+- 별칭 링크: `[[Note|Display Text]]`
+- 복합 링크: `[[Note#section|Display Text]]`
+
+### Tests
+
+- 새로운 테스트: 59개 (Wikilink 33개, Analyzer 26개)
+- 전체 테스트: 272개 통과
+- 테스트 커버리지: 그래프 분석 엔진 100%
+
+---
+
 ## [0.0.10] - 2025-12-20
 
 ### Added

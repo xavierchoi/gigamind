@@ -13,7 +13,7 @@ import type {
 } from "@anthropic-ai/sdk/resources/messages";
 import { getToolsForSubagent } from "./tools.js";
 import { executeTool, type ToolResult } from "./executor.js";
-import { getSubagentPrompt, getSubagentTools, subagents, type SubagentContext } from "./prompts.js";
+import { getSubagentPrompt, getSubagentTools, subagents, getTimeContext, type SubagentContext } from "./prompts.js";
 import { getLogger } from "../utils/logger.js";
 import {
   SubagentError,
@@ -111,9 +111,11 @@ export class SubagentInvoker {
     let totalFilesMatched = 0;
 
     // Subagent 컨텍스트 생성 (동적 프롬프트 생성에 필요)
+    // currentTime을 포함하여 날짜 정확성 보장
     const context: SubagentContext = {
       notesDir: this.notesDir,
       noteDetail: this.noteDetail,
+      currentTime: getTimeContext(),
     };
 
     const systemPrompt = getSubagentPrompt(agentName, context);

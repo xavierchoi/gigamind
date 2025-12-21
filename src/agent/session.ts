@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import type { ChatMessage } from "./client.js";
+import { getTimezoneInfo } from "../utils/time.js";
 
 export interface Session {
   id: string;
@@ -11,6 +12,10 @@ export interface Session {
   tags?: string[];
   /** Claude Agent SDK session ID for resumption */
   agentSessionId?: string;
+  /** User's timezone when session was created (e.g., "Asia/Seoul") */
+  timezone?: string;
+  /** UTC offset when session was created (e.g., "+09:00") */
+  timezoneOffset?: string;
 }
 
 // 세션 요약 정보 인터페이스
@@ -36,6 +41,10 @@ export interface SessionIndexEntry {
   tags: string[];
   /** Claude Agent SDK session ID for resumption */
   agentSessionId?: string;
+  /** User's timezone when session was created (e.g., "Asia/Seoul") */
+  timezone?: string;
+  /** UTC offset when session was created (e.g., "+09:00") */
+  timezoneOffset?: string;
 }
 
 // 세션 인덱스 인터페이스
@@ -163,6 +172,8 @@ export class SessionManager {
       lastMessage,
       tags: session.tags || [],
       agentSessionId: session.agentSessionId,
+      timezone: session.timezone,
+      timezoneOffset: session.timezoneOffset,
     };
   }
 
@@ -274,6 +285,7 @@ export class SessionManager {
   async createSession(): Promise<Session> {
     const id = this.generateSessionId();
     const now = new Date().toISOString();
+    const timezoneInfo = getTimezoneInfo();
 
     this.currentSession = {
       id,
@@ -281,6 +293,8 @@ export class SessionManager {
       updatedAt: now,
       messages: [],
       tags: [],
+      timezone: timezoneInfo.timezone,
+      timezoneOffset: timezoneInfo.offset,
     };
 
     await this.saveCurrentSession();

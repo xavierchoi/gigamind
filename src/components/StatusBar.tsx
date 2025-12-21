@@ -7,6 +7,12 @@ interface StatusBarProps {
   showStats: boolean;
   currentAction?: string;
   lastSync?: Date;
+  /** Dangling Links (미생성 링크) 수 */
+  danglingCount?: number;
+  /** Orphan Notes (고립 노트) 수 */
+  orphanCount?: number;
+  /** 확장 통계 표시 여부 */
+  showExtendedStats?: boolean;
 }
 
 /**
@@ -37,6 +43,9 @@ export function StatusBar({
   showStats,
   currentAction,
   lastSync,
+  danglingCount,
+  orphanCount,
+  showExtendedStats = false,
 }: StatusBarProps) {
   if (!showStats) return null;
 
@@ -61,6 +70,20 @@ export function StatusBar({
             <Text color="green">연결:</Text>{" "}
             <Text color="white">{connectionCount}</Text>
           </Text>
+          {/* 확장 통계: Dangling Links */}
+          {showExtendedStats && danglingCount !== undefined && danglingCount > 0 && (
+            <Text>
+              <Text color="yellow">미생성:</Text>{" "}
+              <Text color="yellow">{danglingCount}</Text>
+            </Text>
+          )}
+          {/* 확장 통계: Orphan Notes */}
+          {showExtendedStats && orphanCount !== undefined && orphanCount > 0 && (
+            <Text>
+              <Text color="gray">고립:</Text>{" "}
+              <Text color="gray">{orphanCount}</Text>
+            </Text>
+          )}
           {lastSync && (
             <Text>
               <Text color="yellow">동기화:</Text>{" "}

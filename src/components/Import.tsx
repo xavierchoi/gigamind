@@ -12,6 +12,7 @@ import {
   openFolderDialog,
   isFolderDialogSupported,
 } from "../utils/folderDialog/index.js";
+import { extractWikilinks } from "../utils/graph/wikilinks.js";
 
 type ImportStep =
   | "source"
@@ -54,17 +55,6 @@ function resetNoteCounter(): void {
 
 // Image extensions to look for
 const IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp"];
-
-// Extract wikilinks from markdown content
-function extractWikilinks(content: string): string[] {
-  const wikilinkRegex = /\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/g;
-  const links: string[] = [];
-  let match;
-  while ((match = wikilinkRegex.exec(content)) !== null) {
-    links.push(match[1]);
-  }
-  return links;
-}
 
 // Extract image references from markdown content
 function extractImageRefs(content: string): string[] {

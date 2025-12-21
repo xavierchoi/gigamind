@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import yaml from "yaml";
+import { getQuickStats as getGraphQuickStats } from "./graph/index.js";
 
 /**
  * Expand tilde (~) to home directory in a path
@@ -161,60 +162,50 @@ export async function ensureNotesDir(notesDir: string): Promise<void> {
   }
 }
 
+/**
+ * 노트 통계 조회
+ * 그래프 모듈을 사용하여 정확한 연결 수를 계산
+ *
+ * @param notesDir 노트 디렉토리 경로
+ * @returns 노트 수와 고유 연결 수
+ */
 export async function getNoteStats(
   notesDir: string
 ): Promise<{ noteCount: number; connectionCount: number }> {
   try {
-    const expandedDir = expandPath(notesDir);
-    const countFilesAndLinks = async (
-      dir: string
-    ): Promise<{ files: number; links: number }> => {
-      let files = 0;
-      let links = 0;
-      try {
-        const entries = await fs.readdir(dir, { withFileTypes: true });
-        for (const entry of entries) {
-          if (entry.isDirectory()) {
-            const subResult = await countFilesAndLinks(
-              path.join(dir, entry.name)
-            );
-            files += subResult.files;
-            links += subResult.links;
-          } else if (entry.name.endsWith(".md")) {
-            files++;
-            // Count wikilinks in the markdown file
-            try {
-              const content = await fs.readFile(
-                path.join(dir, entry.name),
-                "utf-8"
-              );
-              const wikilinks = content.match(/\[\[([^\]]+)\]\]/g);
-              if (wikilinks) {
-                links += wikilinks.length;
-              }
-            } catch (readErr) {
-              // File couldn't be read, skip wikilink counting for this file
-              console.debug(
-                `[getNoteStats] Cannot read file: ${entry.name}`,
-                readErr
-              );
-            }
-          }
-        }
-      } catch (err) {
-        // Directory doesn't exist or can't be accessed
-        console.debug(`[getNoteStats] Cannot access directory: ${dir}`, err);
-      }
-      return { files, links };
+    const stats = await getGraphQuickStats(notesDir);
+    return {
+      noteCount: stats.noteCount,
+      connectionCount: stats.connectionCount,
     };
-
-    const result = await countFilesAndLinks(expandedDir);
-    const noteCount = result.files;
-    const connectionCount = result.links;
-
-    return { noteCount, connectionCount };
   } catch (err) {
     console.warn(`[getNoteStats] Failed to get stats for ${notesDir}:`, err);
     return { noteCount: 0, connectionCount: 0 };
+  }
+}
+
+/**
+ * 확장 노트 통계 조회
+ * Dangling Links, Orphan Notes 등 추가 정보 포함
+ *
+ * @param notesDir 노트 디렉토리 경로
+ * @returns 확장 통계
+ */
+export async function getExtendedNoteStats(
+  notesDir: string
+): Promise<{
+  noteCount: number;
+  connectionCount: number;
+  danglingCount: number;
+  orphanCount: number;
+}> {
+  try {
+    return await getGraphQuickStats(notesDir);
+  } catch (err) {
+    console.warn(
+      `[getExtendedNoteStats] Failed to get stats for ${notesDir}:`,
+      err
+    );
+    return { noteCount: 0, connectionCount: 0, danglingCount: 0, orphanCount: 0 };
   }
 }

@@ -101,24 +101,11 @@ export function parseNote(content: string): ParsedNote {
 
 /**
  * Extract wikilinks from markdown content
- * Supports both [[link]] and [[link|alias]] formats
- * @returns Array of link targets (without aliases)
+ * Re-exported from graph module for backward compatibility
+ * Supports [[link]], [[link|alias]], and [[link#section|alias]] formats
+ * @returns Array of unique link targets (without aliases or sections)
  */
-export function extractWikilinks(content: string): string[] {
-  const wikilinkRegex = /\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/g;
-  const links: string[] = [];
-  let match;
-
-  while ((match = wikilinkRegex.exec(content)) !== null) {
-    const link = match[1].trim();
-    // Avoid duplicates
-    if (!links.includes(link)) {
-      links.push(link);
-    }
-  }
-
-  return links;
-}
+export { extractWikilinks } from "./graph/wikilinks.js";
 
 /**
  * Update the modified date in a note's frontmatter

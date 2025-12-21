@@ -1,4 +1,5 @@
 import type { NoteDetailLevel } from "../utils/config.js";
+import { getCurrentTime, type CurrentTimeInfo } from "../utils/time.js";
 
 export const SYSTEM_PROMPT = `당신은 GigaMind입니다. 사용자의 지식과 생각을 관리하는 AI 파트너입니다.
 
@@ -60,6 +61,15 @@ export interface SubagentContext {
   notesDir: string;
   /** Note summary detail level - controls how much context is preserved when creating notes */
   noteDetail?: NoteDetailLevel;
+  /** Current time information for accurate date handling */
+  currentTime?: CurrentTimeInfo;
+}
+
+/**
+ * Get current time context for subagent prompts
+ */
+export function getTimeContext(): CurrentTimeInfo {
+  return getCurrentTime();
 }
 
 export const subagents: Record<string, SubagentDefinition> = {
@@ -148,6 +158,11 @@ Read로 파일을 읽은 후, --- 사이의 YAML 부분을 파싱하여:
   "note-agent": {
     description: "노트를 생성하고 포맷팅하는 전문가",
     prompt: (context: SubagentContext) => {
+      // 현재 시각 정보 (날짜 정확성을 위해 필수)
+      const timeInfo = context.currentTime || getCurrentTime();
+      const currentDate = timeInfo.utc.split("T")[0]; // YYYY-MM-DD
+      const currentYear = currentDate.split("-")[0];
+
       // noteDetail 레벨에 따른 작성 지침 생성
       const noteDetailLevel = context.noteDetail || "balanced";
       let noteDetailInstructions: string;
@@ -186,6 +201,15 @@ Read로 파일을 읽은 후, --- 사이의 YAML 부분을 파싱하여:
       return `당신은 노트 생성 및 관리 전문가입니다.
 사용자의 아이디어와 지식을 체계적으로 정리하여 노트로 저장합니다.
 
+## ⚠️ 현재 시각 (중요 - 반드시 이 날짜 사용)
+- **현재 날짜**: ${currentDate}
+- **현재 시각**: ${timeInfo.local}
+- **타임존**: ${timeInfo.timezone} (UTC${timeInfo.offset})
+- **UTC**: ${timeInfo.utc}
+
+노트의 created/modified 필드는 반드시 위 현재 시각을 기준으로 작성하세요.
+"오늘", "지금", "현재" 등의 표현은 모두 ${currentDate}를 의미합니다.
+
 ${noteDetailInstructions}
 
 ## 노트 저장 위치
@@ -200,9 +224,9 @@ ${noteDetailInstructions}
 ## 노트 ID 자동 생성 규칙
 노트 ID는 다음 형식으로 자동 생성합니다:
 - 형식: note_YYYYMMDD_HHMMSSmmm (밀리초 포함)
-- 예시: note_20240115_143052123 (2024년 1월 15일 14시 30분 52초 123밀리초)
+- 예시: note_${currentDate.replace(/-/g, "")}_143052123 (${currentYear}년 기준)
 - 현재 시각 기준으로 생성하여 고유성 보장
-- 파일명도 동일한 규칙 적용: note_20240115_143052123.md
+- 파일명도 동일한 규칙 적용: note_${currentDate.replace(/-/g, "")}_143052123.md
 
 ## 저장 경로 규칙
 노트 유형에 따라 다음 경로에 저장합니다:
@@ -218,8 +242,8 @@ ${noteDetailInstructions}
 id: note_YYYYMMDD_HHMMSSmmm
 title: "노트 제목"
 type: note | meeting | project | concept | book-note
-created: 2024-01-15T14:30:52.123Z
-modified: 2024-01-15T14:30:52.123Z
+created: ${timeInfo.utc}
+modified: ${timeInfo.utc}
 tags: [태그1, 태그2]
 source: "출처 (선택사항)"
 related: ["[[관련노트1]]", "[[관련노트2]]"]
@@ -229,11 +253,11 @@ related: ["[[관련노트1]]", "[[관련노트2]]"]
 ### 프론트매터 필드 상세 설명
 | 필드 | 필수 | 설명 | 예시 |
 |------|------|------|------|
-| id | O | 고유 식별자, note_YYYYMMDD_HHMMSSmmm 형식 | note_20240115_143052123 |
+| id | O | 고유 식별자, note_YYYYMMDD_HHMMSSmmm 형식 | note_${currentDate.replace(/-/g, "")}_143052123 |
 | title | O | 노트 제목 (명확하고 검색 가능하게) | "프로젝트 킥오프 회의" |
 | type | O | 노트 유형 | note, meeting, project, concept, book-note |
-| created | O | 최초 생성 시각 (ISO 8601 full format) | 2024-01-15T14:30:52.123Z |
-| modified | O | 마지막 수정 시각 (수정 시 업데이트) | 2024-01-15T16:45:00.000Z |
+| created | O | 최초 생성 시각 (ISO 8601 full format) | ${timeInfo.utc} |
+| modified | O | 마지막 수정 시각 (수정 시 업데이트) | ${timeInfo.utc} |
 | tags | O | 관련 태그 배열 | [회의, 프로젝트A, 아이디어] |
 | source | X | 내용의 출처 (책, URL 등) | "책: 클린 코드" |
 | related | X | 관련 노트 위키링크 배열 | ["[[프로젝트 계획]]"] |
@@ -357,8 +381,21 @@ related: ["[[관련노트1]]", "[[관련노트2]]"]
   "research-agent": {
     description: "웹에서 정보를 검색하고 노트에 추가하는 리서치 전문가",
     tools: ["WebSearch", "WebFetch", "Write", "Read"],
-    prompt: (context: SubagentContext) => `당신은 GigaMind의 리서치 에이전트입니다.
+    prompt: (context: SubagentContext) => {
+      // 현재 시각 정보 (날짜 정확성을 위해 필수)
+      const timeInfo = context.currentTime || getCurrentTime();
+      const currentDate = timeInfo.utc.split("T")[0]; // YYYY-MM-DD
+
+      return `당신은 GigaMind의 리서치 에이전트입니다.
 웹에서 정보를 검색하고 조사하여 사용자의 노트로 정리해 저장합니다.
+
+## ⚠️ 현재 시각 (중요 - 반드시 이 날짜 사용)
+- **현재 날짜**: ${currentDate}
+- **현재 시각**: ${timeInfo.local}
+- **타임존**: ${timeInfo.timezone} (UTC${timeInfo.offset})
+- **UTC**: ${timeInfo.utc}
+
+노트의 created/modified 필드는 반드시 위 현재 시각을 기준으로 작성하세요.
 
 ## 노트 저장 위치
 노트들은 다음 경로에 저장됩니다: ${context.notesDir}
@@ -378,16 +415,16 @@ related: ["[[관련노트1]]", "[[관련노트2]]"]
 
 ## 노트 저장 규칙
 - 저장 경로: ${context.notesDir}/resources/research/
-- 파일명: research_YYYYMMDD_HHMMSSmmm.md (현재 시각 기준)
+- 파일명: research_${currentDate.replace(/-/g, "")}_HHMMSSmmm.md (현재 시각 기준)
 
 ## 프론트매터 형식
 \`\`\`yaml
 ---
-id: research_YYYYMMDD_HHMMSSmmm
+id: research_${currentDate.replace(/-/g, "")}_HHMMSSmmm
 title: "리서치 주제"
 type: research
-created: 2024-01-15T14:30:52.123Z
-modified: 2024-01-15T14:30:52.123Z
+created: ${timeInfo.utc}
+modified: ${timeInfo.utc}
 tags: [리서치, 주제태그]
 sources:
   - "출처 URL 1"
@@ -424,7 +461,8 @@ sources:
 - 최신 정보를 우선적으로 수집하세요
 - 여러 출처를 비교하여 정확성을 높이세요
 - 조사 완료 후 노트 저장 경로를 안내하세요
-- XML 태그나 함수 호출 형식을 응답에 포함하지 마세요`,
+- XML 태그나 함수 호출 형식을 응답에 포함하지 마세요`;
+    },
   },
 };
 

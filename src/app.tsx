@@ -13,13 +13,14 @@ import {
   saveConfig,
   configExists,
   ensureNotesDir,
-  getNoteStats,
   getSessionsDir,
   loadApiKey,
   saveApiKey,
   hasApiKey,
   type GigaMindConfig,
 } from "./utils/config.js";
+import { getQuickStats } from "./utils/graph/index.js";
+import { getCurrentTime, formatTimeDisplay } from "./utils/time.js";
 
 type AppState = "loading" | "onboarding" | "chat" | "config" | "import" | "session_restore";
 
@@ -132,6 +133,8 @@ export function App() {
   const [streamingText, setStreamingText] = useState("");
   const [noteCount, setNoteCount] = useState(0);
   const [connectionCount, setConnectionCount] = useState(0);
+  const [danglingCount, setDanglingCount] = useState(0);
+  const [orphanCount, setOrphanCount] = useState(0);
   const [client, setClient] = useState<GigaMindClient | null>(null);
   const [sessionManager, setSessionManager] = useState<SessionManager | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -171,9 +174,11 @@ export function App() {
         setSessionManager(newSessionManager);
 
         // Load stats
-        const stats = await getNoteStats(loadedConfig.notesDir);
+        const stats = await getQuickStats(loadedConfig.notesDir);
         setNoteCount(stats.noteCount);
         setConnectionCount(stats.connectionCount);
+        setDanglingCount(stats.danglingCount);
+        setOrphanCount(stats.orphanCount);
 
         // 마지막 세션이 최근 30분 이내인지 확인
         const latestSession = await newSessionManager.loadLatestSession();
@@ -191,12 +196,14 @@ export function App() {
         await newSessionManager.createSession();
 
         // Add welcome message with /help hint
+        const timeInfo = getCurrentTime();
+        const timeDisplay = formatTimeDisplay(timeInfo);
         setMessages([
           {
             role: "assistant",
             content: loadedConfig.userName
-              ? `안녕하세요, ${loadedConfig.userName}님! 무엇을 도와드릴까요?\n\n💡 /help를 입력하면 사용 가능한 명령어를 볼 수 있어요.`
-              : "안녕하세요! 무엇을 도와드릴까요?\n\n💡 /help를 입력하면 사용 가능한 명령어를 볼 수 있어요.",
+              ? `안녕하세요, ${loadedConfig.userName}님! 무엇을 도와드릴까요?\n\n🕐 현재 시각: ${timeDisplay}\n\n💡 /help를 입력하면 사용 가능한 명령어를 볼 수 있어요.`
+              : `안녕하세요! 무엇을 도와드릴까요?\n\n🕐 현재 시각: ${timeDisplay}\n\n💡 /help를 입력하면 사용 가능한 명령어를 볼 수 있어요.`,
           },
         ]);
 
@@ -233,9 +240,11 @@ export function App() {
       setConfig(newConfig);
 
       // 노트 통계 업데이트
-      const stats = await getNoteStats(result.notesDir);
+      const stats = await getQuickStats(result.notesDir);
       setNoteCount(stats.noteCount);
       setConnectionCount(stats.connectionCount);
+      setDanglingCount(stats.danglingCount);
+      setOrphanCount(stats.orphanCount);
 
       // Setup client with API key
       const newClient = new GigaMindClient({
@@ -254,15 +263,19 @@ export function App() {
       setSessionManager(newSessionManager);
 
       // Build welcome message
+      const timeInfo = getCurrentTime();
+      const timeDisplay = formatTimeDisplay(timeInfo);
       let welcomeMessage = result.userName
         ? `설정이 완료되었습니다, ${result.userName}님! 이제 GigaMind와 대화를 시작할 수 있어요.`
         : "설정이 완료되었습니다! 이제 GigaMind와 대화를 시작할 수 있어요.";
+
+      welcomeMessage += `\n\n🕐 현재 시각: ${timeDisplay}`;
 
       // Add import info if configured during onboarding
       if (result.importConfig?.sourcePath) {
         welcomeMessage += `\n\n📥 노트 가져오기가 설정되었어요:\n- 소스: ${result.importConfig.source === "obsidian" ? "Obsidian Vault" : "마크다운 폴더"}\n- 경로: ${result.importConfig.sourcePath}\n\n/import 명령어를 입력해서 가져오기를 시작하세요!`;
       } else {
-        welcomeMessage += " 무엇을 도와드릴까요?";
+        welcomeMessage += "\n\n무엇을 도와드릴까요?";
       }
 
       welcomeMessage += `
@@ -796,9 +809,11 @@ export function App() {
             if (result.success) {
               // 노트 통계 업데이트
               if (config) {
-                const stats = await getNoteStats(config.notesDir);
+                const stats = await getQuickStats(config.notesDir);
                 setNoteCount(stats.noteCount);
                 setConnectionCount(stats.connectionCount);
+                setDanglingCount(stats.danglingCount);
+                setOrphanCount(stats.orphanCount);
               }
 
               // Sync to client conversation history
@@ -942,9 +957,11 @@ export function App() {
 
           if (result.success) {
             if (config) {
-              const stats = await getNoteStats(config.notesDir);
+              const stats = await getQuickStats(config.notesDir);
               setNoteCount(stats.noteCount);
               setConnectionCount(stats.connectionCount);
+              setDanglingCount(stats.danglingCount);
+              setOrphanCount(stats.orphanCount);
             }
 
             // Sync to client conversation history
@@ -1234,9 +1251,11 @@ export function App() {
       // Update notes directory if changed
       if (newConfig.notesDir !== config?.notesDir) {
         await ensureNotesDir(newConfig.notesDir);
-        const stats = await getNoteStats(newConfig.notesDir);
+        const stats = await getQuickStats(newConfig.notesDir);
         setNoteCount(stats.noteCount);
         setConnectionCount(stats.connectionCount);
+        setDanglingCount(stats.danglingCount);
+        setOrphanCount(stats.orphanCount);
 
         // Also update client's notesDir if client exists
         if (client && newConfig.model === config?.model && newConfig.noteDetail === config?.noteDetail) {
@@ -1278,9 +1297,11 @@ export function App() {
   const handleImportComplete = useCallback(async (result: ImportResult) => {
     // Update note stats after import
     if (config) {
-      const stats = await getNoteStats(config.notesDir);
+      const stats = await getQuickStats(config.notesDir);
       setNoteCount(stats.noteCount);
       setConnectionCount(stats.connectionCount);
+      setDanglingCount(stats.danglingCount);
+      setOrphanCount(stats.orphanCount);
     }
 
     let message: string;
@@ -1353,12 +1374,14 @@ export function App() {
     await sessionManager.createSession();
 
     // 환영 메시지 설정
+    const timeInfo = getCurrentTime();
+    const timeDisplay = formatTimeDisplay(timeInfo);
     setMessages([
       {
         role: "assistant",
         content: config?.userName
-          ? `안녕하세요, ${config.userName}님! 무엇을 도와드릴까요?\n\n💡 /help를 입력하면 사용 가능한 명령어를 볼 수 있어요.`
-          : "안녕하세요! 무엇을 도와드릴까요?\n\n💡 /help를 입력하면 사용 가능한 명령어를 볼 수 있어요.",
+          ? `안녕하세요, ${config.userName}님! 무엇을 도와드릴까요?\n\n🕐 현재 시각: ${timeDisplay}\n\n💡 /help를 입력하면 사용 가능한 명령어를 볼 수 있어요.`
+          : `안녕하세요! 무엇을 도와드릴까요?\n\n🕐 현재 시각: ${timeDisplay}\n\n💡 /help를 입력하면 사용 가능한 명령어를 볼 수 있어요.`,
       },
     ]);
 
@@ -1415,6 +1438,9 @@ export function App() {
           connectionCount={connectionCount}
           showStats={config.feedback.showStats}
           currentAction={isLoading ? streamingText || "처리 중..." : undefined}
+          danglingCount={danglingCount}
+          orphanCount={orphanCount}
+          showExtendedStats={true}
         />
         <ConfigMenu
           config={config}
@@ -1433,6 +1459,9 @@ export function App() {
           connectionCount={connectionCount}
           showStats={config.feedback.showStats}
           currentAction={isLoading ? streamingText || "처리 중..." : undefined}
+          danglingCount={danglingCount}
+          orphanCount={orphanCount}
+          showExtendedStats={true}
         />
         <Import
           notesDir={config.notesDir}
@@ -1450,6 +1479,9 @@ export function App() {
         connectionCount={connectionCount}
         showStats={config?.feedback.showStats ?? true}
         currentAction={isLoading ? streamingText || "처리 중..." : undefined}
+        danglingCount={danglingCount}
+        orphanCount={orphanCount}
+        showExtendedStats={true}
       />
       <Chat
         messages={messages}
