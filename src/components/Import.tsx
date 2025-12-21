@@ -8,10 +8,15 @@ import path from "node:path";
 import { glob } from "glob";
 import matter from "gray-matter";
 import { expandPath } from "../utils/config.js";
+import {
+  openFolderDialog,
+  isFolderDialogSupported,
+} from "../utils/folderDialog/index.js";
 
 type ImportStep =
   | "source"
   | "path"
+  | "folderDialog"
   | "importing"
   | "complete"
   | "error"
@@ -186,6 +191,15 @@ export function Import({ notesDir, onComplete, onCancel }: ImportProps) {
   const cancelledRef = useRef(false);
   const [showCancelHint, setShowCancelHint] = useState(false);
 
+  // Folder dialog support
+  const [dialogSupported, setDialogSupported] = useState<boolean | null>(null);
+  const [dialogError, setDialogError] = useState<string | null>(null);
+
+  // Check folder dialog support on mount
+  useEffect(() => {
+    isFolderDialogSupported().then(setDialogSupported);
+  }, []);
+
   // Show cancel hint after a short delay when importing
   useEffect(() => {
     if (step === "importing") {
@@ -195,14 +209,6 @@ export function Import({ notesDir, onComplete, onCancel }: ImportProps) {
     setShowCancelHint(false);
   }, [step]);
 
-  // Handle ESC key during import
-  useInput((input, key) => {
-    if (key.escape && step === "importing") {
-      cancelledRef.current = true;
-      setImportStatus("취소 중...");
-    }
-  });
-
   const handleSourceSelect = useCallback((item: { value: string }) => {
     if (item.value === "__cancel__") {
       onCancel();
@@ -211,6 +217,45 @@ export function Import({ notesDir, onComplete, onCancel }: ImportProps) {
     setSource(item.value as "obsidian" | "markdown");
     setStep("path");
   }, [onCancel]);
+
+  // Handle folder dialog button press
+  const handleOpenFolderDialog = useCallback(async () => {
+    if (!dialogSupported) return;
+
+    setDialogError(null);
+    setStep("folderDialog");
+
+    try {
+      const sourceLabel = source === "obsidian" ? "Obsidian Vault" : "마크다운 폴더";
+      const selectedPath = await openFolderDialog(`${sourceLabel} 선택`);
+
+      if (selectedPath) {
+        // Set the selected path and return to path step
+        // User can verify and press Enter to proceed
+        setSourcePath(selectedPath);
+      }
+      // Return to path step regardless (user cancelled or selected)
+      setStep("path");
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      setDialogError(errorMessage);
+      setStep("path");
+    }
+  }, [dialogSupported, source]);
+
+  // Handle keyboard input
+  useInput((input, key) => {
+    // ESC during import to cancel
+    if (key.escape && step === "importing") {
+      cancelledRef.current = true;
+      setImportStatus("취소 중...");
+    }
+
+    // "B" key to open folder dialog in path step
+    if ((input === "b" || input === "B") && step === "path" && dialogSupported) {
+      handleOpenFolderDialog();
+    }
+  });
 
   const handlePathSubmit = useCallback(async (value: string) => {
     const trimmedPath = value.trim();
@@ -453,8 +498,24 @@ export function Import({ notesDir, onComplete, onCancel }: ImportProps) {
     return (
       <Box flexDirection="column" padding={1}>
         <Box marginBottom={1}>
-          <Text color="cyan" bold>📥 노트 가져오기</Text>
+          <Text color="cyan" bold>{"📥 노트 가져오기"}</Text>
         </Box>
+
+        {/* Folder dialog option */}
+        {dialogSupported && (
+          <Box marginBottom={1}>
+            <Text color="green">[B] 폴더 선택 다이얼로그 열기</Text>
+          </Box>
+        )}
+
+        {/* Dialog error message */}
+        {dialogError && (
+          <Box marginBottom={1}>
+            <Text color="red">{"⚠️ 다이얼로그 오류: "}{dialogError}</Text>
+          </Box>
+        )}
+
+        <Text color="gray">{"경로 직접 입력:"}</Text>
         <Text color="yellow" bold>
           ? {sourceLabel} 경로를 입력하세요
         </Text>
@@ -473,6 +534,25 @@ export function Import({ notesDir, onComplete, onCancel }: ImportProps) {
               ? "💡 %USERPROFILE%은 홈 디렉토리를 의미합니다. ESC로 취소할 수 있어요."
               : "💡 ~ 는 홈 디렉토리를 의미합니다. ESC로 취소할 수 있어요."}
           </Text>
+        </Box>
+      </Box>
+    );
+  }
+
+  if (step === "folderDialog") {
+    return (
+      <Box flexDirection="column" padding={1}>
+        <Box marginBottom={1}>
+          <Text color="cyan" bold>{"📥 노트 가져오기"}</Text>
+        </Box>
+        <Box>
+          <Text color="cyan">
+            <Spinner type="dots" />
+          </Text>
+          <Text>{" 📂 폴더 선택 다이얼로그가 열렸습니다..."}</Text>
+        </Box>
+        <Box marginTop={1}>
+          <Text color="gray">{"시스템 폴더 선택 다이얼로그에서 폴더를 선택해주세요."}</Text>
         </Box>
       </Box>
     );

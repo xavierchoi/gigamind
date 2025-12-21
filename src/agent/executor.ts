@@ -11,6 +11,12 @@ import { promisify } from "node:util";
 import { glob } from "glob";
 import { getLogger } from "../utils/logger.js";
 import { expandPath } from "../utils/config.js";
+import {
+  FileSystemError,
+  ValidationError,
+  ErrorCode,
+  formatErrorForUser,
+} from "../utils/errors.js";
 import type {
   GlobToolInput,
   GrepToolInput,
@@ -104,10 +110,15 @@ export async function executeGlob(
     const searchPath = expandPath(rawSearchPath);
 
     if (!isSafePath(rawSearchPath, notesDir)) {
+      const fsError = new FileSystemError(
+        ErrorCode.FS_ACCESS_DENIED,
+        undefined,
+        { path: rawSearchPath, operation: "access" }
+      );
       return {
         success: false,
         output: "",
-        error: `Access denied: ${rawSearchPath} is outside the allowed directory`,
+        error: formatErrorForUser(fsError, "medium"),
       };
     }
 
@@ -134,12 +145,16 @@ export async function executeGlob(
       output: limitedFiles.length > 0 ? limitedFiles.join("\n") : "No files found matching pattern",
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    logger.error("Glob execution failed", error);
+    const nodeError = error as NodeJS.ErrnoException;
+    const fsError = nodeError.code
+      ? FileSystemError.fromNodeError(nodeError, input.path, "read")
+      : new FileSystemError(ErrorCode.FS_READ_ERROR, nodeError.message, { cause: nodeError });
+
+    logger.error("Glob execution failed", fsError);
     return {
       success: false,
       output: "",
-      error: message,
+      error: formatErrorForUser(fsError, "medium"),
     };
   }
 }
@@ -167,10 +182,15 @@ export async function executeGrep(
     const searchPath = expandPath(rawSearchPath);
 
     if (!isSafePath(rawSearchPath, notesDir)) {
+      const fsError = new FileSystemError(
+        ErrorCode.FS_ACCESS_DENIED,
+        undefined,
+        { path: rawSearchPath, operation: "access" }
+      );
       return {
         success: false,
         output: "",
-        error: `Access denied: ${rawSearchPath} is outside the allowed directory`,
+        error: formatErrorForUser(fsError, "medium"),
       };
     }
 
@@ -221,12 +241,16 @@ export async function executeGrep(
         matchingFiles.length > 0 ? matchingFiles.join("\n") : "No files found matching pattern",
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    logger.error("Grep execution failed", error);
+    const nodeError = error as NodeJS.ErrnoException;
+    const fsError = nodeError.code
+      ? FileSystemError.fromNodeError(nodeError, input.path, "read")
+      : new FileSystemError(ErrorCode.FS_READ_ERROR, nodeError.message, { cause: nodeError });
+
+    logger.error("Grep execution failed", fsError);
     return {
       success: false,
       output: "",
-      error: message,
+      error: formatErrorForUser(fsError, "medium"),
     };
   }
 }
@@ -240,10 +264,15 @@ export async function executeRead(
     const filePath = expandPath(rawFilePath);
 
     if (!isSafePath(rawFilePath, notesDir)) {
+      const fsError = new FileSystemError(
+        ErrorCode.FS_ACCESS_DENIED,
+        undefined,
+        { path: rawFilePath, operation: "read" }
+      );
       return {
         success: false,
         output: "",
-        error: `Access denied: ${rawFilePath} is outside the allowed directory`,
+        error: formatErrorForUser(fsError, "medium"),
       };
     }
 
@@ -256,12 +285,14 @@ export async function executeRead(
       output: content,
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    logger.error("Read execution failed", error);
+    const nodeError = error as NodeJS.ErrnoException;
+    const fsError = FileSystemError.fromNodeError(nodeError, input.file_path, "read");
+
+    logger.error("Read execution failed", fsError);
     return {
       success: false,
       output: "",
-      error: message,
+      error: formatErrorForUser(fsError, "medium"),
     };
   }
 }
@@ -275,10 +306,15 @@ export async function executeWrite(
     const filePath = expandPath(rawFilePath);
 
     if (!isSafePath(rawFilePath, notesDir)) {
+      const fsError = new FileSystemError(
+        ErrorCode.FS_ACCESS_DENIED,
+        undefined,
+        { path: rawFilePath, operation: "write" }
+      );
       return {
         success: false,
         output: "",
-        error: `Access denied: ${rawFilePath} is outside the allowed directory`,
+        error: formatErrorForUser(fsError, "medium"),
       };
     }
 
@@ -295,12 +331,14 @@ export async function executeWrite(
       output: `Successfully wrote to ${filePath}`,
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    logger.error("Write execution failed", error);
+    const nodeError = error as NodeJS.ErrnoException;
+    const fsError = FileSystemError.fromNodeError(nodeError, input.file_path, "write");
+
+    logger.error("Write execution failed", fsError);
     return {
       success: false,
       output: "",
-      error: message,
+      error: formatErrorForUser(fsError, "medium"),
     };
   }
 }
@@ -314,10 +352,15 @@ export async function executeEdit(
     const filePath = expandPath(rawFilePath);
 
     if (!isSafePath(rawFilePath, notesDir)) {
+      const fsError = new FileSystemError(
+        ErrorCode.FS_ACCESS_DENIED,
+        undefined,
+        { path: rawFilePath, operation: "write" }
+      );
       return {
         success: false,
         output: "",
-        error: `Access denied: ${rawFilePath} is outside the allowed directory`,
+        error: formatErrorForUser(fsError, "medium"),
       };
     }
 
@@ -326,10 +369,15 @@ export async function executeEdit(
     const content = await fs.readFile(filePath, "utf-8");
 
     if (!content.includes(input.old_string)) {
+      const validationError = new ValidationError(
+        ErrorCode.VALIDATION_INVALID_FORMAT,
+        `지정된 텍스트를 ${filePath}에서 찾을 수 없습니다.`,
+        { field: "old_string", value: input.old_string }
+      );
       return {
         success: false,
         output: "",
-        error: `Could not find the specified text in ${filePath}`,
+        error: formatErrorForUser(validationError, "medium"),
       };
     }
 
@@ -341,12 +389,14 @@ export async function executeEdit(
       output: `Successfully edited ${filePath}`,
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    logger.error("Edit execution failed", error);
+    const nodeError = error as NodeJS.ErrnoException;
+    const fsError = FileSystemError.fromNodeError(nodeError, input.file_path, "write");
+
+    logger.error("Edit execution failed", fsError);
     return {
       success: false,
       output: "",
-      error: message,
+      error: formatErrorForUser(fsError, "medium"),
     };
   }
 }
@@ -366,10 +416,15 @@ export async function executeShell(
     const expandedNotesDir = expandPath(notesDir);
 
     if (!isSafeCommand(command)) {
+      const validationError = new ValidationError(
+        ErrorCode.VALIDATION_INVALID_FORMAT,
+        "보안상의 이유로 이 명령은 실행할 수 없습니다.",
+        { field: "command", value: command }
+      );
       return {
         success: false,
         output: "",
-        error: "Command blocked for safety reasons",
+        error: formatErrorForUser(validationError, "medium"),
       };
     }
 
@@ -387,12 +442,29 @@ export async function executeShell(
       output: stdout || stderr || "Command executed successfully",
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const nodeError = error as NodeJS.ErrnoException;
+    const errorMessage = nodeError.message || String(error);
+
+    // Check for specific shell errors
+    if (errorMessage.includes("ENOENT") || errorMessage.includes("not found")) {
+      const fsError = new FileSystemError(
+        ErrorCode.FS_FILE_NOT_FOUND,
+        "명령어를 찾을 수 없습니다.",
+        { cause: nodeError, operation: "access" }
+      );
+      logger.error("Shell execution failed", fsError);
+      return {
+        success: false,
+        output: "",
+        error: formatErrorForUser(fsError, "medium"),
+      };
+    }
+
     logger.error("Shell execution failed", error);
     return {
       success: false,
       output: "",
-      error: message,
+      error: errorMessage,
     };
   }
 }

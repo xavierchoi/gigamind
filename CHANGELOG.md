@@ -5,6 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.10] - 2025-12-20
+
+### Added
+
+#### Claude Agent SDK 마이그레이션
+- **SDK 기반 에이전트 시스템**: `@anthropic-ai/claude-agent-sdk`를 활용한 새로운 에이전트 아키텍처
+  - `query()` 기반 비동기 제너레이터 패턴 적용
+  - 세션 ID 기반 대화 컨텍스트 관리
+- **research-agent 신규 추가**: 웹 검색 및 리서치 전문 에이전트
+  - 도구: WebSearch, WebFetch, Write, Read
+  - 트리거: "웹에서 찾아줘", "리서치해줘", "search the web" 등
+- **보안 훅 시스템**: notesDir 경로 제한 및 위험 명령어 차단
+  - 크로스 플랫폼 호환 (Windows + Unix)
+  - PreToolUse 이벤트 기반 검증
+
+### Enhanced
+
+#### 에이전트 정의 통합
+- 5개 에이전트 정의를 SDK 호환 형식으로 재구성
+  - search-agent, note-agent, clone-agent, import-agent, research-agent
+- 세션에 `agentSessionId` 필드 추가로 SDK 세션 추적
+
+### Technical Details
+
+#### 새로운 SDK 모듈 (`src/agent/sdk/`)
+```
+src/agent/sdk/
+├── index.ts           # SDK 모듈 엔트리포인트
+├── agentClient.ts     # query() 기반 클라이언트 (562줄)
+├── agentDefinitions.ts # 5개 에이전트 정의 (393줄)
+└── hooks.ts           # 보안 훅 (259줄)
+```
+
+#### 수정된 파일
+- `src/agent/prompts.ts`: research-agent 프롬프트 추가
+- `src/agent/subagent.ts`: research-agent 트리거 키워드 추가
+- `src/agent/session.ts`: agentSessionId 필드 추가
+- `package.json`: @anthropic-ai/claude-agent-sdk 의존성 추가
+
+---
+
 ## [0.0.8] - 2025-12-20
 
 ### Added

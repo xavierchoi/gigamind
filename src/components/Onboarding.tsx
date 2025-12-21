@@ -1,20 +1,26 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import { Box, Text, Newline, useInput } from "ink";
 import TextInput from "ink-text-input";
 import SelectInput from "ink-select-input";
 import Spinner from "ink-spinner";
 import { GigaMindClient } from "../agent/client.js";
+import {
+  openFolderDialog,
+  isFolderDialogSupported,
+} from "../utils/folderDialog/index.js";
 
 type OnboardingStep =
   | "welcome"
   | "apiKey"
   | "validating"
   | "notesDir"
+  | "notesDirDialog"
   | "userName"
   | "useCases"
   | "existingNotes"
   | "importSource"
   | "importPath"
+  | "importPathDialog"
   | "importing"
   | "complete";
 
@@ -65,11 +71,13 @@ const STEP_PROGRESS: Record<OnboardingStep, { current: number; total: number }> 
   apiKey: { current: 2, total: 6 },
   validating: { current: 2, total: 6 },
   notesDir: { current: 3, total: 6 },
+  notesDirDialog: { current: 3, total: 6 },
   userName: { current: 4, total: 6 },
   useCases: { current: 5, total: 6 },
   existingNotes: { current: 6, total: 6 },
   importSource: { current: 6, total: 6 },
   importPath: { current: 6, total: 6 },
+  importPathDialog: { current: 6, total: 6 },
   importing: { current: 6, total: 6 },
   complete: { current: 6, total: 6 },
 };
@@ -108,6 +116,15 @@ export function Onboarding({ onComplete }: OnboardingProps) {
   const [importPath, setImportPath] = useState("");
   const [importStats, setImportStats] = useState<{ files: number; folders: number } | null>(null);
   const [useCaseIndex, setUseCaseIndex] = useState(0);
+
+  // Folder dialog support
+  const [dialogSupported, setDialogSupported] = useState<boolean | null>(null);
+  const [dialogError, setDialogError] = useState<string | null>(null);
+
+  // Check folder dialog support on mount
+  useEffect(() => {
+    isFolderDialogSupported().then(setDialogSupported);
+  }, []);
 
   // Keyboard handler for ESC (back) and useCases navigation
   useInput((input, key) => {
@@ -155,7 +172,62 @@ export function Onboarding({ onComplete }: OnboardingProps) {
         return;
       }
     }
+
+    // "B" key to open folder dialog in notesDir step (custom input mode)
+    if ((input === "b" || input === "B") && step === "notesDir" && showCustomInput && dialogSupported) {
+      handleOpenNotesDirDialog();
+      return;
+    }
+
+    // "B" key to open folder dialog in importPath step
+    if ((input === "b" || input === "B") && step === "importPath" && dialogSupported) {
+      handleOpenImportPathDialog();
+      return;
+    }
   });
+
+  // Handle folder dialog for notesDir
+  const handleOpenNotesDirDialog = useCallback(async () => {
+    if (!dialogSupported) return;
+
+    setDialogError(null);
+    setStep("notesDirDialog");
+
+    try {
+      const selectedPath = await openFolderDialog("노트 저장 폴더 선택");
+
+      if (selectedPath) {
+        setCustomNotesDir(selectedPath);
+      }
+      setStep("notesDir");
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      setDialogError(errorMessage);
+      setStep("notesDir");
+    }
+  }, [dialogSupported]);
+
+  // Handle folder dialog for importPath
+  const handleOpenImportPathDialog = useCallback(async () => {
+    if (!dialogSupported) return;
+
+    setDialogError(null);
+    setStep("importPathDialog");
+
+    try {
+      const sourceLabel = importSource === "obsidian" ? "Obsidian Vault" : "마크다운 폴더";
+      const selectedPath = await openFolderDialog(`${sourceLabel} 선택`);
+
+      if (selectedPath) {
+        setImportPath(selectedPath);
+      }
+      setStep("importPath");
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      setDialogError(errorMessage);
+      setStep("importPath");
+    }
+  }, [dialogSupported, importSource]);
 
   const handleWelcome = () => {
     setStep("apiKey");
@@ -402,14 +474,31 @@ export function Onboarding({ onComplete }: OnboardingProps) {
           ? 노트를 어디에 저장할까요?
         </Text>
         {showCustomInput ? (
-          <Box marginTop={1}>
-            <Text color="cyan">{"> "}</Text>
-            <TextInput
-              value={customNotesDir}
-              onChange={setCustomNotesDir}
-              onSubmit={handleCustomNotesDir}
-              placeholder="경로를 입력하세요..."
-            />
+          <Box marginTop={1} flexDirection="column">
+            {/* Folder dialog option */}
+            {dialogSupported && (
+              <Box marginBottom={1}>
+                <Text color="green">[B] 폴더 선택 다이얼로그 열기</Text>
+              </Box>
+            )}
+
+            {/* Dialog error message */}
+            {dialogError && (
+              <Box marginBottom={1}>
+                <Text color="red">다이얼로그 오류: {dialogError}</Text>
+              </Box>
+            )}
+
+            <Text color="gray">경로 직접 입력:</Text>
+            <Box marginTop={1}>
+              <Text color="cyan">{"> "}</Text>
+              <TextInput
+                value={customNotesDir}
+                onChange={setCustomNotesDir}
+                onSubmit={handleCustomNotesDir}
+                placeholder="경로를 입력하세요..."
+              />
+            </Box>
           </Box>
         ) : (
           <Box marginTop={1}>
@@ -418,6 +507,26 @@ export function Onboarding({ onComplete }: OnboardingProps) {
         )}
         <Box marginTop={1}>
           <Text color="gray" dimColor>ESC: 이전 단계</Text>
+        </Box>
+      </Box>
+    );
+  }
+
+  if (step === "notesDirDialog") {
+    return (
+      <Box flexDirection="column" padding={2}>
+        <StepIndicator step={step} />
+        <Box marginBottom={1}>
+          <Text color="green">API 키가 확인되었습니다!</Text>
+        </Box>
+        <Box>
+          <Text color="cyan">
+            <Spinner type="dots" />
+          </Text>
+          <Text> 폴더 선택 다이얼로그가 열렸습니다...</Text>
+        </Box>
+        <Box marginTop={1}>
+          <Text color="gray">시스템 폴더 선택 다이얼로그에서 폴더를 선택해주세요.</Text>
         </Box>
       </Box>
     );
@@ -532,6 +641,22 @@ export function Onboarding({ onComplete }: OnboardingProps) {
     return (
       <Box flexDirection="column" padding={2}>
         <StepIndicator step={step} />
+
+        {/* Folder dialog option */}
+        {dialogSupported && (
+          <Box marginBottom={1}>
+            <Text color="green">[B] 폴더 선택 다이얼로그 열기</Text>
+          </Box>
+        )}
+
+        {/* Dialog error message */}
+        {dialogError && (
+          <Box marginBottom={1}>
+            <Text color="red">다이얼로그 오류: {dialogError}</Text>
+          </Box>
+        )}
+
+        <Text color="gray">경로 직접 입력:</Text>
         <Text color="yellow" bold>
           ? {sourceLabel} 경로를 입력하세요
         </Text>
@@ -553,6 +678,27 @@ export function Onboarding({ onComplete }: OnboardingProps) {
         </Box>
         <Box marginTop={1}>
           <Text color="gray" dimColor>ESC: 이전 단계</Text>
+        </Box>
+      </Box>
+    );
+  }
+
+  if (step === "importPathDialog") {
+    const sourceLabel = importSource === "obsidian" ? "Obsidian Vault" : "마크다운 폴더";
+    return (
+      <Box flexDirection="column" padding={2}>
+        <StepIndicator step={step} />
+        <Box marginBottom={1}>
+          <Text color="cyan">📥 노트 가져오기</Text>
+        </Box>
+        <Box>
+          <Text color="cyan">
+            <Spinner type="dots" />
+          </Text>
+          <Text> 폴더 선택 다이얼로그가 열렸습니다...</Text>
+        </Box>
+        <Box marginTop={1}>
+          <Text color="gray">시스템 폴더 선택 다이얼로그에서 {sourceLabel}을 선택해주세요.</Text>
         </Box>
       </Box>
     );
