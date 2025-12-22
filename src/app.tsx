@@ -141,12 +141,18 @@ export function App() {
   const [loadingStartTime, setLoadingStartTime] = useState<number | undefined>(undefined);
   const [isFirstSession, setIsFirstSession] = useState(false);
   const [pendingRestoreSession, setPendingRestoreSession] = useState<SessionSummary | null>(null);
+  const [currentTool, setCurrentTool] = useState<string | null>(null);
+  const [currentToolStartTime, setCurrentToolStartTime] = useState<number | null>(null);
 
   // AbortController ref for cancelling ongoing API requests
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // Request generation counter to invalidate callbacks from cancelled/stale requests
   const requestGenerationRef = useRef<number>(0);
+
+  // Refs for tracking tool usage in callbacks
+  const currentToolRef = useRef<string | null>(null);
+  const currentToolStartTimeRef = useRef<number | null>(null);
 
   // Initialize app
   useEffect(() => {
@@ -320,7 +326,7 @@ export function App() {
         const command = parts[0].toLowerCase();
 
         // Known commands
-        const IMPLEMENTED_COMMANDS = ["help", "config", "clear", "import", "session", "search", "clone", "me", "note"];
+        const IMPLEMENTED_COMMANDS = ["help", "config", "clear", "import", "session", "search", "clone", "me", "note", "graph"];
         const UNIMPLEMENTED_COMMANDS = ["sync"];
 
         if (command === "help") {
@@ -336,6 +342,7 @@ export function App() {
 /import - 외부 노트 가져오기
 /session list - 최근 세션 목록 보기
 /session export - 현재 세션 마크다운으로 저장
+/graph - 노트 그래프 시각화 (브라우저)
 /search <query> - 노트 검색
 /clone <질문> - 내 노트 기반으로 나처럼 답변
 /note <내용> - 새 노트 작성
@@ -468,6 +475,38 @@ export function App() {
           return;
         }
 
+        // /graph 명령어 처리 - 그래프 시각화 서버 시작
+        if (command === "graph") {
+          setMessages((prev) => [
+            ...prev,
+            { role: "user", content: userMessage },
+            { role: "assistant", content: "그래프 시각화 서버를 시작하는 중..." },
+          ]);
+
+          try {
+            const { startGraphServer } = await import("./graph-server/index.js");
+            const result = await startGraphServer(config?.notesDir || "./notes");
+
+            setMessages((prev) => [
+              ...prev.slice(0, -1),
+              {
+                role: "assistant",
+                content: `그래프가 브라우저에서 열렸습니다.\n\n**URL:** ${result.url}\n\n**단축키:**\n- / : 노트 검색\n- +/- : 확대/축소\n- 0 : 뷰 초기화\n- ESC : 포커스 모드 종료\n- F : 전체화면\n\n서버는 30분 동안 비활성 시 자동 종료됩니다.`,
+              },
+            ]);
+          } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            setMessages((prev) => [
+              ...prev.slice(0, -1),
+              {
+                role: "assistant",
+                content: `그래프 서버 시작 중 오류가 발생했습니다: ${errorMessage}`,
+              },
+            ]);
+          }
+          return;
+        }
+
         // /search 명령어 처리 - Search 에이전트 호출
         if (command === "search") {
           const searchQuery = parts.slice(1).join(" ").trim();
@@ -523,7 +562,18 @@ export function App() {
                 },
                 onToolUse: (toolName) => {
                   if (requestGenerationRef.current !== currentGeneration) return;
+                  currentToolRef.current = toolName;
+                  currentToolStartTimeRef.current = Date.now();
+                  setCurrentTool(toolName);
+                  setCurrentToolStartTime(Date.now());
                   setStreamingText(`${toolName} 도구 사용 중...`);
+                },
+                onToolResult: () => {
+                  if (requestGenerationRef.current !== currentGeneration) return;
+                  currentToolRef.current = null;
+                  currentToolStartTimeRef.current = null;
+                  setCurrentTool(null);
+                  setCurrentToolStartTime(null);
                 },
                 onProgress: (info) => {
                   if (requestGenerationRef.current !== currentGeneration) return;
@@ -615,6 +665,10 @@ export function App() {
             setIsLoading(false);
             setLoadingStartTime(undefined);
             setStreamingText("");
+            setCurrentTool(null);
+            setCurrentToolStartTime(null);
+            currentToolRef.current = null;
+            currentToolStartTimeRef.current = null;
           }
           return;
         }
@@ -683,7 +737,18 @@ export function App() {
                 },
                 onToolUse: (toolName) => {
                   if (requestGenerationRef.current !== currentGeneration) return;
+                  currentToolRef.current = toolName;
+                  currentToolStartTimeRef.current = Date.now();
+                  setCurrentTool(toolName);
+                  setCurrentToolStartTime(Date.now());
                   setStreamingText(`${toolName} 도구로 노트 탐색 중...`);
+                },
+                onToolResult: () => {
+                  if (requestGenerationRef.current !== currentGeneration) return;
+                  currentToolRef.current = null;
+                  currentToolStartTimeRef.current = null;
+                  setCurrentTool(null);
+                  setCurrentToolStartTime(null);
                 },
                 onProgress: (info) => {
                   if (requestGenerationRef.current !== currentGeneration) return;
@@ -775,6 +840,10 @@ export function App() {
             setIsLoading(false);
             setLoadingStartTime(undefined);
             setStreamingText("");
+            setCurrentTool(null);
+            setCurrentToolStartTime(null);
+            currentToolRef.current = null;
+            currentToolStartTimeRef.current = null;
           }
           return;
         }
@@ -843,7 +912,18 @@ export function App() {
                 },
                 onToolUse: (toolName) => {
                   if (requestGenerationRef.current !== currentGeneration) return;
+                  currentToolRef.current = toolName;
+                  currentToolStartTimeRef.current = Date.now();
+                  setCurrentTool(toolName);
+                  setCurrentToolStartTime(Date.now());
                   setStreamingText(`${toolName} 도구 사용 중...`);
+                },
+                onToolResult: () => {
+                  if (requestGenerationRef.current !== currentGeneration) return;
+                  currentToolRef.current = null;
+                  currentToolStartTimeRef.current = null;
+                  setCurrentTool(null);
+                  setCurrentToolStartTime(null);
                 },
                 onProgress: (info) => {
                   if (requestGenerationRef.current !== currentGeneration) return;
@@ -942,6 +1022,10 @@ export function App() {
             setIsLoading(false);
             setLoadingStartTime(undefined);
             setStreamingText("");
+            setCurrentTool(null);
+            setCurrentToolStartTime(null);
+            currentToolRef.current = null;
+            currentToolStartTimeRef.current = null;
           }
           return;
         }
@@ -994,6 +1078,20 @@ export function App() {
               if (requestGenerationRef.current !== currentGeneration) return;
               setStreamingText((prev) => prev + text);
             },
+            onToolUse: (toolName) => {
+              if (requestGenerationRef.current !== currentGeneration) return;
+              currentToolRef.current = toolName;
+              currentToolStartTimeRef.current = Date.now();
+              setCurrentTool(toolName);
+              setCurrentToolStartTime(Date.now());
+            },
+            onToolResult: () => {
+              if (requestGenerationRef.current !== currentGeneration) return;
+              currentToolRef.current = null;
+              currentToolStartTimeRef.current = null;
+              setCurrentTool(null);
+              setCurrentToolStartTime(null);
+            },
             onComplete: (fullText) => {
               // Ignore if this is from an old request
               if (requestGenerationRef.current !== currentGeneration) return;
@@ -1002,6 +1100,10 @@ export function App() {
               setStreamingText("");
               setIsLoading(false);
               setLoadingStartTime(undefined);
+              setCurrentTool(null);
+              setCurrentToolStartTime(null);
+              currentToolRef.current = null;
+              currentToolStartTimeRef.current = null;
 
               // Save to session
               sessionManager?.addMessage({ role: "user", content: userMessage });
@@ -1028,6 +1130,10 @@ export function App() {
               ]);
               setIsLoading(false);
               setLoadingStartTime(undefined);
+              setCurrentTool(null);
+              setCurrentToolStartTime(null);
+              currentToolRef.current = null;
+              currentToolStartTimeRef.current = null;
             },
             onAbort: () => {
               // Abort is handled in handleCancel, just clean up
@@ -1040,6 +1146,10 @@ export function App() {
         abortControllerRef.current = null;
         setIsLoading(false);
         setLoadingStartTime(undefined);
+        setCurrentTool(null);
+        setCurrentToolStartTime(null);
+        currentToolRef.current = null;
+        currentToolStartTimeRef.current = null;
 
         // Don't show error message for abort - it's intentional cancellation
         if (err instanceof AbortError || (err instanceof Error && err.name === "AbortError")) {
@@ -1075,6 +1185,10 @@ export function App() {
       setIsLoading(false);
       setLoadingStartTime(undefined);
       setStreamingText("");
+      setCurrentTool(null);
+      setCurrentToolStartTime(null);
+      currentToolRef.current = null;
+      currentToolStartTimeRef.current = null;
 
       // Remove the pending user message that was added before the API call
       // and add a cancellation message instead
@@ -1381,6 +1495,8 @@ export function App() {
         onCancel={handleCancel}
         loadingStartTime={loadingStartTime}
         isFirstSession={isFirstSession}
+        currentTool={currentTool}
+        currentToolStartTime={currentToolStartTime}
       />
     </Box>
   );

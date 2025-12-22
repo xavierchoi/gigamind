@@ -3,6 +3,7 @@ import { Box, Text, useInput } from "ink";
 import TextInput from "ink-text-input";
 import Spinner from "ink-spinner";
 import { MarkdownText } from "../utils/markdown.js";
+import { ToolUsageIndicator } from "./ToolUsageIndicator.js";
 
 // Available slash commands
 const SLASH_COMMANDS = [
@@ -17,6 +18,7 @@ const SLASH_COMMANDS = [
   { command: "/session", description: "세션 관리 (list, export)" },
   { command: "/session list", description: "최근 세션 목록 보기" },
   { command: "/session export", description: "현재 세션 마크다운으로 저장" },
+  { command: "/graph", description: "노트 그래프 시각화 (브라우저)" },
   { command: "/sync", description: "Git 동기화 (준비 중)" },
 ];
 
@@ -46,23 +48,26 @@ interface ChatProps {
   onCancel?: () => void;
   loadingStartTime?: number;
   isFirstSession?: boolean;
+  currentTool?: string | null;
+  currentToolStartTime?: number | null;
 }
 
 function MessageBubble({ message }: { message: Message }) {
   const isUser = message.role === "user";
 
-  return (
-    <Box flexDirection="column" marginBottom={1}>
-      <Text color={isUser ? "cyan" : "green"} bold>
-        {isUser ? "> " : ""}
-      </Text>
-      <Box marginLeft={isUser ? 2 : 0}>
-        {isUser ? (
-          <Text wrap="wrap">{message.content}</Text>
-        ) : (
-          <MarkdownText>{message.content}</MarkdownText>
-        )}
+  if (isUser) {
+    // User message: highlighted with dark gray background like text selection
+    return (
+      <Box flexDirection="column" marginY={1}>
+        <Text backgroundColor="#3a3a3a" color="white">{` > ${message.content} `}</Text>
       </Box>
+    );
+  }
+
+  // AI response: no prefix, with bottom margin for visual separation
+  return (
+    <Box flexDirection="column" marginBottom={2} marginLeft={2}>
+      <MarkdownText>{message.content}</MarkdownText>
     </Box>
   );
 }
@@ -70,8 +75,9 @@ function MessageBubble({ message }: { message: Message }) {
 function StreamingMessage({ text }: { text: string }) {
   if (!text) return null;
 
+  // Streaming AI response: same style as completed AI response with cursor
   return (
-    <Box flexDirection="column" marginBottom={1}>
+    <Box flexDirection="column" marginBottom={2} marginLeft={2}>
       <Box flexDirection="row">
         <MarkdownText>{text}</MarkdownText>
         <Text color="gray">_</Text>
@@ -165,6 +171,8 @@ export function Chat({
   onCancel,
   loadingStartTime,
   isFirstSession = false,
+  currentTool,
+  currentToolStartTime,
 }: ChatProps) {
   const [input, setInput] = useState("");
   const [inputHistory, setInputHistory] = useState<string[]>([]);
@@ -307,9 +315,13 @@ export function Chat({
         {/* Streaming response */}
         {streamingText && <StreamingMessage text={streamingText} />}
 
-        {/* Loading indicator with timer */}
-        {isLoading && !streamingText && (
-          <LoadingIndicator startTime={loadingStartTime} />
+        {/* Loading indicator with elapsed time - always shown when loading */}
+        {isLoading && (
+          <ToolUsageIndicator
+            startTime={loadingStartTime}
+            currentTool={currentTool}
+            currentToolStartTime={currentToolStartTime}
+          />
         )}
       </Box>
 

@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GigaMind — Knowledge Graph</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Grain overlay for texture -->
+  <div class="grain-overlay" aria-hidden="true"></div>
+
+  <!-- Background gradient layers -->
+  <div class="bg-layer bg-layer--1" aria-hidden="true"></div>
+  <div class="bg-layer bg-layer--2" aria-hidden="true"></div>
+
+  <!-- Main graph canvas -->
+  <svg id="graph-canvas"></svg>
+
+  <!-- Stats panel (top-left) -->
+  <aside class="panel panel--stats" role="complementary" aria-label="Graph statistics">
+    <header class="panel__header">
+      <span class="panel__icon">◈</span>
+      <h1 class="panel__title">GigaMind</h1>
+    </header>
+    <div class="stats-grid">
+      <div class="stat">
+        <span class="stat__value" id="stat-notes">—</span>
+        <span class="stat__label">노트</span>
+      </div>
+      <div class="stat">
+        <span class="stat__value" id="stat-connections">—</span>
+        <span class="stat__label">연결</span>
+      </div>
+      <div class="stat stat--warning">
+        <span class="stat__value" id="stat-dangling">—</span>
+        <span class="stat__label">미생성</span>
+      </div>
+      <div class="stat stat--muted">
+        <span class="stat__value" id="stat-orphan">—</span>
+        <span class="stat__label">고립</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Controls panel (top-right) -->
+  <aside class="panel panel--controls" role="toolbar" aria-label="Graph controls">
+    <div class="search-container">
+      <input
+        type="search"
+        id="search-input"
+        class="search-input"
+        placeholder="노트 검색..."
+        autocomplete="off"
+      >
+      <kbd class="search-hint">/</kbd>
+    </div>
+    <div class="control-buttons">
+      <button class="control-btn" id="zoom-in" title="확대">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </button>
+      <button class="control-btn" id="zoom-out" title="축소">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <path d="M3 8h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </button>
+      <button class="control-btn" id="reset-view" title="뷰 초기화">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <path d="M2 8a6 6 0 1 1 1.5 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          <path d="M2 12V8h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </div>
+  </aside>
+
+  <!-- Node detail sidebar (right) -->
+  <aside class="sidebar" id="node-sidebar" role="complementary" aria-label="Note details" hidden>
+    <button class="sidebar__close" id="close-sidebar" aria-label="닫기">×</button>
+    <header class="sidebar__header">
+      <span class="sidebar__type" id="sidebar-type">NOTE</span>
+      <h2 class="sidebar__title" id="sidebar-title">—</h2>
+      <p class="sidebar__path" id="sidebar-path">—</p>
+    </header>
+    <div class="sidebar__section">
+      <h3 class="sidebar__section-title">
+        <span class="sidebar__section-icon">←</span>
+        백링크
+        <span class="sidebar__count" id="backlinks-count">0</span>
+      </h3>
+      <ul class="sidebar__list" id="backlinks-list"></ul>
+    </div>
+    <div class="sidebar__section">
+      <h3 class="sidebar__section-title">
+        <span class="sidebar__section-icon">→</span>
+        포워드 링크
+        <span class="sidebar__count" id="forwardlinks-count">0</span>
+      </h3>
+      <ul class="sidebar__list" id="forwardlinks-list"></ul>
+    </div>
+  </aside>
+
+  <!-- Focus mode indicator (bottom-center) -->
+  <div class="focus-indicator" id="focus-indicator" hidden>
+    <span class="focus-indicator__text">포커스 모드</span>
+    <button class="focus-indicator__exit" id="exit-focus">
+      전체 보기
+      <kbd>ESC</kbd>
+    </button>
+  </div>
+
+  <!-- Tooltip -->
+  <div class="tooltip" id="tooltip" role="tooltip" hidden></div>
+
+  <!-- Loading state -->
+  <div class="loading" id="loading">
+    <div class="loading__spinner"></div>
+    <span class="loading__text">그래프 불러오는 중...</span>
+  </div>
+
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script src="js/graph.js"></script>
+  <script src="js/controls.js"></script>
+</body>
+</html>

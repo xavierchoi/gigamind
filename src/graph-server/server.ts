@@ -1,0 +1,110 @@
+/**
+ * Graph Visualization Server
+ * Express server for serving the graph visualization UI
+ */
+
+import express, { type Express, type Request, type Response } from "express";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { createGraphRouter } from "./routes/api.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+export interface GraphServerOptions {
+  notesDir: string;
+  port?: number;
+  autoShutdownMinutes?: number;
+}
+
+export interface GraphServer {
+  app: Express;
+  port: number;
+  url: string;
+  shutdown: () => void;
+}
+
+/**
+ * Create and configure the Express server
+ */
+export function createGraphServer(options: GraphServerOptions): GraphServer {
+  const { notesDir, port = 3847, autoShutdownMinutes = 30 } = options;
+
+  const app = express();
+
+  // Middleware
+  app.use(express.json());
+
+  // CORS for local development
+  app.use((_req: Request, res: Response, next) => {
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+    next();
+  });
+
+  // API routes
+  app.use("/api", createGraphRouter(notesDir));
+
+  // Serve static files
+  const publicPath = path.join(__dirname, "public");
+  app.use(express.static(publicPath));
+
+  // Fallback to index.html for SPA
+  app.get("*", (_req: Request, res: Response) => {
+    res.sendFile(path.join(publicPath, "index.html"));
+  });
+
+  // Activity tracking for auto-shutdown
+  let lastActivity = Date.now();
+  let shutdownTimer: NodeJS.Timeout | null = null;
+  let server: ReturnType<typeof app.listen> | null = null;
+
+  const updateActivity = () => {
+    lastActivity = Date.now();
+  };
+
+  // Track activity on API requests
+  app.use((req: Request, _res: Response, next) => {
+    if (req.path.startsWith("/api")) {
+      updateActivity();
+    }
+    next();
+  });
+
+  const shutdown = () => {
+    if (shutdownTimer) {
+      clearInterval(shutdownTimer);
+      shutdownTimer = null;
+    }
+    if (server) {
+      server.close();
+      server = null;
+    }
+  };
+
+  // Start server
+  server = app.listen(port, () => {
+    console.log(`Graph server running at http://localhost:${port}`);
+  });
+
+  // Auto-shutdown check
+  if (autoShutdownMinutes > 0) {
+    shutdownTimer = setInterval(() => {
+      const idleTime = Date.now() - lastActivity;
+      const idleMinutes = idleTime / (1000 * 60);
+
+      if (idleMinutes >= autoShutdownMinutes) {
+        console.log(`Graph server shutting down after ${autoShutdownMinutes} minutes of inactivity`);
+        shutdown();
+        process.exit(0);
+      }
+    }, 60 * 1000); // Check every minute
+  }
+
+  return {
+    app,
+    port,
+    url: `http://localhost:${port}`,
+    shutdown,
+  };
+}

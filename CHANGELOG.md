@@ -5,6 +5,58 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4] - 2025-12-21
+
+### Added
+
+#### Tool Usage Indicator UI (Claude Code Style)
+- **실시간 도구 사용 현황 표시**: 모델이 응답 중일 때 현재 사용 중인 도구와 경과 시간을 실시간으로 표시
+  - 새 컴포넌트: `src/components/ToolUsageIndicator.tsx`
+  - 1초 단위 경과 시간 업데이트
+  - 현재 사용 중인 도구 1개만 표시 (히스토리 제거로 UI 간소화)
+  - UI 형태:
+    ```
+    Grep (3s)
+
+    작업 중... (12s) | Esc: 취소
+    ```
+
+#### Universal Loading Time Display
+- **모든 대기 시나리오에서 경과 시간 표시**: `isLoading`이 true인 모든 상황에서 ToolUsageIndicator 표시
+  - `/search`, `/clone`, `/note` 명령어 지원
+  - 일반 채팅 메시지 처리 지원
+  - `streamingText`와 함께 표시되도록 개선
+
+### Enhanced
+
+#### Claude Code Style Chat UI
+- **사용자 메시지 하이라이트**: 어두운 회색 배경(`#3a3a3a`)으로 사용자 메시지 시각적 구분
+- **AI 응답 들여쓰기**: 왼쪽 들여쓰기(`marginLeft={2}`)로 AI 응답 시각적 구분
+- **메시지 간격 개선**: 적절한 여백 추가 (`marginY`, `marginBottom`)로 가독성 향상
+- **스트리밍 응답 스타일 통일**: 스트리밍 중인 응답도 완료된 응답과 동일한 스타일 적용
+
+### Technical Details
+
+#### 새로운 파일
+```
+src/components/ToolUsageIndicator.tsx    # 도구 사용 현황 표시 컴포넌트
+```
+
+#### 수정된 파일
+- `src/components/Chat.tsx`: Claude Code 스타일 UI 적용, ToolUsageIndicator 통합
+- `src/app.tsx`: 도구 추적 상태(`currentTool`, `toolStartTime`) 및 콜백 추가
+
+#### ToolUsageIndicator Props
+```typescript
+interface ToolUsageIndicatorProps {
+  currentTool: string | null;      // 현재 사용 중인 도구 이름
+  toolStartTime: number | null;    // 도구 시작 시간 (timestamp)
+  isLoading: boolean;              // 로딩 상태
+}
+```
+
+---
+
 ## [0.1.3] - 2025-12-21
 
 ### Added

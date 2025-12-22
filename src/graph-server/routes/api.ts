@@ -1,0 +1,250 @@
+/**
+ * Graph API Routes
+ * REST endpoints for graph data
+ */
+
+import { Router, type Request, type Response } from "express";
+import { analyzeNoteGraph } from "../../utils/graph/analyzer.js";
+import { normalizeNoteTitle } from "../../utils/graph/wikilinks.js";
+import type { NoteGraphStats, BacklinkEntry } from "../../utils/graph/types.js";
+import path from "node:path";
+
+/**
+ * Graph node for API response
+ */
+interface GraphNode {
+  id: string;
+  title: string;
+  path: string;
+  type: "note" | "dangling" | "orphan";
+  connectionCount: number;
+}
+
+/**
+ * Graph link for API response
+ */
+interface GraphLink {
+  source: string;
+  target: string;
+}
+
+/**
+ * Full graph API response
+ */
+interface GraphAPIResponse {
+  nodes: GraphNode[];
+  links: GraphLink[];
+  stats: {
+    noteCount: number;
+    connectionCount: number;
+    danglingCount: number;
+    orphanCount: number;
+  };
+}
+
+/**
+ * Transform NoteGraphStats to API-friendly format
+ */
+function transformGraphStats(stats: NoteGraphStats, notesDir: string): GraphAPIResponse {
+  const nodes: GraphNode[] = [];
+  const links: GraphLink[] = [];
+  const nodeIds = new Set<string>();
+
+  // Build node ID from path (use relative path as ID)
+  const getNodeId = (filePath: string): string => {
+    return path.relative(notesDir, filePath);
+  };
+
+  // Get title from backlinks or use basename
+  const getTitleFromPath = (filePath: string): string => {
+    const basename = path.basename(filePath, ".md");
+    // Check if we have backlinks with this path to get the title
+    for (const [title, entries] of stats.backlinks) {
+      for (const entry of entries) {
+        if (entry.notePath === filePath) {
+          return entry.noteTitle;
+        }
+      }
+      // Check if this is the target note
+      const normalizedTitle = normalizeNoteTitle(title);
+      const normalizedBasename = normalizeNoteTitle(basename);
+      if (normalizedTitle === normalizedBasename) {
+        return title;
+      }
+    }
+    return basename;
+  };
+
+  // Add all existing notes as nodes
+  for (const [filePath, targets] of stats.forwardLinks) {
+    const nodeId = getNodeId(filePath);
+    const isOrphan = stats.orphanNotes.includes(filePath);
+
+    if (!nodeIds.has(nodeId)) {
+      nodeIds.add(nodeId);
+      nodes.push({
+        id: nodeId,
+        title: getTitleFromPath(filePath),
+        path: filePath,
+        type: isOrphan ? "orphan" : "note",
+        connectionCount: targets.length + (stats.backlinks.get(getTitleFromPath(filePath))?.length || 0),
+      });
+    }
+  }
+
+  // Also add notes that only have backlinks (no forward links)
+  for (const [title, entries] of stats.backlinks) {
+    for (const entry of entries) {
+      const nodeId = getNodeId(entry.notePath);
+      if (!nodeIds.has(nodeId)) {
+        nodeIds.add(nodeId);
+        nodes.push({
+          id: nodeId,
+          title: entry.noteTitle,
+          path: entry.notePath,
+          type: "note",
+          connectionCount: entries.length,
+        });
+      }
+    }
+  }
+
+  // Add dangling links as special nodes
+  for (const dangling of stats.danglingLinks) {
+    const danglingId = `dangling:${dangling.target}`;
+    if (!nodeIds.has(danglingId)) {
+      nodeIds.add(danglingId);
+      nodes.push({
+        id: danglingId,
+        title: dangling.target,
+        path: "",
+        type: "dangling",
+        connectionCount: dangling.sources.length,
+      });
+    }
+  }
+
+  // Build links from forwardLinks
+  for (const [sourcePath, targets] of stats.forwardLinks) {
+    const sourceId = getNodeId(sourcePath);
+
+    for (const target of targets) {
+      // Find the target node
+      const normalizedTarget = normalizeNoteTitle(target);
+
+      // Check if it's an existing note
+      let targetId: string | null = null;
+
+      for (const node of nodes) {
+        if (node.type !== "dangling" && normalizeNoteTitle(node.title) === normalizedTarget) {
+          targetId = node.id;
+          break;
+        }
+        // Also check by basename
+        if (node.type !== "dangling") {
+          const nodeBasename = normalizeNoteTitle(path.basename(node.path, ".md"));
+          if (nodeBasename === normalizedTarget) {
+            targetId = node.id;
+            break;
+          }
+        }
+      }
+
+      // If not found, it's a dangling link
+      if (!targetId) {
+        targetId = `dangling:${target}`;
+      }
+
+      // Add link if both nodes exist
+      if (nodeIds.has(sourceId) && nodeIds.has(targetId)) {
+        links.push({
+          source: sourceId,
+          target: targetId,
+        });
+      }
+    }
+  }
+
+  return {
+    nodes,
+    links,
+    stats: {
+      noteCount: stats.noteCount,
+      connectionCount: stats.uniqueConnections,
+      danglingCount: stats.danglingLinks.length,
+      orphanCount: stats.orphanNotes.length,
+    },
+  };
+}
+
+/**
+ * Get focused graph (single note + 1-hop neighbors)
+ */
+function getFocusedGraph(fullGraph: GraphAPIResponse, nodeId: string): GraphAPIResponse {
+  // Find all connected node IDs
+  const connectedIds = new Set<string>([nodeId]);
+
+  for (const link of fullGraph.links) {
+    if (link.source === nodeId) {
+      connectedIds.add(link.target);
+    }
+    if (link.target === nodeId) {
+      connectedIds.add(link.source);
+    }
+  }
+
+  // Filter nodes and links
+  const nodes = fullGraph.nodes.filter((node) => connectedIds.has(node.id));
+  const links = fullGraph.links.filter(
+    (link) => connectedIds.has(link.source) && connectedIds.has(link.target)
+  );
+
+  return {
+    nodes,
+    links,
+    stats: fullGraph.stats, // Keep original stats
+  };
+}
+
+/**
+ * Create the graph API router
+ */
+export function createGraphRouter(notesDir: string): Router {
+  const router = Router();
+
+  // GET /api/graph - Full graph data
+  router.get("/graph", async (_req: Request, res: Response) => {
+    try {
+      const stats = await analyzeNoteGraph(notesDir, { includeContext: false });
+      const graphData = transformGraphStats(stats, notesDir);
+      res.json(graphData);
+    } catch (error) {
+      console.error("Error fetching graph data:", error);
+      res.status(500).json({ error: "Failed to analyze graph" });
+    }
+  });
+
+  // GET /api/graph/:nodeId - Focused graph (single note + neighbors)
+  router.get("/graph/:nodeId", async (req: Request, res: Response) => {
+    try {
+      const { nodeId } = req.params;
+      const decodedNodeId = decodeURIComponent(nodeId);
+
+      const stats = await analyzeNoteGraph(notesDir, { includeContext: false });
+      const fullGraph = transformGraphStats(stats, notesDir);
+      const focusedGraph = getFocusedGraph(fullGraph, decodedNodeId);
+
+      res.json(focusedGraph);
+    } catch (error) {
+      console.error("Error fetching focused graph:", error);
+      res.status(500).json({ error: "Failed to analyze graph" });
+    }
+  });
+
+  // GET /api/heartbeat - Keep server alive
+  router.get("/heartbeat", (_req: Request, res: Response) => {
+    res.json({ status: "ok", timestamp: Date.now() });
+  });
+
+  return router;
+}
