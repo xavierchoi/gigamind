@@ -5,6 +5,155 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.5] - 2025-12-22
+
+### Added
+
+#### Browser-Based Graph Visualization (`/graph` command)
+- **Interactive D3.js Force-Directed Graph**: Renders note network as dynamic force-directed graph in web browser
+  - Node-based representation of all notes in knowledge base
+  - Force-directed physics simulation for organic layout
+  - Real-time node positioning and collision detection
+  - Zoom and pan functionality with mouse wheel and drag
+  - Click-to-focus feature to highlight connected nodes
+
+#### Graph Visualization Server
+- **Express.js Server**: Dedicated HTTP server for serving graph interface
+  - Available at `http://localhost:7860` (configurable port)
+  - Automatic server startup on `/graph` command
+  - Graceful error handling and port fallback
+  - Static file serving for HTML/CSS/JavaScript assets
+  - JSON API endpoint for graph data (`/api/graph`)
+
+#### Obsidian-Style UI Design
+- **Dark Cosmic Theme**: Premium visual design with cosmic color palette
+  - Deep space background with subtle starfield effect
+  - Neon purple and cyan accent colors
+  - Glass-morphism panels with frosted glass appearance
+  - Smooth transitions and shadow effects
+  - Responsive layout for various screen sizes
+
+#### Graph Interaction Features
+- **Focus Mode**: Click nodes to isolate and highlight connected subgraphs
+  - Show node connections (incoming and outgoing edges)
+  - Dim unrelated nodes for better focus
+  - Display node statistics (in-degree, out-degree)
+- **Search Functionality**: Real-time node search with highlighting
+  - Type to filter visible nodes
+  - Case-insensitive matching
+  - Instant visual feedback
+  - Search results counter
+- **Node Details Sidebar**: Information panel for selected nodes
+  - Node title and ID
+  - Connection statistics
+  - List of linked notes
+  - Backlinks (notes linking to this node)
+  - Edit note link
+
+#### Visual Indicators
+- **Node Styling by Type**:
+  - Project notes: Green highlight
+  - Resource notes: Blue highlight
+  - Area notes: Purple highlight
+  - Regular notes: Default cyan
+  - Dangling links: Red warning indicator
+- **Node Size**: Proportional to connection count
+  - Highly connected nodes appear larger
+  - Easy visual identification of hubs
+- **Edge Rendering**:
+  - Directional arrows showing link direction
+  - Color-coded by source node type
+  - Hover highlight for edge visibility
+
+#### Graph Data API
+- **JSON Graph Data Format**: Standardized node and link representation
+  - Node properties: `id`, `title`, `type`, `connections`
+  - Edge properties: `source`, `target`, `weight`
+  - Real-time data synchronization with file system
+
+### Enhanced
+
+#### User Experience
+- **Seamless Integration**: `/graph` command launches visualization without leaving CLI
+  - Automatic browser opening (configurable)
+  - Background server management
+  - Graceful shutdown on CLI exit
+- **Loading States**: Visual feedback during graph generation
+  - Progress indicator in CLI
+  - Loading skeleton in browser
+  - Error notifications for data loading failures
+
+### Technical Details
+
+#### New Files
+```
+src/components/GraphServer.tsx          # Graph server component and Express setup
+src/components/GraphUI/
+├── index.html                          # Main visualization HTML
+├── styles.css                          # Graph visualization styles
+├── script.js                           # D3.js graph rendering logic
+└── utils.js                            # Graph interaction utilities
+
+src/agent/handlers/graphHandler.ts      # Handler for /graph command
+src/utils/graph/visualization.ts        # Graph data formatting for visualization
+```
+
+#### Modified Files
+- `src/app.tsx`: Added `/graph` command handling and server lifecycle management
+- `src/agent/tools.ts`: Graph visualization tool definition
+- `src/utils/graph/index.ts`: Exported graph visualization utilities
+- `package.json`: Added D3.js and Express server dependencies
+
+#### Dependencies Added
+- `d3`: ^7.8.0 - Force-directed graph rendering
+- `express`: ^4.18.0 - HTTP server for graph interface
+
+#### Core Components
+```typescript
+interface GraphVisualizationData {
+  nodes: Array<{
+    id: string;
+    title: string;
+    type: 'project' | 'resource' | 'area' | 'regular';
+    connections: number;
+    inDegree: number;
+    outDegree: number;
+  }>;
+  links: Array<{
+    source: string;
+    target: string;
+    weight: number;
+  }>;
+}
+
+interface GraphServerConfig {
+  port: number;
+  autoOpenBrowser: boolean;
+  host: string;
+}
+```
+
+#### Server Port Configuration
+- Default port: 7860
+- Fallback ports: 7861, 7862, 7863, 7864 if primary port unavailable
+- Environment variable: `GIGAMIND_GRAPH_PORT`
+
+### Performance
+
+- **Client-Side Rendering**: Graph computed in browser for responsiveness
+- **Lazy Loading**: Graph data fetched on demand
+- **Canvas Optimization**: D3.js uses optimized force simulation
+- **Memory Efficient**: Minimal data transfer with compressed node/link format
+
+### Browser Compatibility
+
+- Chrome/Chromium: Full support
+- Firefox: Full support
+- Safari: Full support
+- Edge: Full support
+
+---
+
 ## [0.1.4] - 2025-12-21
 
 ### Added
