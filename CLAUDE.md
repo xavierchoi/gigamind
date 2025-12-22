@@ -1,0 +1,1 @@
+# Before adding any new features, please refer to the @SDK.md document and follow the best practices.

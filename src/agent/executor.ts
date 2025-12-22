@@ -24,6 +24,8 @@ import type {
   WriteToolInput,
   EditToolInput,
   ShellToolInput,
+  WebSearchToolInput,
+  WebFetchToolInput,
 } from "./tools.js";
 
 const execAsync = promisify(exec);
@@ -469,6 +471,346 @@ export async function executeShell(
   }
 }
 
+// Web request timeout in milliseconds
+const WEB_REQUEST_TIMEOUT = 30000;
+
+// User agent for web requests
+const USER_AGENT = "GigaMind/1.0 (Knowledge Management CLI)";
+
+/**
+ * Convert HTML to plain text (simple implementation)
+ * Strips HTML tags and decodes basic HTML entities
+ */
+function htmlToText(html: string): string {
+  // Remove script and style elements
+  let text = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "");
+  text = text.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "");
+
+  // Convert common block elements to newlines
+  text = text.replace(/<\/?(div|p|br|h[1-6]|li|tr)[^>]*>/gi, "\n");
+
+  // Remove remaining HTML tags
+  text = text.replace(/<[^>]+>/g, " ");
+
+  // Decode HTML entities
+  text = text.replace(/&nbsp;/g, " ");
+  text = text.replace(/&amp;/g, "&");
+  text = text.replace(/&lt;/g, "<");
+  text = text.replace(/&gt;/g, ">");
+  text = text.replace(/&quot;/g, '"');
+  text = text.replace(/&#39;/g, "'");
+  text = text.replace(/&apos;/g, "'");
+
+  // Clean up whitespace
+  text = text.replace(/\s+/g, " ");
+  text = text.replace(/\n\s*\n/g, "\n\n");
+
+  return text.trim();
+}
+
+/**
+ * Extract title from HTML
+ */
+function extractTitle(html: string): string {
+  const titleMatch = html.match(/<title[^>]*>([^<]*)<\/title>/i);
+  return titleMatch ? titleMatch[1].trim() : "";
+}
+
+/**
+ * Extract meta description from HTML
+ */
+function extractDescription(html: string): string {
+  const metaMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']*)/i) ||
+                    html.match(/<meta[^>]*content=["']([^"']*)[^>]*name=["']description["']/i);
+  return metaMatch ? metaMatch[1].trim() : "";
+}
+
+interface SearchResult {
+  title: string;
+  url: string;
+  snippet: string;
+}
+
+/**
+ * Web search using DuckDuckGo HTML search (no API key required)
+ * Falls back to a simple web scraping approach
+ */
+export async function executeWebSearch(
+  input: WebSearchToolInput
+): Promise<ToolResult> {
+  try {
+    const { query } = input;
+
+    if (!query || query.trim().length === 0) {
+      return {
+        success: false,
+        output: "",
+        error: "Search query cannot be empty",
+      };
+    }
+
+    logger.debug("Executing WebSearch", { query });
+
+    // Use DuckDuckGo HTML search
+    const encodedQuery = encodeURIComponent(query);
+    const searchUrl = `https://html.duckduckgo.com/html/?q=${encodedQuery}`;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), WEB_REQUEST_TIMEOUT);
+
+    try {
+      const response = await fetch(searchUrl, {
+        method: "GET",
+        headers: {
+          "User-Agent": USER_AGENT,
+          "Accept": "text/html,application/xhtml+xml",
+          "Accept-Language": "en-US,en;q=0.9",
+        },
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        return {
+          success: false,
+          output: "",
+          error: `Search request failed with status ${response.status}`,
+        };
+      }
+
+      const html = await response.text();
+      const results: SearchResult[] = [];
+
+      // Parse DuckDuckGo HTML results
+      // Results are in <div class="result"> elements
+      const resultRegex = /<a[^>]*class="result__a"[^>]*href="([^"]*)"[^>]*>([^<]*)<\/a>[\s\S]*?<a[^>]*class="result__snippet"[^>]*>([^<]*(?:<[^>]*>[^<]*)*)<\/a>/gi;
+
+      let match: RegExpExecArray | null;
+      while ((match = resultRegex.exec(html)) !== null && results.length < 10) {
+        const [, url, title, snippet] = match;
+        if (url && title) {
+          // DuckDuckGo uses redirect URLs, extract the actual URL
+          const actualUrlMatch = url.match(/uddg=([^&]*)/);
+          const actualUrl = actualUrlMatch
+            ? decodeURIComponent(actualUrlMatch[1])
+            : url;
+
+          results.push({
+            title: htmlToText(title),
+            url: actualUrl,
+            snippet: htmlToText(snippet || ""),
+          });
+        }
+      }
+
+      // Alternative parsing for different DuckDuckGo HTML structure
+      if (results.length === 0) {
+        const altResultRegex = /<div[^>]*class="[^"]*result[^"]*"[^>]*>[\s\S]*?<a[^>]*href="([^"]*)"[^>]*>([^<]*)<\/a>[\s\S]*?<span[^>]*>([^<]*)<\/span>/gi;
+        while ((match = altResultRegex.exec(html)) !== null && results.length < 10) {
+          const [, url, title, snippet] = match;
+          if (url && title && !url.includes("duckduckgo.com")) {
+            results.push({
+              title: htmlToText(title),
+              url: url,
+              snippet: htmlToText(snippet || ""),
+            });
+          }
+        }
+      }
+
+      if (results.length === 0) {
+        return {
+          success: true,
+          output: `No search results found for: "${query}"`,
+        };
+      }
+
+      // Format results as readable text
+      const formattedResults = results.map((result, index) =>
+        `${index + 1}. ${result.title}\n   URL: ${result.url}\n   ${result.snippet}`
+      ).join("\n\n");
+
+      return {
+        success: true,
+        output: `Search results for "${query}":\n\n${formattedResults}`,
+      };
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+
+    if (errorMessage.includes("abort") || errorMessage.includes("timeout")) {
+      logger.error("WebSearch timeout", error);
+      return {
+        success: false,
+        output: "",
+        error: "Search request timed out. Please try again.",
+      };
+    }
+
+    logger.error("WebSearch execution failed", error);
+    return {
+      success: false,
+      output: "",
+      error: `Search failed: ${errorMessage}`,
+    };
+  }
+}
+
+/**
+ * Fetch web content from a URL and convert to readable text
+ */
+export async function executeWebFetch(
+  input: WebFetchToolInput
+): Promise<ToolResult> {
+  try {
+    const { url, prompt } = input;
+
+    if (!url || url.trim().length === 0) {
+      return {
+        success: false,
+        output: "",
+        error: "URL cannot be empty",
+      };
+    }
+
+    // Validate URL format
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(url);
+    } catch {
+      return {
+        success: false,
+        output: "",
+        error: `Invalid URL format: ${url}`,
+      };
+    }
+
+    // Only allow http and https protocols
+    if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+      return {
+        success: false,
+        output: "",
+        error: `Unsupported protocol: ${parsedUrl.protocol}. Only HTTP and HTTPS are supported.`,
+      };
+    }
+
+    logger.debug("Executing WebFetch", { url, prompt });
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), WEB_REQUEST_TIMEOUT);
+
+    try {
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          "User-Agent": USER_AGENT,
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.7",
+          "Accept-Language": "en-US,en;q=0.9,ko;q=0.8",
+        },
+        signal: controller.signal,
+        redirect: "follow",
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        return {
+          success: false,
+          output: "",
+          error: `Failed to fetch URL: HTTP ${response.status} ${response.statusText}`,
+        };
+      }
+
+      const contentType = response.headers.get("content-type") || "";
+      const content = await response.text();
+
+      let output: string;
+
+      if (contentType.includes("text/html") || contentType.includes("application/xhtml")) {
+        // Extract meaningful content from HTML
+        const title = extractTitle(content);
+        const description = extractDescription(content);
+        const text = htmlToText(content);
+
+        // Limit text length to prevent overwhelming output
+        const maxLength = 10000;
+        const truncatedText = text.length > maxLength
+          ? text.substring(0, maxLength) + "\n\n[Content truncated...]"
+          : text;
+
+        output = `# ${title || parsedUrl.hostname}\n`;
+        if (description) {
+          output += `\n> ${description}\n`;
+        }
+        output += `\nURL: ${url}\n\n---\n\n${truncatedText}`;
+      } else if (contentType.includes("text/") || contentType.includes("application/json")) {
+        // Plain text or JSON content
+        const maxLength = 10000;
+        output = content.length > maxLength
+          ? content.substring(0, maxLength) + "\n\n[Content truncated...]"
+          : content;
+      } else {
+        return {
+          success: false,
+          output: "",
+          error: `Unsupported content type: ${contentType}. Only text-based content is supported.`,
+        };
+      }
+
+      // Add prompt context if provided
+      if (prompt) {
+        output = `Prompt: ${prompt}\n\n${output}`;
+      }
+
+      return {
+        success: true,
+        output,
+      };
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+
+    if (errorMessage.includes("abort") || errorMessage.includes("timeout")) {
+      logger.error("WebFetch timeout", error);
+      return {
+        success: false,
+        output: "",
+        error: "Request timed out. The server took too long to respond.",
+      };
+    }
+
+    if (errorMessage.includes("ENOTFOUND") || errorMessage.includes("getaddrinfo")) {
+      logger.error("WebFetch DNS error", error);
+      return {
+        success: false,
+        output: "",
+        error: `Could not resolve hostname. Please check the URL.`,
+      };
+    }
+
+    if (errorMessage.includes("ECONNREFUSED")) {
+      logger.error("WebFetch connection refused", error);
+      return {
+        success: false,
+        output: "",
+        error: "Connection refused by the server.",
+      };
+    }
+
+    logger.error("WebFetch execution failed", error);
+    return {
+      success: false,
+      output: "",
+      error: `Failed to fetch URL: ${errorMessage}`,
+    };
+  }
+}
+
 // Main executor function
 export async function executeTool(
   toolName: string,
@@ -488,6 +830,10 @@ export async function executeTool(
       return executeEdit(toolInput as EditToolInput, notesDir);
     case "Shell":
       return executeShell(toolInput as ShellToolInput, notesDir);
+    case "WebSearch":
+      return executeWebSearch(toolInput as WebSearchToolInput);
+    case "WebFetch":
+      return executeWebFetch(toolInput as WebFetchToolInput);
     default:
       return {
         success: false,

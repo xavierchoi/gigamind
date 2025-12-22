@@ -19,20 +19,62 @@ import {
 } from "../utils/errors.js";
 
 // delegate_to_subagent tool definition
+// SDK 스타일: 상세한 description으로 Claude가 직접 에이전트 선택
 const DELEGATE_TOOL: Tool = {
   name: "delegate_to_subagent",
-  description: "전문 에이전트에게 작업을 위임합니다. 노트 검색, 노트 생성, 사용자 관점 답변 등 전문 작업이 필요할 때 사용하세요.",
+  description: `전문 에이전트에게 작업을 위임합니다. 반드시 다음 기준에 따라 적절한 에이전트를 선택하세요.
+
+## 에이전트 선택 기준 (우선순위 순서대로 평가)
+
+### 1. research-agent - 웹/인터넷 관련 작업 (최우선)
+트리거 키워드: 웹, 인터넷, 온라인, 리서치, 조사, 최신 정보, web, online, research, search the web, look up
+예시:
+- "웹에서 찾아줘", "인터넷에서 검색해줘"
+- "최신 AI 트렌드 리서치해줘", "조사해줘"
+- "search the web for...", "look up online"
+주의: "검색" 키워드가 있어도 "웹/인터넷/온라인" 키워드가 함께 있으면 반드시 research-agent
+
+### 2. note-agent - 노트 생성/저장 작업
+트리거 키워드: 메모, 기록, 저장, 노트 작성, 적어, save, write note, record, 記録
+예시:
+- "이 내용 메모해줘", "노트로 저장해줘"
+- "기록해줘", "적어줘"
+- "save this as a note", "write a note about..."
+
+### 3. clone-agent - 사용자 관점 답변 (노트 기반)
+트리거 키워드: 내 생각, 나라면, 내 관점, 내 노트에서, 클론, my perspective, what would I think, from my notes
+예시:
+- "내가 어떻게 생각했더라?", "나라면 어떻게 할까?"
+- "내 노트에서 이 주제 관련 찾아줘"
+- "내 관점에서 설명해줘", "나처럼 답변해줘"
+
+### 4. search-agent - 기존 노트 검색 (웹 검색 아님!)
+트리거 키워드: 노트에서 찾기, 노트 검색, 어디에 적었더라 (웹/인터넷 언급 없이)
+예시:
+- "프로젝트 관련 노트 찾아줘"
+- "어디에 적었더라?", "이 주제 노트 검색해줘"
+- "find in my notes", "search my notes"
+주의: "웹/인터넷/온라인" 키워드가 없고, 노트 검색 의도가 명확할 때만
+
+## 중요한 행동 원칙
+- 위 기준에 해당하면 망설이지 말고 즉시 이 도구를 호출하세요
+- 도구를 호출하지 않고 "~할 수 있습니다"라고 설명만 하지 마세요
+- 확실하지 않거나 단순 인사/일반 질문이면 이 도구를 호출하지 말고 직접 대화하세요`,
   input_schema: {
     type: "object" as const,
     properties: {
       agent: {
         type: "string",
-        enum: ["search-agent", "note-agent", "clone-agent"],
-        description: "호출할 에이전트. search-agent: 노트 검색/찾기, note-agent: 노트 생성/기록, clone-agent: 사용자 관점 답변",
+        enum: ["search-agent", "note-agent", "clone-agent", "research-agent"],
+        description: `호출할 에이전트:
+- research-agent: 웹 검색, 인터넷 리서치, 최신 정보 조사 (웹/온라인 키워드 있을 때)
+- note-agent: 노트 생성, 메모, 기록, 저장
+- clone-agent: 사용자 노트 기반으로 사용자처럼 답변
+- search-agent: 기존 노트에서 검색, 찾기 (웹 검색 아님!)`,
       },
       task: {
         type: "string",
-        description: "에이전트에게 전달할 작업 내용",
+        description: "에이전트에게 전달할 작업 내용. 사용자의 원래 메시지를 그대로 전달하세요.",
       },
     },
     required: ["agent", "task"],
@@ -40,7 +82,7 @@ const DELEGATE_TOOL: Tool = {
 };
 
 interface DelegateToolInput {
-  agent: "search-agent" | "note-agent" | "clone-agent";
+  agent: "search-agent" | "note-agent" | "clone-agent" | "research-agent";
   task: string;
 }
 

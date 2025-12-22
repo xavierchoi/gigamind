@@ -52,6 +52,8 @@ export interface AgentClientConfig {
  */
 const ALLOWED_TOOLS = [
   "Read",
+  "Write",
+  "Edit",
   "Glob",
   "Grep",
   "Task",

@@ -5,6 +5,63 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.3] - 2025-12-21
+
+### Added
+
+#### Research Agent 웹 검색 기능 완성
+- **research-agent 처리 로직 추가**: `app.tsx`에서 research-agent 요청 처리 구현
+- **WebSearch 도구 정의**: `tools.ts`에 DuckDuckGo HTML 검색 기반 웹 검색 도구 스키마 추가
+- **WebFetch 도구 정의**: `tools.ts`에 URL 콘텐츠 가져오기 도구 스키마 추가
+- **WebSearch 실행 로직**: `executor.ts`에 DuckDuckGo HTML 검색 실행 함수 구현
+- **WebFetch 실행 로직**: `executor.ts`에 URL 콘텐츠 가져오기 실행 함수 구현
+- **DELEGATE_TOOL에 research-agent 추가**: `client.ts`의 enum에 새로운 에이전트 등록
+- **SYSTEM_PROMPT에 research-agent 안내 추가**: `prompts.ts`에서 웹 검색 에이전트 사용법 안내
+
+#### Note Agent 도구 접근 수정
+- **Write, Edit 도구 권한 추가**: `agentClient.ts`의 ALLOWED_TOOLS에 Write, Edit 추가
+- **노트 생성/수정 기능 활성화**: note-agent가 직접 노트 파일을 생성하고 수정할 수 있도록 개선
+
+### Changed
+
+#### SDK 스타일 의도 감지 시스템으로 리팩토링
+- **별도의 의도 감지 API 호출 제거**: Haiku 모델을 사용한 의도 감지 호출 불필요
+- **DELEGATE_TOOL description 대폭 강화**: Claude가 상세한 에이전트 선택 기준을 직접 판단
+- **약 290줄의 수동 라우팅 로직 제거**: `detectSubagentIntentWithAI`, 수동 에이전트 호출 등 제거
+- **메인 Claude 자동 에이전트 선택**: DELEGATE_TOOL의 description 기반으로 에이전트 자동 위임
+
+### Enhanced
+
+#### 응답 속도 및 비용 최적화
+- **응답 속도 향상**: 의도 감지 3초 타임아웃 제거로 빠른 응답
+- **API 비용 절감**: 의도 감지용 추가 Haiku 호출 제거
+
+#### 위임 판단 기준 강화
+- **SYSTEM_PROMPT 위임 판단 기준 강화**: `prompts.ts`에서 위임 판단 기준을 더 적극적으로 변경
+- **행동 원칙 추가**: "설명만 하지 말고 즉시 도구 호출" 원칙 명시
+
+### Technical Details
+
+#### 수정된 파일
+- `src/app.tsx`: research-agent 처리 로직 추가, 수동 라우팅 로직 제거
+- `src/agent/tools.ts`: WebSearch, WebFetch 도구 스키마 추가
+- `src/agent/executor.ts`: WebSearch, WebFetch 실행 함수 구현
+- `src/agent/client.ts`: DELEGATE_TOOL description 강화, research-agent 추가
+- `src/agent/prompts.ts`: SYSTEM_PROMPT 강화, research-agent 안내 추가
+- `src/agent/subagent.ts`: 트리거 패턴 추가 (폴백용 유지)
+- `src/agent/sdk/agentClient.ts`: ALLOWED_TOOLS에 Write, Edit 추가
+
+#### 아키텍처 변경
+```
+Before (의도 감지 흐름):
+User Input → detectSubagentIntentWithAI (Haiku) → Manual Agent Routing → Response
+
+After (SDK 스타일 흐름):
+User Input → Main Claude (DELEGATE_TOOL description 기반 자동 판단) → Agent Delegation → Response
+```
+
+---
+
 ## [0.1.2] - 2025-12-21
 
 ### Added

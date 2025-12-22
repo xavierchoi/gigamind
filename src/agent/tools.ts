@@ -35,6 +35,15 @@ export interface ShellToolInput {
   command: string;
 }
 
+export interface WebSearchToolInput {
+  query: string;
+}
+
+export interface WebFetchToolInput {
+  url: string;
+  prompt?: string;
+}
+
 // Legacy alias for backward compatibility
 export type BashToolInput = ShellToolInput;
 
@@ -44,7 +53,9 @@ export type ToolInput =
   | ReadToolInput
   | WriteToolInput
   | EditToolInput
-  | ShellToolInput;
+  | ShellToolInput
+  | WebSearchToolInput
+  | WebFetchToolInput;
 
 // Tool definitions for Claude API
 export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
@@ -158,6 +169,41 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
         },
       },
       required: ["command"],
+    },
+  },
+  {
+    name: "WebSearch",
+    description:
+      "Search the web for information. Returns search results with titles, URLs, and snippets. Use this for finding current information, documentation, or answers to questions.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        query: {
+          type: "string",
+          description: "The search query to execute",
+        },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "WebFetch",
+    description:
+      "Fetch content from a URL and optionally process it with a prompt. Returns the page content as markdown. Use this to read web pages, documentation, or articles.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        url: {
+          type: "string",
+          description: "The URL to fetch content from",
+        },
+        prompt: {
+          type: "string",
+          description:
+            "Optional prompt to process the fetched content. If provided, the content will be analyzed according to this prompt.",
+        },
+      },
+      required: ["url"],
     },
   },
 ];
