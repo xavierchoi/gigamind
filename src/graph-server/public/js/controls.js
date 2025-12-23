@@ -1,6 +1,6 @@
 /**
  * GigaMind Knowledge Graph — UI Controls
- * Keyboard shortcuts, button handlers, and search functionality
+ * Search dropdown, filter toggles, keyboard navigation
  */
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -9,13 +9,33 @@
 
 const elements = {
   searchInput: document.getElementById('search-input'),
+  searchResults: document.getElementById('search-results'),
+  searchResultsList: document.getElementById('search-results-list'),
+  searchCount: document.getElementById('search-count'),
+  searchClear: document.getElementById('search-clear'),
   zoomIn: document.getElementById('zoom-in'),
   zoomOut: document.getElementById('zoom-out'),
+  zoomLevel: document.getElementById('zoom-level'),
   resetView: document.getElementById('reset-view'),
+  toggleLabels: document.getElementById('toggle-labels'),
   exitFocus: document.getElementById('exit-focus'),
   closeSidebar: document.getElementById('close-sidebar'),
   focusIndicator: document.getElementById('focus-indicator'),
   sidebar: document.getElementById('node-sidebar'),
+  minimap: document.getElementById('minimap'),
+  minimapToggle: document.getElementById('minimap-toggle'),
+  filterButtons: document.querySelectorAll('.filter-btn'),
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// State
+// ═══════════════════════════════════════════════════════════════════════════
+
+let searchState = {
+  query: '',
+  results: [],
+  selectedIndex: -1,
+  isOpen: false,
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -34,6 +54,11 @@ elements.resetView.addEventListener('click', () => {
   window.graphAPI?.resetView();
 });
 
+elements.toggleLabels?.addEventListener('click', () => {
+  const isActive = window.graphAPI?.toggleLabels();
+  elements.toggleLabels.classList.toggle('control-btn--active', isActive);
+});
+
 elements.exitFocus.addEventListener('click', () => {
   window.graphAPI?.exitFocusMode();
 });
@@ -43,23 +68,225 @@ elements.closeSidebar.addEventListener('click', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Search
+// Minimap Toggle
+// ═══════════════════════════════════════════════════════════════════════════
+
+elements.minimapToggle?.addEventListener('click', () => {
+  elements.minimap.classList.toggle('minimap--collapsed');
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Filter Toggles
+// ═══════════════════════════════════════════════════════════════════════════
+
+elements.filterButtons.forEach(btn => {
+  btn.addEventListener('click', () => {
+    const filterType = btn.dataset.filter;
+    if (!filterType) return;
+
+    btn.classList.toggle('filter-btn--active');
+    window.graphAPI?.toggleFilter(filterType);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Search with Dropdown
 // ═══════════════════════════════════════════════════════════════════════════
 
 let searchDebounceTimer = null;
 
+function performSearch(query) {
+  searchState.query = query;
+
+  if (!query.trim()) {
+    closeSearchDropdown();
+    window.graphAPI?.searchNodes('');
+    return;
+  }
+
+  const matches = window.graphAPI?.searchNodes(query) || [];
+  searchState.results = matches;
+  searchState.selectedIndex = -1;
+
+  renderSearchResults(matches, query);
+  openSearchDropdown();
+}
+
+function renderSearchResults(results, query) {
+  const count = results.length;
+  elements.searchCount.textContent = `${count} result${count !== 1 ? 's' : ''}`;
+
+  if (results.length === 0) {
+    elements.searchResultsList.innerHTML = `
+      <li class="search-results__empty">No matching nodes</li>
+    `;
+    return;
+  }
+
+  // Limit to 10 results
+  const displayResults = results.slice(0, 10);
+
+  elements.searchResultsList.innerHTML = displayResults.map((node, index) => {
+    const highlightedTitle = highlightMatch(node.title, query);
+    const inbound = countInbound(node.id);
+    const outbound = countOutbound(node.id);
+
+    return `
+      <li class="search-results__item ${index === searchState.selectedIndex ? 'search-results__item--selected' : ''}"
+          data-node-id="${node.id}"
+          data-index="${index}">
+        <span class="search-results__item-indicator search-results__item-indicator--${node.type}"></span>
+        <span class="search-results__item-title">${highlightedTitle}</span>
+        <span class="search-results__item-connections">${inbound + outbound}</span>
+      </li>
+    `;
+  }).join('');
+
+  // Add click handlers
+  elements.searchResultsList.querySelectorAll('.search-results__item').forEach(item => {
+    item.addEventListener('click', () => {
+      const nodeId = item.dataset.nodeId;
+      selectSearchResult(nodeId);
+    });
+  });
+}
+
+function highlightMatch(text, query) {
+  if (!query) return escapeHtml(text);
+
+  const regex = new RegExp(`(${escapeRegex(query)})`, 'gi');
+  return escapeHtml(text).replace(regex, '<mark>$1</mark>');
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function escapeRegex(string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function countInbound(nodeId) {
+  const nodes = window.graphAPI?.getNodes() || [];
+  // This would need the links data, simplified for now
+  return 0;
+}
+
+function countOutbound(nodeId) {
+  return 0;
+}
+
+function selectSearchResult(nodeId) {
+  window.graphAPI?.focusOnNode(nodeId);
+  closeSearchDropdown();
+  elements.searchInput.value = '';
+  elements.searchInput.blur();
+}
+
+function openSearchDropdown() {
+  searchState.isOpen = true;
+  elements.searchResults.hidden = false;
+}
+
+function closeSearchDropdown() {
+  searchState.isOpen = false;
+  searchState.selectedIndex = -1;
+  elements.searchResults.hidden = true;
+}
+
+function navigateResults(direction) {
+  if (!searchState.isOpen || searchState.results.length === 0) return;
+
+  const maxIndex = Math.min(searchState.results.length - 1, 9);
+
+  if (direction === 'down') {
+    searchState.selectedIndex = Math.min(searchState.selectedIndex + 1, maxIndex);
+  } else {
+    searchState.selectedIndex = Math.max(searchState.selectedIndex - 1, 0);
+  }
+
+  updateSelectedResult();
+}
+
+function updateSelectedResult() {
+  elements.searchResultsList.querySelectorAll('.search-results__item').forEach((item, index) => {
+    item.classList.toggle('search-results__item--selected', index === searchState.selectedIndex);
+  });
+
+  // Scroll into view
+  const selected = elements.searchResultsList.querySelector('.search-results__item--selected');
+  if (selected) {
+    selected.scrollIntoView({ block: 'nearest' });
+  }
+}
+
+function confirmSelection() {
+  if (searchState.selectedIndex >= 0 && searchState.selectedIndex < searchState.results.length) {
+    const node = searchState.results[searchState.selectedIndex];
+    selectSearchResult(node.id);
+  }
+}
+
+// Search input event listeners
 elements.searchInput.addEventListener('input', (e) => {
   clearTimeout(searchDebounceTimer);
   searchDebounceTimer = setTimeout(() => {
-    window.graphAPI?.searchNodes(e.target.value.trim());
-  }, 150);
+    performSearch(e.target.value.trim());
+  }, 100);
+});
+
+elements.searchInput.addEventListener('focus', () => {
+  if (searchState.query && searchState.results.length > 0) {
+    openSearchDropdown();
+  }
 });
 
 elements.searchInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') {
-    e.target.value = '';
-    e.target.blur();
-    window.graphAPI?.searchNodes('');
+  switch (e.key) {
+    case 'ArrowDown':
+      e.preventDefault();
+      navigateResults('down');
+      break;
+
+    case 'ArrowUp':
+      e.preventDefault();
+      navigateResults('up');
+      break;
+
+    case 'Enter':
+      e.preventDefault();
+      if (searchState.isOpen && searchState.selectedIndex >= 0) {
+        confirmSelection();
+      }
+      break;
+
+    case 'Escape':
+      e.preventDefault();
+      if (searchState.isOpen) {
+        closeSearchDropdown();
+      } else {
+        elements.searchInput.value = '';
+        elements.searchInput.blur();
+        window.graphAPI?.searchNodes('');
+      }
+      break;
+  }
+});
+
+// Clear button
+elements.searchClear?.addEventListener('click', () => {
+  elements.searchInput.value = '';
+  closeSearchDropdown();
+  window.graphAPI?.searchNodes('');
+  elements.searchInput.focus();
+});
+
+// Close dropdown when clicking outside
+document.addEventListener('click', (e) => {
+  if (!elements.searchInput.contains(e.target) && !elements.searchResults.contains(e.target)) {
+    closeSearchDropdown();
   }
 });
 
@@ -75,13 +302,11 @@ document.addEventListener('keydown', (e) => {
 
   switch (e.key) {
     case '/':
-      // Focus search
       e.preventDefault();
       elements.searchInput.focus();
       break;
 
     case 'Escape':
-      // Exit focus mode or close sidebar
       if (!elements.focusIndicator.hidden) {
         window.graphAPI?.exitFocusMode();
       } else if (!elements.sidebar.hidden) {
@@ -91,38 +316,54 @@ document.addEventListener('keydown', (e) => {
 
     case '+':
     case '=':
-      // Zoom in
       e.preventDefault();
       window.graphAPI?.zoomIn();
       break;
 
     case '-':
     case '_':
-      // Zoom out
       e.preventDefault();
       window.graphAPI?.zoomOut();
       break;
 
     case '0':
-      // Reset view
       e.preventDefault();
       window.graphAPI?.resetView();
       break;
 
+    case 'l':
+    case 'L':
+      if (!e.metaKey && !e.ctrlKey) {
+        e.preventDefault();
+        const isActive = window.graphAPI?.toggleLabels();
+        elements.toggleLabels?.classList.toggle('control-btn--active', isActive);
+      }
+      break;
+
     case 'f':
     case 'F':
-      // Toggle fullscreen
-      if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen?.();
-      } else {
-        document.exitFullscreen?.();
+      if (!e.metaKey && !e.ctrlKey) {
+        e.preventDefault();
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen?.();
+        } else {
+          document.exitFullscreen?.();
+        }
+      }
+      break;
+
+    case 'm':
+    case 'M':
+      if (!e.metaKey && !e.ctrlKey) {
+        e.preventDefault();
+        elements.minimap?.classList.toggle('minimap--collapsed');
       }
       break;
   }
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Touch Support (mobile)
+// Touch Support
 // ═══════════════════════════════════════════════════════════════════════════
 
 let touchStartDistance = 0;
@@ -143,10 +384,10 @@ document.addEventListener('touchmove', (e) => {
 
     if (touchStartDistance > 0) {
       const scale = distance / touchStartDistance;
-      if (scale > 1.1) {
+      if (scale > 1.15) {
         window.graphAPI?.zoomIn();
         touchStartDistance = distance;
-      } else if (scale < 0.9) {
+      } else if (scale < 0.85) {
         window.graphAPI?.zoomOut();
         touchStartDistance = distance;
       }
@@ -159,37 +400,22 @@ document.addEventListener('touchend', () => {
 }, { passive: true });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Heartbeat (keep server alive)
+// Heartbeat
 // ═══════════════════════════════════════════════════════════════════════════
 
 setInterval(() => {
-  fetch('/api/heartbeat').catch(() => {
-    // Server might be down, ignore
-  });
-}, 60 * 1000); // Every minute
+  fetch('/api/heartbeat').catch(() => {});
+}, 60 * 1000);
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Visibility Change (pause when hidden)
-// ═══════════════════════════════════════════════════════════════════════════
-
-document.addEventListener('visibilitychange', () => {
-  if (document.hidden) {
-    // Tab is hidden, could pause simulation
-  } else {
-    // Tab is visible again
-    // Could refresh data here
-  }
-});
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Console Info
+// Console Branding
 // ═══════════════════════════════════════════════════════════════════════════
 
 console.log(
-  '%cGigaMind Knowledge Graph',
-  'font-size: 16px; font-weight: bold; color: #a78bfa;'
+  '%cGigaMind Neural Observatory',
+  'font-size: 14px; font-weight: 600; color: #d4a574; font-family: Georgia, serif;'
 );
 console.log(
-  '%cKeyboard shortcuts: / (search), +/- (zoom), 0 (reset), ESC (exit focus), F (fullscreen)',
-  'color: #8888a0;'
+  '%c/ search  +/- zoom  0 reset  L labels  M minimap  F fullscreen  ESC exit',
+  'color: #5c5c6c; font-family: monospace; font-size: 11px;'
 );

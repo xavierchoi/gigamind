@@ -6,120 +6,244 @@
   <title>GigaMind — Knowledge Graph</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <!-- Grain overlay for texture -->
-  <div class="grain-overlay" aria-hidden="true"></div>
+  <!-- Subtle texture overlay -->
+  <div class="texture-overlay" aria-hidden="true"></div>
 
-  <!-- Background gradient layers -->
-  <div class="bg-layer bg-layer--1" aria-hidden="true"></div>
-  <div class="bg-layer bg-layer--2" aria-hidden="true"></div>
+  <!-- Ambient background -->
+  <div class="ambient-bg" aria-hidden="true">
+    <div class="ambient-orb ambient-orb--1"></div>
+    <div class="ambient-orb ambient-orb--2"></div>
+  </div>
 
   <!-- Main graph canvas -->
   <svg id="graph-canvas"></svg>
 
-  <!-- Stats panel (top-left) -->
-  <aside class="panel panel--stats" role="complementary" aria-label="Graph statistics">
-    <header class="panel__header">
-      <span class="panel__icon">◈</span>
-      <h1 class="panel__title">GigaMind</h1>
-    </header>
-    <div class="stats-grid">
-      <div class="stat">
-        <span class="stat__value" id="stat-notes">—</span>
-        <span class="stat__label">노트</span>
+  <!-- Header bar -->
+  <header class="header">
+    <div class="header__brand">
+      <div class="header__logo">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="3" fill="currentColor"/>
+          <circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.5" opacity="0.5"/>
+          <circle cx="12" cy="12" r="11" stroke="currentColor" stroke-width="1" opacity="0.25"/>
+        </svg>
       </div>
-      <div class="stat">
-        <span class="stat__value" id="stat-connections">—</span>
-        <span class="stat__label">연결</span>
+      <span class="header__title">GigaMind</span>
+      <span class="header__version">v0.1.5</span>
+    </div>
+    <div class="header__stats">
+      <div class="header__stat">
+        <span class="header__stat-value" id="stat-notes">—</span>
+        <span class="header__stat-label">nodes</span>
       </div>
-      <div class="stat stat--warning">
-        <span class="stat__value" id="stat-dangling">—</span>
-        <span class="stat__label">미생성</span>
+      <div class="header__stat-divider"></div>
+      <div class="header__stat">
+        <span class="header__stat-value" id="stat-connections">—</span>
+        <span class="header__stat-label">edges</span>
       </div>
-      <div class="stat stat--muted">
-        <span class="stat__value" id="stat-orphan">—</span>
-        <span class="stat__label">고립</span>
+      <div class="header__stat-divider"></div>
+      <div class="header__stat header__stat--warning">
+        <span class="header__stat-value" id="stat-dangling">—</span>
+        <span class="header__stat-label">dangling</span>
+      </div>
+      <div class="header__stat-divider"></div>
+      <div class="header__stat header__stat--muted">
+        <span class="header__stat-value" id="stat-orphan">—</span>
+        <span class="header__stat-label">orphan</span>
       </div>
     </div>
-  </aside>
+  </header>
 
-  <!-- Controls panel (top-right) -->
-  <aside class="panel panel--controls" role="toolbar" aria-label="Graph controls">
-    <div class="search-container">
+  <!-- Command bar (search + filters) -->
+  <div class="command-bar">
+    <div class="search-wrapper">
+      <div class="search-icon">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"/>
+          <path d="M21 21l-4.35-4.35"/>
+        </svg>
+      </div>
       <input
-        type="search"
+        type="text"
         id="search-input"
         class="search-input"
-        placeholder="노트 검색..."
+        placeholder="Search nodes..."
         autocomplete="off"
+        spellcheck="false"
       >
-      <kbd class="search-hint">/</kbd>
+      <kbd class="search-shortcut">/</kbd>
+      <!-- Search results dropdown -->
+      <div class="search-results" id="search-results" hidden>
+        <div class="search-results__header">
+          <span class="search-results__count" id="search-count">0 results</span>
+          <button class="search-results__clear" id="search-clear">Clear</button>
+        </div>
+        <ul class="search-results__list" id="search-results-list"></ul>
+      </div>
     </div>
-    <div class="control-buttons">
-      <button class="control-btn" id="zoom-in" title="확대">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-          <path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-        </svg>
-      </button>
-      <button class="control-btn" id="zoom-out" title="축소">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-          <path d="M3 8h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-        </svg>
-      </button>
-      <button class="control-btn" id="reset-view" title="뷰 초기화">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-          <path d="M2 8a6 6 0 1 1 1.5 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-          <path d="M2 12V8h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-      </button>
-    </div>
-  </aside>
 
-  <!-- Node detail sidebar (right) -->
-  <aside class="sidebar" id="node-sidebar" role="complementary" aria-label="Note details" hidden>
-    <button class="sidebar__close" id="close-sidebar" aria-label="닫기">×</button>
+    <!-- Filter toggles -->
+    <div class="filter-group">
+      <button class="filter-btn filter-btn--active" data-filter="note" title="Notes">
+        <span class="filter-indicator filter-indicator--note"></span>
+        <span class="filter-label">Notes</span>
+      </button>
+      <button class="filter-btn filter-btn--active" data-filter="orphan" title="Orphan nodes">
+        <span class="filter-indicator filter-indicator--orphan"></span>
+        <span class="filter-label">Orphan</span>
+      </button>
+      <button class="filter-btn filter-btn--active" data-filter="dangling" title="Dangling references">
+        <span class="filter-indicator filter-indicator--dangling"></span>
+        <span class="filter-label">Dangling</span>
+      </button>
+    </div>
+
+    <!-- View controls -->
+    <div class="control-group">
+      <button class="control-btn" id="zoom-out" title="Zoom out (-)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+      </button>
+      <span class="zoom-level" id="zoom-level">100%</span>
+      <button class="control-btn" id="zoom-in" title="Zoom in (+)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="12" y1="5" x2="12" y2="19"/>
+          <line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+      </button>
+      <div class="control-divider"></div>
+      <button class="control-btn" id="reset-view" title="Reset view (0)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+          <path d="M3 3v5h5"/>
+        </svg>
+      </button>
+      <button class="control-btn" id="toggle-labels" title="Toggle labels">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M4 7V4h16v3"/>
+          <path d="M9 20h6"/>
+          <path d="M12 4v16"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Minimap -->
+  <div class="minimap" id="minimap">
+    <div class="minimap__header">
+      <span class="minimap__title">Overview</span>
+      <button class="minimap__toggle" id="minimap-toggle" title="Collapse">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </button>
+    </div>
+    <canvas id="minimap-canvas" width="180" height="120"></canvas>
+    <div class="minimap__viewport" id="minimap-viewport"></div>
+  </div>
+
+  <!-- Node detail sidebar -->
+  <aside class="sidebar" id="node-sidebar" hidden>
+    <button class="sidebar__close" id="close-sidebar" aria-label="Close">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="18" y1="6" x2="6" y2="18"/>
+        <line x1="6" y1="6" x2="18" y2="18"/>
+      </svg>
+    </button>
+
     <header class="sidebar__header">
-      <span class="sidebar__type" id="sidebar-type">NOTE</span>
+      <span class="sidebar__badge" id="sidebar-type">NOTE</span>
       <h2 class="sidebar__title" id="sidebar-title">—</h2>
       <p class="sidebar__path" id="sidebar-path">—</p>
     </header>
+
+    <!-- Note preview -->
+    <div class="sidebar__preview" id="sidebar-preview">
+      <p class="sidebar__preview-text" id="sidebar-preview-text"></p>
+    </div>
+
+    <!-- Connection stats -->
+    <div class="sidebar__stats">
+      <div class="sidebar__stat">
+        <span class="sidebar__stat-icon">←</span>
+        <span class="sidebar__stat-value" id="backlinks-count">0</span>
+        <span class="sidebar__stat-label">inbound</span>
+      </div>
+      <div class="sidebar__stat">
+        <span class="sidebar__stat-icon">→</span>
+        <span class="sidebar__stat-value" id="forwardlinks-count">0</span>
+        <span class="sidebar__stat-label">outbound</span>
+      </div>
+    </div>
+
     <div class="sidebar__section">
       <h3 class="sidebar__section-title">
-        <span class="sidebar__section-icon">←</span>
-        백링크
-        <span class="sidebar__count" id="backlinks-count">0</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="15 18 9 12 15 6"/>
+        </svg>
+        Backlinks
       </h3>
       <ul class="sidebar__list" id="backlinks-list"></ul>
     </div>
+
     <div class="sidebar__section">
       <h3 class="sidebar__section-title">
-        <span class="sidebar__section-icon">→</span>
-        포워드 링크
-        <span class="sidebar__count" id="forwardlinks-count">0</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="9 18 15 12 9 6"/>
+        </svg>
+        Forward Links
       </h3>
       <ul class="sidebar__list" id="forwardlinks-list"></ul>
     </div>
   </aside>
 
-  <!-- Focus mode indicator (bottom-center) -->
-  <div class="focus-indicator" id="focus-indicator" hidden>
-    <span class="focus-indicator__text">포커스 모드</span>
-    <button class="focus-indicator__exit" id="exit-focus">
-      전체 보기
-      <kbd>ESC</kbd>
+  <!-- Focus mode indicator -->
+  <div class="focus-bar" id="focus-indicator" hidden>
+    <div class="focus-bar__content">
+      <span class="focus-bar__icon">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <circle cx="12" cy="12" r="3"/>
+        </svg>
+      </span>
+      <span class="focus-bar__label">Focus Mode</span>
+      <span class="focus-bar__node" id="focus-node-name">—</span>
+    </div>
+    <button class="focus-bar__exit" id="exit-focus">
+      Exit <kbd>ESC</kbd>
     </button>
   </div>
 
-  <!-- Tooltip -->
-  <div class="tooltip" id="tooltip" role="tooltip" hidden></div>
+  <!-- Enhanced tooltip -->
+  <div class="tooltip" id="tooltip" role="tooltip" hidden>
+    <div class="tooltip__title" id="tooltip-title"></div>
+    <div class="tooltip__meta" id="tooltip-meta"></div>
+  </div>
 
   <!-- Loading state -->
   <div class="loading" id="loading">
-    <div class="loading__spinner"></div>
-    <span class="loading__text">그래프 불러오는 중...</span>
+    <div class="loading__content">
+      <div class="loading__rings">
+        <div class="loading__ring loading__ring--1"></div>
+        <div class="loading__ring loading__ring--2"></div>
+        <div class="loading__ring loading__ring--3"></div>
+      </div>
+      <span class="loading__text">Initializing neural graph...</span>
+    </div>
+  </div>
+
+  <!-- Keyboard shortcuts help -->
+  <div class="shortcuts-hint">
+    <kbd>/</kbd> search
+    <kbd>+</kbd><kbd>-</kbd> zoom
+    <kbd>0</kbd> reset
+    <kbd>ESC</kbd> exit
+    <kbd>F</kbd> fullscreen
   </div>
 
   <script src="https://d3js.org/d3.v7.min.js"></script>

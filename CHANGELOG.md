@@ -5,6 +5,84 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.6] - 2025-12-22
+
+### Added
+
+#### Neural Observatory UI Theme
+- **Complete UI Redesign**: New "Neural Observatory" visual theme for graph visualization
+  - Warm gold accent color palette (#d4a574) replacing generic purple
+  - Premium typography: Crimson Pro (serif) + IBM Plex Sans + JetBrains Mono
+  - Reduced grain overlay opacity (0.35 to 0.12) for improved readability
+  - Smoother force-directed simulation with optimized alpha (0.8 to 0.3)
+  - Standardized animation duration to 300ms throughout UI
+
+#### Enhanced UI Components
+- **Search Results Dropdown**: Interactive search interface with keyboard navigation
+  - Arrow keys (↑↓) to navigate results
+  - Enter key to select result
+  - Dropdown menu display with search suggestions
+- **Minimap Component**: Bottom-left graph overview panel
+  - Full graph visualization at reduced scale
+  - Interactive viewport indicator
+  - Quick navigation reference
+- **Filter Panel**: Sidebar controls to toggle node types
+  - Filter by Notes, Orphan nodes, Dangling links
+  - Real-time visibility toggling
+- **Enhanced Tooltips**: Improved information display on node hover
+  - Connection count details (incoming/outgoing edges)
+  - Node type indicators
+- **Link Direction Arrows**: Visual indicators showing edge directionality
+- **Zoom Level Display**: Percentage indicator in UI controls
+- **Animated Stat Counters**: Smooth number animations for graph statistics
+
+#### New Keyboard Shortcuts
+- `L` - Toggle node labels on/off
+- `M` - Toggle minimap visibility
+
+### Changed
+
+- **Graph Visualization Engine**: Updated to support enhanced UI features
+  - Improved animation timing and smoothness
+  - Better simulation physics parameters
+  - Enhanced data binding for minimap and filters
+
+### Files Modified
+- `/src/graph-server/public/index.html` - Complete structural redesign with new component containers
+- `/src/graph-server/public/styles.css` - Comprehensive rewrite (~1300 lines) with new theme
+- `/src/graph-server/public/js/graph.js` - Extended with minimap, filter logic, enhanced animations
+- `/src/graph-server/public/js/controls.js` - Added search dropdown and filter panel functionality
+
+### Known Issues
+
+#### Critical: Graph Rendering Failure
+- **Issue**: Graph nodes and links are not rendering on canvas
+  - Only UI shell visible (header, command bar, minimap frame, sidebar)
+  - D3 visualization elements not appearing despite correct HTML structure
+  - Affects all graph display functionality
+
+- **Attempted Fixes** (unsuccessful):
+  - Changed node initial opacity from 0 to 1
+  - Modified circle initial radius from 0 to calculated value
+  - Added guards for undefined x/y positions
+  - Increased link opacity in CSS (12% to 25%)
+  - Added default fill color for node circles
+
+- **Possible Root Causes**:
+  1. API endpoint `/api/graph` may not return data correctly
+  2. D3.js data binding issues with node/link selection
+  3. SVG structure or z-index layering problems
+  4. Force simulation initialization failure
+  5. JavaScript errors in browser console
+
+- **Priority**: High - Blocks all graph visualization functionality
+- **Next Steps**:
+  - Check browser console for JavaScript errors
+  - Verify `/api/graph` endpoint returns valid JSON
+  - Debug D3 selection and data binding
+  - Review SVG element rendering and CSS z-index
+  - Validate force simulation tick events
+
 ## [0.1.5] - 2025-12-22
 
 ### Added
