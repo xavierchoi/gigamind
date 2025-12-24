@@ -6,12 +6,13 @@ GigaMind is a conversational knowledge management tool that helps you capture, o
 
 ## Features
 
-- **Natural language note creation and search** - Create and find notes through conversation, no rigid syntax required
+- **Semantic search with RAG** - Find notes using natural language queries powered by hybrid vector + keyword search with graph-aware re-ranking
 - **Digital clone mode** - Ask questions and get answers based on your accumulated knowledge, as if asking yourself
 - **Obsidian/Markdown import** - Seamlessly import existing notes with wikilink preservation
 - **Interactive graph visualization** - Explore connections between your notes in a visual knowledge graph
-- **Session management with auto-recovery** - Never lose your conversation context, with automatic session restoration
+- **Encrypted session management** - Conversations are encrypted at rest (AES-256-GCM) with automatic session recovery
 - **Web research integration** - Research topics online and automatically save findings to your notes
+- **Multilingual support** - Full Korean and English localization
 
 ## Quick Start
 
@@ -44,16 +45,16 @@ On first launch, GigaMind will guide you through an interactive onboarding proce
 | Command | Description |
 |---------|-------------|
 | `/help` | Show all available commands |
-| `/search <query>` | Search through your notes |
+| `/search <query>` | Semantic search through your notes (uses RAG hybrid retrieval) |
 | `/note <content>` | Create a new note from your input |
 | `/clone <question>` | Answer questions based on your notes (as your digital clone) |
 | `/me <question>` | Alias for `/clone` |
 | `/graph` | Visualize note connections in browser |
 | `/session list` | List saved conversation sessions |
 | `/session export` | Export current session as markdown |
-| `/config` | View and edit settings |
+| `/config` | View and edit settings (including language preferences) |
 | `/import` | Import notes from Obsidian or markdown folders |
-| `/clear` | Clear current conversation |
+| `/clear` | Clear current conversation
 
 ### Natural Language Commands
 
@@ -120,7 +121,9 @@ GigaMind follows an agent-based architecture powered by Claude AI:
 
 - **Agent SDK Integration** - Built on the Claude Agent SDK for reliable AI interactions
 - **Specialized Subagents** - Different agents handle search, note creation, clone mode, and research
-- **Session Persistence** - Conversations are automatically saved and can be resumed
+- **RAG Pipeline** - Semantic search powered by embeddings, document chunking, indexing, and hybrid retrieval with graph-based re-ranking
+- **Command Pattern** - Extensible command architecture with BaseCommand for adding new features
+- **Session Persistence** - Encrypted conversations with automatic save and resume
 - **Graph Analysis** - Notes are analyzed for connections via wikilinks and tags
 
 For detailed implementation guidelines, see:
@@ -136,9 +139,12 @@ src/
 │   ├── client.ts    # Main GigaMind client
 │   ├── session.ts   # Session management
 │   └── subagent.ts  # Specialized agent handlers
+├── commands/        # Command pattern implementations
 ├── components/      # React/Ink UI components
 ├── graph-server/    # Graph visualization server
-└── utils/           # Utilities (config, graph analysis, etc.)
+├── i18n/            # Internationalization (ko/en)
+├── rag/             # RAG pipeline (embeddings, chunker, indexer, retriever)
+└── utils/           # Utilities (config, keychain, encryption, etc.)
 ```
 
 ## Configuration
@@ -146,8 +152,9 @@ src/
 GigaMind stores its configuration in `~/.gigamind/`:
 
 - `config.json` - Main configuration file
-- `sessions/` - Conversation session history
+- `sessions/` - Encrypted conversation session history
 - `notes/` - Default notes directory (customizable)
+- `credentials.enc` - Encrypted API key (fallback when OS Keychain unavailable)
 
 ### Configuration Options
 
@@ -157,6 +164,15 @@ GigaMind stores its configuration in `~/.gigamind/`:
 | `userName` | Your name for personalized greetings | - |
 | `model` | Claude model to use | `claude-sonnet-4-20250514` |
 | `noteDetail` | Note detail level (concise/balanced/verbose) | `balanced` |
+| `language` | UI language (ko/en) | `ko` |
+
+## Security
+
+GigaMind takes security seriously:
+
+- **API Key Storage** - Keys are stored in OS Keychain (macOS Keychain, Windows Credential Vault, Linux Secret Service) with AES-256-GCM encrypted file fallback
+- **Session Encryption** - All conversation data is encrypted at rest using AES-256-GCM with machine-specific key derivation
+- **Local-only Server** - The graph visualization server binds only to localhost
 
 ## License
 

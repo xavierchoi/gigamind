@@ -18,7 +18,7 @@ export { HelpCommand, helpCommand } from "./HelpCommand.js";
 export { CloneCommand, cloneCommand } from "./CloneCommand.js";
 export { NoteCommand, noteCommand } from "./NoteCommand.js";
 export { GraphCommand, graphCommand } from "./GraphCommand.js";
-export { SessionCommand, createSessionCommand } from "./SessionCommand.js";
+export { SessionCommand, sessionCommand } from "./SessionCommand.js";
 export { SearchCommand, searchCommand } from "./SearchCommand.js";
 export { ClearCommand, clearCommand } from "./ClearCommand.js";
 

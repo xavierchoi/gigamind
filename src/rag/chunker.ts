@@ -23,6 +23,8 @@ export interface ChunkConfig {
   preserveSentences: boolean;
   /** 헤더와 내용을 함께 유지할지 여부. Default: true */
   preserveHeaders: boolean;
+  /** 코드 블록 보호 여부. Default: true */
+  preserveCodeBlocks: boolean;
 }
 
 /**
@@ -35,6 +37,10 @@ export interface ChunkMetadata {
   headerLevel?: number;
   /** 헤더 텍스트 */
   headerText?: string;
+  /** 청크가 코드 블록을 포함하는지 여부 */
+  hasCodeBlock?: boolean;
+  /** 코드 블록 언어 (여러 개일 경우 쉼표로 구분) */
+  codeLanguages?: string;
 }
 
 /**
@@ -63,6 +69,32 @@ export interface FrontmatterResult {
   content: string;
   /** 프론트매터 종료 위치 (원본 문서 기준) */
   contentStartOffset: number;
+}
+
+/**
+ * 코드 블록 정보
+ */
+export interface CodeBlock {
+  /** 원본 코드 블록 전체 (```...```) */
+  original: string;
+  /** 코드 언어 (javascript, python 등) */
+  language: string;
+  /** 코드 블록 시작 오프셋 */
+  startOffset: number;
+  /** 코드 블록 끝 오프셋 */
+  endOffset: number;
+}
+
+/**
+ * 코드 블록 추출 결과
+ */
+interface CodeBlockExtractionResult {
+  /** 추출된 코드 블록 배열 */
+  blocks: CodeBlock[];
+  /** 코드 블록이 플레이스홀더로 교체된 콘텐츠 */
+  contentWithPlaceholders: string;
+  /** 플레이스홀더 -> 코드 블록 매핑 */
+  placeholderMap: Map<string, CodeBlock>;
 }
 
 /**
@@ -97,7 +129,15 @@ const DEFAULT_CONFIG: ChunkConfig = {
   overlapSize: 200,
   preserveSentences: true,
   preserveHeaders: true,
+  preserveCodeBlocks: true,
 };
+
+/** 코드 블록 플레이스홀더 프리픽스 */
+const CODE_BLOCK_PLACEHOLDER_PREFIX = "__CODE_BLOCK_";
+const CODE_BLOCK_PLACEHOLDER_SUFFIX = "__";
+
+/** 코드 블록 정규식 (```로 시작하고 끝나는 블록) */
+const CODE_BLOCK_REGEX = /```(\w*)\n?([\s\S]*?)```/g;
 
 /**
  * 한국어 문장 종결 패턴
@@ -174,6 +214,11 @@ export class DocumentChunker {
 
     if (!bodyContent.trim()) {
       return [];
+    }
+
+    // 코드 블록 보호 모드
+    if (this.config.preserveCodeBlocks) {
+      return this.chunkWithCodeBlockProtection(bodyContent, contentStartOffset);
     }
 
     // 헤더 보존 모드인 경우 섹션별로 분할
@@ -571,5 +616,570 @@ export class DocumentChunker {
     }
 
     return overlapRegion;
+  }
+
+  /**
+   * 코드 블록 추출 및 플레이스홀더로 교체
+   * @param content 원본 콘텐츠
+   * @returns 코드 블록 추출 결과
+   */
+  extractCodeBlocks(content: string): CodeBlockExtractionResult {
+    const blocks: CodeBlock[] = [];
+    const placeholderMap = new Map<string, CodeBlock>();
+    let blockIndex = 0;
+    let contentWithPlaceholders = content;
+    let offsetAdjustment = 0;
+
+    // 코드 블록 정규식 리셋 (global flag 때문에)
+    const regex = new RegExp(CODE_BLOCK_REGEX.source, "g");
+    let match: RegExpExecArray | null;
+
+    while ((match = regex.exec(content)) !== null) {
+      const original = match[0];
+      const language = match[1] || "";
+      const startOffset = match.index;
+      const endOffset = startOffset + original.length;
+
+      const block: CodeBlock = {
+        original,
+        language,
+        startOffset,
+        endOffset,
+      };
+
+      const placeholder = `${CODE_BLOCK_PLACEHOLDER_PREFIX}${blockIndex}${CODE_BLOCK_PLACEHOLDER_SUFFIX}`;
+
+      blocks.push(block);
+      placeholderMap.set(placeholder, block);
+
+      // 플레이스홀더로 교체 (오프셋 조정 포함)
+      const adjustedStart = startOffset - offsetAdjustment;
+      const adjustedEnd = endOffset - offsetAdjustment;
+      contentWithPlaceholders =
+        contentWithPlaceholders.slice(0, adjustedStart) +
+        placeholder +
+        contentWithPlaceholders.slice(adjustedEnd);
+
+      // 오프셋 조정 (원본 길이 - 플레이스홀더 길이)
+      offsetAdjustment += original.length - placeholder.length;
+      blockIndex++;
+    }
+
+    return {
+      blocks,
+      contentWithPlaceholders,
+      placeholderMap,
+    };
+  }
+
+  /**
+   * 플레이스홀더를 원본 코드 블록으로 복원
+   * @param content 플레이스홀더가 포함된 콘텐츠
+   * @param placeholderMap 플레이스홀더 -> 코드 블록 매핑
+   * @returns 복원된 콘텐츠
+   */
+  private restoreCodeBlocks(
+    content: string,
+    placeholderMap: Map<string, CodeBlock>
+  ): string {
+    let restored = content;
+
+    for (const [placeholder, block] of placeholderMap) {
+      restored = restored.replace(placeholder, block.original);
+    }
+
+    return restored;
+  }
+
+  /**
+   * 콘텐츠에서 코드 블록 언어 목록 추출
+   * @param content 콘텐츠
+   * @param placeholderMap 플레이스홀더 매핑
+   * @returns 코드 블록 언어 배열
+   */
+  private getCodeLanguagesInContent(
+    content: string,
+    placeholderMap: Map<string, CodeBlock>
+  ): string[] {
+    const languages: string[] = [];
+
+    for (const [placeholder, block] of placeholderMap) {
+      if (content.includes(placeholder) && block.language) {
+        languages.push(block.language);
+      }
+    }
+
+    return [...new Set(languages)]; // 중복 제거
+  }
+
+  /**
+   * 콘텐츠에 코드 블록이 포함되어 있는지 확인
+   * @param content 콘텐츠
+   * @param placeholderMap 플레이스홀더 매핑
+   * @returns 코드 블록 포함 여부
+   */
+  private hasCodeBlockInContent(
+    content: string,
+    placeholderMap: Map<string, CodeBlock>
+  ): boolean {
+    for (const placeholder of placeholderMap.keys()) {
+      if (content.includes(placeholder)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * 코드 블록을 보호하면서 청킹
+   * 코드 블록은 하나의 단위로 유지되며, maxChunkSize보다 크면 별도 청크로 분리
+   * @param content 본문 내용
+   * @param baseOffset 기본 오프셋
+   * @returns 청크 배열
+   */
+  private chunkWithCodeBlockProtection(
+    content: string,
+    baseOffset: number
+  ): Chunk[] {
+    const { blocks, contentWithPlaceholders, placeholderMap } =
+      this.extractCodeBlocks(content);
+
+    if (blocks.length === 0) {
+      // 코드 블록이 없으면 일반 청킹 수행
+      if (this.config.preserveHeaders) {
+        return this.chunkWithHeadersInternal(content, baseOffset, null);
+      }
+      return this.chunkPlainTextInternal(content, baseOffset, null);
+    }
+
+    // 코드 블록이 있는 경우: 플레이스홀더로 청킹 후 복원
+    let chunks: Chunk[];
+    if (this.config.preserveHeaders) {
+      chunks = this.chunkWithHeadersInternal(
+        contentWithPlaceholders,
+        baseOffset,
+        placeholderMap
+      );
+    } else {
+      chunks = this.chunkPlainTextInternal(
+        contentWithPlaceholders,
+        baseOffset,
+        placeholderMap
+      );
+    }
+
+    // 각 청크의 플레이스홀더를 원본 코드 블록으로 복원하고 메타데이터 업데이트
+    return chunks.map((chunk) => {
+      const hasCodeBlock = this.hasCodeBlockInContent(
+        chunk.content,
+        placeholderMap
+      );
+      const codeLanguages = this.getCodeLanguagesInContent(
+        chunk.content,
+        placeholderMap
+      );
+
+      const restoredContent = this.restoreCodeBlocks(
+        chunk.content,
+        placeholderMap
+      );
+
+      return {
+        ...chunk,
+        content: restoredContent,
+        metadata: {
+          ...chunk.metadata,
+          hasCodeBlock,
+          codeLanguages:
+            codeLanguages.length > 0 ? codeLanguages.join(",") : undefined,
+        },
+      };
+    });
+  }
+
+  /**
+   * 헤더를 보존하면서 청킹 (내부 구현)
+   * @param content 본문 내용
+   * @param baseOffset 기본 오프셋
+   * @param placeholderMap 코드 블록 플레이스홀더 맵 (null이면 코드 블록 보호 없음)
+   * @returns 청크 배열
+   */
+  private chunkWithHeadersInternal(
+    content: string,
+    baseOffset: number,
+    placeholderMap: Map<string, CodeBlock> | null
+  ): Chunk[] {
+    const sections = this.splitByHeaders(content);
+    const chunks: Chunk[] = [];
+    let chunkIndex = 0;
+
+    for (const section of sections) {
+      const sectionChunks = this.chunkSectionInternal(
+        section,
+        baseOffset,
+        chunkIndex,
+        placeholderMap
+      );
+      chunks.push(...sectionChunks);
+      chunkIndex += sectionChunks.length;
+    }
+
+    return chunks;
+  }
+
+  /**
+   * 단일 섹션을 청크로 분할 (내부 구현)
+   * @param section 섹션 정보
+   * @param baseOffset 기본 오프셋
+   * @param startIndex 시작 청크 인덱스
+   * @param placeholderMap 코드 블록 플레이스홀더 맵
+   * @returns 청크 배열
+   */
+  private chunkSectionInternal(
+    section: Section,
+    baseOffset: number,
+    startIndex: number,
+    placeholderMap: Map<string, CodeBlock> | null
+  ): Chunk[] {
+    const { maxChunkSize, overlapSize } = this.config;
+
+    // 코드 블록 플레이스홀더가 있는 경우 실제 크기 계산
+    let effectiveSize = section.content.length;
+    if (placeholderMap) {
+      let testContent = section.content;
+      for (const [placeholder, block] of placeholderMap) {
+        testContent = testContent.replace(placeholder, block.original);
+      }
+      effectiveSize = testContent.length;
+    }
+
+    // 섹션이 maxChunkSize 이하면 그대로 반환
+    if (effectiveSize <= maxChunkSize) {
+      return [
+        {
+          content: section.content,
+          startOffset: baseOffset + section.startOffset,
+          endOffset: baseOffset + section.endOffset,
+          index: startIndex,
+          metadata: {
+            hasHeader: !!section.header,
+            headerLevel: section.header?.level,
+            headerText: section.header?.text,
+          },
+        },
+      ];
+    }
+
+    // 플레이스홀더 경계를 고려한 분할점 찾기
+    const chunks: Chunk[] = [];
+    const segments = this.splitContentPreservingPlaceholders(
+      section.content,
+      placeholderMap
+    );
+
+    let currentChunk = "";
+    let currentStart = section.startOffset;
+    let chunkIndex = startIndex;
+
+    for (const segment of segments) {
+      // 세그먼트가 플레이스홀더인지 확인
+      const isPlaceholder =
+        placeholderMap && this.isCodeBlockPlaceholder(segment);
+      const segmentEffectiveSize = isPlaceholder
+        ? placeholderMap.get(segment)!.original.length
+        : segment.length;
+
+      const currentEffectiveSize = this.getEffectiveSize(
+        currentChunk,
+        placeholderMap
+      );
+      const potentialSize = currentEffectiveSize + segmentEffectiveSize;
+
+      if (potentialSize > maxChunkSize && currentChunk) {
+        // 현재 청크 저장
+        chunks.push({
+          content: currentChunk.trim(),
+          startOffset: baseOffset + currentStart,
+          endOffset:
+            baseOffset + currentStart + currentChunk.length,
+          index: chunkIndex,
+          metadata: {
+            hasHeader: chunkIndex === startIndex && !!section.header,
+            headerLevel:
+              chunkIndex === startIndex ? section.header?.level : undefined,
+            headerText:
+              chunkIndex === startIndex ? section.header?.text : undefined,
+          },
+        });
+
+        chunkIndex++;
+
+        // 오버랩 처리 (플레이스홀더는 오버랩에서 제외)
+        const overlapText = this.getOverlapTextPreservingPlaceholders(
+          currentChunk,
+          overlapSize,
+          placeholderMap
+        );
+        currentStart =
+          currentStart + currentChunk.length - overlapText.length;
+        currentChunk = overlapText + segment;
+      } else {
+        currentChunk += segment;
+      }
+    }
+
+    // 마지막 청크 저장
+    if (currentChunk.trim()) {
+      chunks.push({
+        content: currentChunk.trim(),
+        startOffset: baseOffset + currentStart,
+        endOffset: baseOffset + section.endOffset,
+        index: chunkIndex,
+        metadata: {
+          hasHeader: chunkIndex === startIndex && !!section.header,
+          headerLevel:
+            chunkIndex === startIndex ? section.header?.level : undefined,
+          headerText:
+            chunkIndex === startIndex ? section.header?.text : undefined,
+        },
+      });
+    }
+
+    return chunks;
+  }
+
+  /**
+   * 플레이스홀더인지 확인
+   * @param text 텍스트
+   * @returns 플레이스홀더 여부
+   */
+  private isCodeBlockPlaceholder(text: string): boolean {
+    return (
+      text.startsWith(CODE_BLOCK_PLACEHOLDER_PREFIX) &&
+      text.endsWith(CODE_BLOCK_PLACEHOLDER_SUFFIX)
+    );
+  }
+
+  /**
+   * 플레이스홀더를 보존하면서 콘텐츠 분할
+   * 코드 블록 플레이스홀더는 하나의 단위로 유지
+   * @param content 콘텐츠
+   * @param placeholderMap 플레이스홀더 맵
+   * @returns 세그먼트 배열
+   */
+  private splitContentPreservingPlaceholders(
+    content: string,
+    placeholderMap: Map<string, CodeBlock> | null
+  ): string[] {
+    if (!placeholderMap || placeholderMap.size === 0) {
+      // 플레이스홀더가 없으면 문장 단위로 분할
+      return this.splitSentences(content);
+    }
+
+    const segments: string[] = [];
+    let currentPosition = 0;
+
+    // 플레이스홀더 위치 찾기
+    const placeholderPositions: Array<{
+      placeholder: string;
+      start: number;
+      end: number;
+    }> = [];
+
+    for (const placeholder of placeholderMap.keys()) {
+      let searchPos = 0;
+      while (true) {
+        const idx = content.indexOf(placeholder, searchPos);
+        if (idx === -1) break;
+        placeholderPositions.push({
+          placeholder,
+          start: idx,
+          end: idx + placeholder.length,
+        });
+        searchPos = idx + placeholder.length;
+      }
+    }
+
+    // 시작 위치로 정렬
+    placeholderPositions.sort((a, b) => a.start - b.start);
+
+    for (const pos of placeholderPositions) {
+      // 플레이스홀더 이전 텍스트를 문장 단위로 분할
+      if (pos.start > currentPosition) {
+        const textBefore = content.slice(currentPosition, pos.start);
+        const sentences = this.splitSentences(textBefore);
+        segments.push(...sentences);
+      }
+
+      // 플레이스홀더 자체를 하나의 세그먼트로 추가
+      segments.push(pos.placeholder);
+      currentPosition = pos.end;
+    }
+
+    // 마지막 플레이스홀더 이후 텍스트
+    if (currentPosition < content.length) {
+      const textAfter = content.slice(currentPosition);
+      const sentences = this.splitSentences(textAfter);
+      segments.push(...sentences);
+    }
+
+    return segments.filter((s) => s.length > 0);
+  }
+
+  /**
+   * 실제 크기 계산 (플레이스홀더를 원본 크기로 변환)
+   * @param content 콘텐츠
+   * @param placeholderMap 플레이스홀더 맵
+   * @returns 실제 크기
+   */
+  private getEffectiveSize(
+    content: string,
+    placeholderMap: Map<string, CodeBlock> | null
+  ): number {
+    if (!placeholderMap) {
+      return content.length;
+    }
+
+    let size = content.length;
+    for (const [placeholder, block] of placeholderMap) {
+      const count = (content.match(new RegExp(placeholder, "g")) || []).length;
+      if (count > 0) {
+        size += count * (block.original.length - placeholder.length);
+      }
+    }
+    return size;
+  }
+
+  /**
+   * 플레이스홀더를 보존하면서 오버랩 텍스트 추출
+   * @param text 원본 텍스트
+   * @param overlapSize 오버랩 크기
+   * @param placeholderMap 플레이스홀더 맵
+   * @returns 오버랩 텍스트
+   */
+  private getOverlapTextPreservingPlaceholders(
+    text: string,
+    overlapSize: number,
+    placeholderMap: Map<string, CodeBlock> | null
+  ): string {
+    if (!placeholderMap) {
+      return this.getOverlapText(text, overlapSize);
+    }
+
+    // 플레이스홀더가 오버랩 영역에 포함되면 해당 플레이스홀더 직전까지만 오버랩
+    const effectiveOverlapSize = Math.min(overlapSize, text.length);
+    const overlapStart = text.length - effectiveOverlapSize;
+    const overlapRegion = text.slice(overlapStart);
+
+    // 오버랩 영역에 플레이스홀더가 포함되어 있는지 확인
+    for (const placeholder of placeholderMap.keys()) {
+      const idx = overlapRegion.indexOf(placeholder);
+      if (idx !== -1) {
+        // 플레이스홀더가 포함되면 플레이스홀더 이후부터 오버랩
+        const afterPlaceholder = overlapRegion.slice(idx + placeholder.length);
+        if (afterPlaceholder.trim()) {
+          return afterPlaceholder;
+        }
+        // 플레이스홀더 이후에 내용이 없으면 오버랩 없이 진행
+        return "";
+      }
+    }
+
+    return this.getOverlapText(text, overlapSize);
+  }
+
+  /**
+   * 일반 텍스트 청킹 (내부 구현 - 플레이스홀더 지원)
+   * @param content 본문 내용
+   * @param baseOffset 기본 오프셋
+   * @param placeholderMap 코드 블록 플레이스홀더 맵
+   * @returns 청크 배열
+   */
+  private chunkPlainTextInternal(
+    content: string,
+    baseOffset: number,
+    placeholderMap: Map<string, CodeBlock> | null
+  ): Chunk[] {
+    const { maxChunkSize, overlapSize, preserveSentences } = this.config;
+    const chunks: Chunk[] = [];
+
+    if (preserveSentences) {
+      const segments = this.splitContentPreservingPlaceholders(
+        content,
+        placeholderMap
+      );
+      let currentChunk = "";
+      let currentStart = 0;
+      let chunkIndex = 0;
+
+      for (const segment of segments) {
+        const currentEffectiveSize = this.getEffectiveSize(
+          currentChunk,
+          placeholderMap
+        );
+        const segmentEffectiveSize = this.getEffectiveSize(
+          segment,
+          placeholderMap
+        );
+        const potentialSize = currentEffectiveSize + segmentEffectiveSize;
+
+        if (potentialSize > maxChunkSize && currentChunk) {
+          chunks.push({
+            content: currentChunk.trim(),
+            startOffset: baseOffset + currentStart,
+            endOffset: baseOffset + currentStart + currentChunk.length,
+            index: chunkIndex,
+            metadata: { hasHeader: false },
+          });
+
+          chunkIndex++;
+
+          const overlapText = this.getOverlapTextPreservingPlaceholders(
+            currentChunk,
+            overlapSize,
+            placeholderMap
+          );
+          currentStart =
+            currentStart + currentChunk.length - overlapText.length;
+          currentChunk = overlapText + segment;
+        } else {
+          currentChunk += segment;
+        }
+      }
+
+      if (currentChunk.trim()) {
+        chunks.push({
+          content: currentChunk.trim(),
+          startOffset: baseOffset + currentStart,
+          endOffset: baseOffset + content.length,
+          index: chunkIndex,
+          metadata: { hasHeader: false },
+        });
+      }
+    } else {
+      // 문자 수 기반 분할
+      let position = 0;
+      let chunkIndex = 0;
+
+      while (position < content.length) {
+        const end = Math.min(position + maxChunkSize, content.length);
+        const chunkContent = content.slice(position, end);
+
+        chunks.push({
+          content: chunkContent.trim(),
+          startOffset: baseOffset + position,
+          endOffset: baseOffset + end,
+          index: chunkIndex,
+          metadata: { hasHeader: false },
+        });
+
+        chunkIndex++;
+        position = end - overlapSize;
+        if (position < 0) position = 0;
+        if (end >= content.length) break;
+      }
+    }
+
+    return chunks;
   }
 }

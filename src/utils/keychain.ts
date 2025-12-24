@@ -27,7 +27,7 @@ const ENCRYPTED_FILE_NAME = "credentials.enc";
 // Encryption constants
 const ALGORITHM = "aes-256-gcm";
 const KEY_LENGTH = 32; // 256 bits
-const IV_LENGTH = 16; // 128 bits for GCM
+const IV_LENGTH = 12; // 96 bits (GCM standard)
 const AUTH_TAG_LENGTH = 16; // 128 bits
 const SALT_LENGTH = 32;
 const PBKDF2_ITERATIONS = 100000;

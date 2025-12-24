@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2025-12-24
+
+### Fixed
+
+#### Security
+- **Keychain IV Length**: Fixed initialization vector length in `src/utils/keychain.ts` to 12 bytes for proper AES-256-GCM compliance
+- **Graph Server Security**: Added Content-Security-Policy header to graph-server for enhanced XSS protection
+
+#### RAG Pipeline
+- **Index Validation**: Added `validateIndex()` method to `src/rag/indexer.ts` for runtime integrity checks
+- **Code Block Protection**: Enhanced `src/rag/chunker.ts` to preserve code blocks during chunking, preventing code fragmentation
+
+### Changed
+
+#### Architecture
+- **Command Pattern Consistency**: Refactored `SessionCommand` to extend `BaseCommand` for uniform command interface
+- **Command Registry Integration**: Updated `src/components/Chat.tsx` to integrate `CommandRegistry` with `buildCommandContext()` for centralized command management
+
+### Enhanced
+
+#### Documentation
+- **README.md**: Updated installation and usage sections with seamless v0.2.0 feature integration
+- **CONTRIBUTING.md**: Enhanced with detailed commit conventions and comprehensive code review guidelines
+
 ## [0.2.0] - 2024-12-24
 
 ### Added

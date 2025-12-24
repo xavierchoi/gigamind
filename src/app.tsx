@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { Box, Text, useApp, useInput } from "ink";
 import { Chat, type Message } from "./components/Chat.js";
 import { StatusBar } from "./components/StatusBar.js";
@@ -7,7 +7,6 @@ import { ConfigMenu } from "./components/ConfigMenu.js";
 import { Import, type ImportResult } from "./components/Import.js";
 import { GigaMindClient, AbortError } from "./agent/client.js";
 import { SessionManager, type SessionSummary } from "./agent/session.js";
-import { createSubagentInvoker } from "./agent/subagent.js";
 import {
   loadConfig,
   saveConfig,
@@ -21,8 +20,19 @@ import {
 } from "./utils/config.js";
 import { getQuickStats } from "./utils/graph/index.js";
 import { getCurrentTime, formatTimeDisplay } from "./utils/time.js";
-
-type AppState = "loading" | "onboarding" | "chat" | "config" | "import" | "session_restore";
+// CommandRegistry imports
+import {
+  CommandRegistry,
+  helpCommand,
+  clearCommand,
+  graphCommand,
+  searchCommand,
+  cloneCommand,
+  noteCommand,
+  sessionCommand,
+  type CommandContext,
+  type AppState,
+} from "./commands/index.js";
 
 // Format error messages to be user-friendly
 function formatErrorMessage(err: unknown): string {
@@ -153,6 +163,53 @@ export function App() {
   // Refs for tracking tool usage in callbacks
   const currentToolRef = useRef<string | null>(null);
   const currentToolStartTimeRef = useRef<number | null>(null);
+
+  // Initialize command registry with all commands
+  const commandRegistry = useMemo(() => {
+    const registry = new CommandRegistry();
+    registry.registerAll([
+      helpCommand,
+      clearCommand,
+      graphCommand,
+      searchCommand,
+      cloneCommand,
+      noteCommand,
+      sessionCommand,
+    ]);
+    return registry;
+  }, []);
+
+  // Refresh stats callback for commands that modify notes
+  const refreshStats = useCallback(async () => {
+    if (config?.notesDir) {
+      const stats = await getQuickStats(config.notesDir);
+      setNoteCount(stats.noteCount);
+      setConnectionCount(stats.connectionCount);
+      setDanglingCount(stats.danglingCount);
+      setOrphanCount(stats.orphanCount);
+    }
+  }, [config?.notesDir]);
+
+  // Build CommandContext for command execution
+  const buildCommandContext = useCallback((): CommandContext => ({
+    config,
+    client,
+    sessionManager,
+    messages,
+    setMessages,
+    setAppState,
+    isLoading,
+    setIsLoading,
+    setLoadingStartTime,
+    setStreamingText,
+    setCurrentTool,
+    setCurrentToolStartTime,
+    abortControllerRef,
+    requestGenerationRef,
+    currentToolRef,
+    currentToolStartTimeRef,
+    refreshStats,
+  }), [config, client, sessionManager, messages, isLoading, refreshStats]);
 
   // Initialize app
   useEffect(() => {
@@ -320,52 +377,18 @@ export function App() {
       // Increment generation for this new request
       const currentGeneration = ++requestGenerationRef.current;
 
-      // Handle special commands
+      // Handle special commands using CommandRegistry
       if (userMessage.startsWith("/")) {
         const parts = userMessage.slice(1).split(" ");
-        const command = parts[0].toLowerCase();
+        const commandName = parts[0].toLowerCase();
+        const args = parts.slice(1);
 
-        // Known commands
-        const IMPLEMENTED_COMMANDS = ["help", "config", "clear", "import", "session", "search", "clone", "me", "note", "graph"];
+        // Commands that require special handling (not in registry)
+        const SPECIAL_COMMANDS = ["config", "import"];
         const UNIMPLEMENTED_COMMANDS = ["sync"];
 
-        if (command === "help") {
-          setMessages((prev) => [
-            ...prev,
-            { role: "user", content: userMessage },
-            {
-              role: "assistant",
-              content: `**사용 가능한 명령어:**
-/help - 도움말
-/config - 설정 보기
-/clear - 대화 내역 정리
-/import - 외부 노트 가져오기
-/session list - 최근 세션 목록 보기
-/session export - 현재 세션 마크다운으로 저장
-/graph - 노트 그래프 시각화 (브라우저)
-/search <query> - 노트 검색
-/clone <질문> - 내 노트 기반으로 나처럼 답변
-/note <내용> - 새 노트 작성
-/sync - Git 동기화 (준비 중)
-
----
-
-**이렇게 말해도 돼요:**
-- "프로젝트 관련 노트 찾아줘" -> 노트 검색
-- "내가 이 주제에 대해 어떻게 생각했더라?" -> 클론 모드
-- "내 노트에서 OO 찾아줘" -> 노트 검색
-- "OO에 대해 메모해줘" -> 노트 작성
-- "내 관점에서 설명해줘" -> 클론 모드
-
-**키보드 단축키:**
-- Ctrl+C: 종료
-- Esc: 응답 취소
-- 방향키 위/아래: 입력 히스토리`,
-            },
-          ]);
-          return;
-        }
-        if (command === "config") {
+        // Handle config command (transitions to config state)
+        if (commandName === "config") {
           setMessages((prev) => [
             ...prev,
             { role: "user", content: userMessage },
@@ -373,19 +396,9 @@ export function App() {
           setAppState("config");
           return;
         }
-        if (command === "clear") {
-          // Clear all messages and show welcome message
-          setMessages([
-            {
-              role: "assistant",
-              content: config?.userName
-                ? `안녕하세요, ${config.userName}님! 무엇을 도와드릴까요?\n\n💡 /help를 입력하면 사용 가능한 명령어를 볼 수 있어요.`
-                : "안녕하세요! 무엇을 도와드릴까요?\n\n💡 /help를 입력하면 사용 가능한 명령어를 볼 수 있어요.",
-            },
-          ]);
-          return;
-        }
-        if (command === "import") {
+
+        // Handle import command (transitions to import state)
+        if (commandName === "import") {
           setMessages((prev) => [
             ...prev,
             { role: "user", content: userMessage },
@@ -393,664 +406,37 @@ export function App() {
           setAppState("import");
           return;
         }
-        if (command === "session") {
-          const subCommand = parts[1]?.toLowerCase();
 
-          if (subCommand === "list") {
-            // 최근 세션 목록 표시
-            if (!sessionManager) {
-              setMessages((prev) => [
-                ...prev,
-                { role: "user", content: userMessage },
-                { role: "assistant", content: "세션 매니저가 초기화되지 않았습니다." },
-              ]);
-              return;
-            }
+        // Try to execute command through registry
+        const context = buildCommandContext();
+        const result = await commandRegistry.execute(commandName, args, context);
 
-            const sessions = await sessionManager.listSessionsWithSummary(10);
-            if (sessions.length === 0) {
-              setMessages((prev) => [
-                ...prev,
-                { role: "user", content: userMessage },
-                { role: "assistant", content: "저장된 세션이 없습니다." },
-              ]);
-              return;
-            }
-
-            let listMessage = "**최근 세션 목록**\n\n";
-            for (const session of sessions) {
-              const date = new Date(session.createdAt).toLocaleString("ko-KR");
-              const preview = session.firstMessage || "(메시지 없음)";
-              listMessage += `- **${session.id}** (${date})\n`;
-              listMessage += `  메시지: ${session.messageCount}개 | ${preview}\n\n`;
-            }
-
-            setMessages((prev) => [
-              ...prev,
-              { role: "user", content: userMessage },
-              { role: "assistant", content: listMessage },
-            ]);
-            return;
-          }
-
-          if (subCommand === "export") {
-            // 현재 세션 내보내기
-            if (!sessionManager) {
-              setMessages((prev) => [
-                ...prev,
-                { role: "user", content: userMessage },
-                { role: "assistant", content: "세션 매니저가 초기화되지 않았습니다." },
-              ]);
-              return;
-            }
-
-            const result = await sessionManager.exportSession();
-            if (result.success) {
-              setMessages((prev) => [
-                ...prev,
-                { role: "user", content: userMessage },
-                { role: "assistant", content: `세션이 마크다운으로 저장되었습니다.\n\n저장 위치: ${result.filePath}` },
-              ]);
-            } else {
-              setMessages((prev) => [
-                ...prev,
-                { role: "user", content: userMessage },
-                { role: "assistant", content: `세션 내보내기 실패: ${result.error}` },
-              ]);
-            }
-            return;
-          }
-
-          // /session만 입력한 경우 도움말 표시
-          setMessages((prev) => [
-            ...prev,
-            { role: "user", content: userMessage },
-            {
-              role: "assistant",
-              content: `/session 명령어 사용법:
-- /session list - 최근 세션 목록 보기
-- /session export - 현재 세션을 마크다운으로 저장`,
-            },
-          ]);
-          return;
-        }
-
-        // /graph 명령어 처리 - 그래프 시각화 서버 시작
-        if (command === "graph") {
-          setMessages((prev) => [
-            ...prev,
-            { role: "user", content: userMessage },
-            { role: "assistant", content: "그래프 시각화 서버를 시작하는 중..." },
-          ]);
-
-          try {
-            const { startGraphServer } = await import("./graph-server/index.js");
-            const result = await startGraphServer(config?.notesDir || "./notes");
-
-            setMessages((prev) => [
-              ...prev.slice(0, -1),
-              {
-                role: "assistant",
-                content: `그래프가 브라우저에서 열렸습니다.\n\n**URL:** ${result.url}\n\n**단축키:**\n- / : 노트 검색\n- +/- : 확대/축소\n- 0 : 뷰 초기화\n- ESC : 포커스 모드 종료\n- F : 전체화면\n\n서버는 30분 동안 비활성 시 자동 종료됩니다.`,
-              },
-            ]);
-          } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : String(err);
-            setMessages((prev) => [
-              ...prev.slice(0, -1),
-              {
-                role: "assistant",
-                content: `그래프 서버 시작 중 오류가 발생했습니다: ${errorMessage}`,
-              },
-            ]);
-          }
-          return;
-        }
-
-        // /search 명령어 처리 - Search 에이전트 호출
-        if (command === "search") {
-          const searchQuery = parts.slice(1).join(" ").trim();
-
-          // 검색어가 없으면 안내 메시지 표시
-          if (!searchQuery) {
-            setMessages((prev) => [
-              ...prev,
-              { role: "user", content: userMessage },
-              {
-                role: "assistant",
-                content: `검색어를 입력해주세요.\n\n사용법: /search <검색어>\n예시: /search 프로젝트 아이디어`,
-              },
-            ]);
-            return;
-          }
-
-          // 사용자 메시지 표시
-          setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
-          setIsLoading(true);
-          setLoadingStartTime(Date.now());
-          setStreamingText("노트를 검색하는 중...");
-
-          // Create AbortController for this request
-          const controller = new AbortController();
-          abortControllerRef.current = controller;
-
-          try {
-            // API 키 로드
-            const apiKey = await loadApiKey();
-            if (!apiKey) {
-              throw new Error("API 키가 설정되지 않았습니다.");
-            }
-
-            // Search 에이전트 호출
-            const subagent = createSubagentInvoker({
-              apiKey,
-              notesDir: config?.notesDir || "./notes",
-              model: config?.model || "claude-sonnet-4-20250514",
-              noteDetail: config?.noteDetail,
-            });
-
-            // Get conversation history from client for context continuity
-            const conversationHistory = client?.getRawHistory().slice(-10) || [];
-
-            const result = await subagent.invoke(
-              "search-agent",
-              `다음 키워드로 노트를 검색해주세요: "${searchQuery}"`,
-              {
-                onThinking: () => {
-                  if (requestGenerationRef.current !== currentGeneration) return;
-                  setStreamingText("노트를 검색하는 중...");
-                },
-                onToolUse: (toolName) => {
-                  if (requestGenerationRef.current !== currentGeneration) return;
-                  currentToolRef.current = toolName;
-                  currentToolStartTimeRef.current = Date.now();
-                  setCurrentTool(toolName);
-                  setCurrentToolStartTime(Date.now());
-                  setStreamingText(`${toolName} 도구 사용 중...`);
-                },
-                onToolResult: () => {
-                  if (requestGenerationRef.current !== currentGeneration) return;
-                  currentToolRef.current = null;
-                  currentToolStartTimeRef.current = null;
-                  setCurrentTool(null);
-                  setCurrentToolStartTime(null);
-                },
-                onProgress: (info) => {
-                  if (requestGenerationRef.current !== currentGeneration) return;
-                  if (info.filesMatched !== undefined && info.filesMatched > 0) {
-                    setStreamingText(`노트를 검색하는 중... (${info.filesMatched}개 파일에서 매치)`);
-                  } else if (info.filesFound !== undefined && info.filesFound > 0) {
-                    setStreamingText(`노트를 검색하는 중... (${info.filesFound}개 파일 발견)`);
-                  }
-                },
-                onText: (text) => {
-                  if (requestGenerationRef.current !== currentGeneration) return;
-                  setStreamingText((prev) =>
-                    prev.startsWith("노트를 검색") || prev.includes("도구 사용")
-                      ? text
-                      : prev + text
-                  );
-                },
-              },
-              { conversationHistory, signal: controller.signal }
-            );
-
-            // Handle aborted result
-            if (result.aborted) {
-              abortControllerRef.current = null;
-              return;
-            }
-
-            if (result.success) {
-              // Sync to client conversation history
-              client?.addToHistory("user", userMessage);
-              client?.addToHistory("assistant", result.response);
-
-              // Save to session manager
-              sessionManager?.addMessage({ role: "user", content: userMessage });
-              sessionManager?.addMessage({ role: "assistant", content: result.response });
-              sessionManager?.saveCurrentSession();
-
-              setMessages((prev) => [
-                ...prev,
-                { role: "assistant", content: result.response },
-              ]);
-            } else {
-              const errorResponse = `검색 중 오류가 발생했습니다: ${result.error}`;
-
-              // Sync to client conversation history even on error
-              client?.addToHistory("user", userMessage);
-              client?.addToHistory("assistant", errorResponse);
-
-              // Save to session manager
-              sessionManager?.addMessage({ role: "user", content: userMessage });
-              sessionManager?.addMessage({ role: "assistant", content: errorResponse });
-              sessionManager?.saveCurrentSession();
-
-              setMessages((prev) => [
-                ...prev,
-                {
-                  role: "assistant",
-                  content: errorResponse,
-                },
-              ]);
-            }
-          } catch (err) {
-            // Abort는 오류가 아님 - 사용자가 의도적으로 취소한 것
-            if (err instanceof AbortError || (err instanceof Error && err.name === "AbortError")) {
-              return;
-            }
-
-            const errorMessage = err instanceof Error ? err.message : String(err);
-            const errorResponse = `검색 중 오류가 발생했습니다: ${errorMessage}`;
-
-            // Sync to client conversation history even on error
-            client?.addToHistory("user", userMessage);
-            client?.addToHistory("assistant", errorResponse);
-
-            // Save to session manager
-            sessionManager?.addMessage({ role: "user", content: userMessage });
-            sessionManager?.addMessage({ role: "assistant", content: errorResponse });
-            sessionManager?.saveCurrentSession();
-
-            setMessages((prev) => [
-              ...prev,
-              {
-                role: "assistant",
-                content: errorResponse,
-              },
-            ]);
-          } finally {
-            abortControllerRef.current = null;
-            setIsLoading(false);
-            setLoadingStartTime(undefined);
-            setStreamingText("");
-            setCurrentTool(null);
-            setCurrentToolStartTime(null);
-            currentToolRef.current = null;
-            currentToolStartTimeRef.current = null;
-          }
-          return;
-        }
-
-        // /clone 또는 /me 명령어 처리 - Clone 에이전트 호출
-        if (command === "clone" || command === "me") {
-          const cloneQuery = parts.slice(1).join(" ").trim();
-
-          // 질문이 없으면 안내 메시지 표시
-          if (!cloneQuery) {
-            setMessages((prev) => [
-              ...prev,
-              { role: "user", content: userMessage },
-              {
-                role: "assistant",
-                content: `질문을 입력해주세요.
-
-**사용법:** /clone <질문> 또는 /me <질문>
-
-**예시:**
-- /clone 이 프로젝트에 대해 어떻게 생각해?
-- /me 생산성을 높이는 방법이 뭐야?
-- /clone 최근에 읽은 책 중 추천할 만한 건?
-
-내 노트에 기록된 내용을 바탕으로 나처럼 답변해드릴게요!`,
-              },
-            ]);
-            return;
-          }
-
-          // 사용자 메시지 표시
-          setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
-          setIsLoading(true);
-          setLoadingStartTime(Date.now());
-          setStreamingText("내 노트를 분석하는 중...");
-
-          // Create AbortController for this request
-          const controller = new AbortController();
-          abortControllerRef.current = controller;
-
-          try {
-            // API 키 로드
-            const apiKey = await loadApiKey();
-            if (!apiKey) {
-              throw new Error("API 키가 설정되지 않았습니다.");
-            }
-
-            // Clone 에이전트 호출
-            const subagent = createSubagentInvoker({
-              apiKey,
-              notesDir: config?.notesDir || "./notes",
-              model: config?.model || "claude-sonnet-4-20250514",
-              noteDetail: config?.noteDetail,
-            });
-
-            // Get conversation history from client for context continuity
-            const conversationHistory = client?.getRawHistory().slice(-10) || [];
-
-            const result = await subagent.invoke(
-              "clone-agent",
-              cloneQuery,
-              {
-                onThinking: () => {
-                  if (requestGenerationRef.current !== currentGeneration) return;
-                  setStreamingText("내 노트를 분석하는 중...");
-                },
-                onToolUse: (toolName) => {
-                  if (requestGenerationRef.current !== currentGeneration) return;
-                  currentToolRef.current = toolName;
-                  currentToolStartTimeRef.current = Date.now();
-                  setCurrentTool(toolName);
-                  setCurrentToolStartTime(Date.now());
-                  setStreamingText(`${toolName} 도구로 노트 탐색 중...`);
-                },
-                onToolResult: () => {
-                  if (requestGenerationRef.current !== currentGeneration) return;
-                  currentToolRef.current = null;
-                  currentToolStartTimeRef.current = null;
-                  setCurrentTool(null);
-                  setCurrentToolStartTime(null);
-                },
-                onProgress: (info) => {
-                  if (requestGenerationRef.current !== currentGeneration) return;
-                  if (info.filesMatched !== undefined && info.filesMatched > 0) {
-                    setStreamingText(`내 노트를 분석하는 중... (${info.filesMatched}개 파일에서 매치)`);
-                  } else if (info.filesFound !== undefined && info.filesFound > 0) {
-                    setStreamingText(`내 노트를 분석하는 중... (${info.filesFound}개 파일 발견)`);
-                  }
-                },
-                onText: (text) => {
-                  if (requestGenerationRef.current !== currentGeneration) return;
-                  setStreamingText((prev) =>
-                    prev.startsWith("내 노트를") || prev.includes("도구")
-                      ? text
-                      : prev + text
-                  );
-                },
-              },
-              { conversationHistory, signal: controller.signal }
-            );
-
-            // Handle aborted result
-            if (result.aborted) {
-              abortControllerRef.current = null;
-              return;
-            }
-
-            if (result.success) {
-              // Sync to client conversation history
-              client?.addToHistory("user", userMessage);
-              client?.addToHistory("assistant", result.response);
-
-              // Save to session manager
-              sessionManager?.addMessage({ role: "user", content: userMessage });
-              sessionManager?.addMessage({ role: "assistant", content: result.response });
-              sessionManager?.saveCurrentSession();
-
-              setMessages((prev) => [
-                ...prev,
-                { role: "assistant", content: result.response },
-              ]);
-            } else {
-              const errorResponse = `클론 모드 실행 중 오류가 발생했습니다: ${result.error}`;
-
-              // Sync to client conversation history even on error
-              client?.addToHistory("user", userMessage);
-              client?.addToHistory("assistant", errorResponse);
-
-              // Save to session manager
-              sessionManager?.addMessage({ role: "user", content: userMessage });
-              sessionManager?.addMessage({ role: "assistant", content: errorResponse });
-              sessionManager?.saveCurrentSession();
-
-              setMessages((prev) => [
-                ...prev,
-                {
-                  role: "assistant",
-                  content: errorResponse,
-                },
-              ]);
-            }
-          } catch (err) {
-            // Abort는 오류가 아님 - 사용자가 의도적으로 취소한 것
-            if (err instanceof AbortError || (err instanceof Error && err.name === "AbortError")) {
-              return;
-            }
-
-            const errorMessage = err instanceof Error ? err.message : String(err);
-            const errorResponse = `클론 모드 실행 중 오류가 발생했습니다: ${errorMessage}`;
-
-            // Sync to client conversation history even on error
-            client?.addToHistory("user", userMessage);
-            client?.addToHistory("assistant", errorResponse);
-
-            // Save to session manager
-            sessionManager?.addMessage({ role: "user", content: userMessage });
-            sessionManager?.addMessage({ role: "assistant", content: errorResponse });
-            sessionManager?.saveCurrentSession();
-
-            setMessages((prev) => [
-              ...prev,
-              {
-                role: "assistant",
-                content: errorResponse,
-              },
-            ]);
-          } finally {
-            abortControllerRef.current = null;
-            setIsLoading(false);
-            setLoadingStartTime(undefined);
-            setStreamingText("");
-            setCurrentTool(null);
-            setCurrentToolStartTime(null);
-            currentToolRef.current = null;
-            currentToolStartTimeRef.current = null;
-          }
-          return;
-        }
-
-        // /note 명령어 처리 - Note 에이전트 호출
-        if (command === "note") {
-          const noteContent = parts.slice(1).join(" ").trim();
-
-          // 내용이 없으면 안내 메시지 표시
-          if (!noteContent) {
-            setMessages((prev) => [
-              ...prev,
-              { role: "user", content: userMessage },
-              {
-                role: "assistant",
-                content: `노트 내용을 입력해주세요.
-
-**사용법:** /note <내용>
-
-**예시:**
-- /note 오늘 회의에서 새로운 프로젝트 아이디어가 나왔다
-- /note React 18의 Suspense 기능 정리
-- /note 독서 메모: "원씽" - 핵심은 가장 중요한 한 가지에 집중하는 것
-
-입력하신 내용을 바탕으로 노트를 작성해드릴게요!`,
-              },
-            ]);
-            return;
-          }
-
-          // 사용자 메시지 표시
-          setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
-          setIsLoading(true);
-          setLoadingStartTime(Date.now());
-          setStreamingText("노트를 작성하는 중...");
-
-          // Create AbortController for this request
-          const controller = new AbortController();
-          abortControllerRef.current = controller;
-
-          try {
-            // API 키 로드
-            const apiKey = await loadApiKey();
-            if (!apiKey) {
-              throw new Error("API 키가 설정되지 않았습니다.");
-            }
-
-            // Note 에이전트 호출
-            const subagent = createSubagentInvoker({
-              apiKey,
-              notesDir: config?.notesDir || "./notes",
-              model: config?.model || "claude-sonnet-4-20250514",
-              noteDetail: config?.noteDetail,
-            });
-
-            // Get conversation history from client for context continuity
-            const conversationHistory = client?.getRawHistory().slice(-10) || [];
-
-            const result = await subagent.invoke(
-              "note-agent",
-              `다음 내용으로 노트를 작성해주세요: "${noteContent}"`,
-              {
-                onThinking: () => {
-                  if (requestGenerationRef.current !== currentGeneration) return;
-                  setStreamingText("노트를 작성하는 중...");
-                },
-                onToolUse: (toolName) => {
-                  if (requestGenerationRef.current !== currentGeneration) return;
-                  currentToolRef.current = toolName;
-                  currentToolStartTimeRef.current = Date.now();
-                  setCurrentTool(toolName);
-                  setCurrentToolStartTime(Date.now());
-                  setStreamingText(`${toolName} 도구 사용 중...`);
-                },
-                onToolResult: () => {
-                  if (requestGenerationRef.current !== currentGeneration) return;
-                  currentToolRef.current = null;
-                  currentToolStartTimeRef.current = null;
-                  setCurrentTool(null);
-                  setCurrentToolStartTime(null);
-                },
-                onProgress: (info) => {
-                  if (requestGenerationRef.current !== currentGeneration) return;
-                  if (info.filesFound !== undefined && info.filesFound > 0) {
-                    setStreamingText(`노트를 작성하는 중... (${info.filesFound}개 관련 파일 확인)`);
-                  }
-                },
-                onText: (text) => {
-                  if (requestGenerationRef.current !== currentGeneration) return;
-                  setStreamingText((prev) =>
-                    prev.startsWith("노트를 작성") || prev.includes("도구 사용")
-                      ? text
-                      : prev + text
-                  );
-                },
-              },
-              { conversationHistory, signal: controller.signal }
-            );
-
-            // Handle aborted result
-            if (result.aborted) {
-              abortControllerRef.current = null;
-              return;
-            }
-
-            if (result.success) {
-              // 노트 통계 업데이트
-              if (config) {
-                const stats = await getQuickStats(config.notesDir);
-                setNoteCount(stats.noteCount);
-                setConnectionCount(stats.connectionCount);
-                setDanglingCount(stats.danglingCount);
-                setOrphanCount(stats.orphanCount);
-              }
-
-              // Sync to client conversation history
-              client?.addToHistory("user", userMessage);
-              client?.addToHistory("assistant", result.response);
-
-              // Save to session manager
-              sessionManager?.addMessage({ role: "user", content: userMessage });
-              sessionManager?.addMessage({ role: "assistant", content: result.response });
-              sessionManager?.saveCurrentSession();
-
-              setMessages((prev) => [
-                ...prev,
-                { role: "assistant", content: result.response },
-              ]);
-            } else {
-              const errorResponse = `노트 작성 중 오류가 발생했습니다: ${result.error}`;
-
-              // Sync to client conversation history even on error
-              client?.addToHistory("user", userMessage);
-              client?.addToHistory("assistant", errorResponse);
-
-              // Save to session manager
-              sessionManager?.addMessage({ role: "user", content: userMessage });
-              sessionManager?.addMessage({ role: "assistant", content: errorResponse });
-              sessionManager?.saveCurrentSession();
-
-              setMessages((prev) => [
-                ...prev,
-                {
-                  role: "assistant",
-                  content: errorResponse,
-                },
-              ]);
-            }
-          } catch (err) {
-            // Abort는 오류가 아님 - 사용자가 의도적으로 취소한 것
-            if (err instanceof AbortError || (err instanceof Error && err.name === "AbortError")) {
-              return;
-            }
-
-            const friendlyMessage = formatErrorMessage(err);
-            const errorResponse = `노트 작성 중 문제가 발생했습니다.\n\n${friendlyMessage}`;
-
-            // Sync to client conversation history even on error
-            client?.addToHistory("user", userMessage);
-            client?.addToHistory("assistant", errorResponse);
-
-            // Save to session manager
-            sessionManager?.addMessage({ role: "user", content: userMessage });
-            sessionManager?.addMessage({ role: "assistant", content: errorResponse });
-            sessionManager?.saveCurrentSession();
-
-            setMessages((prev) => [
-              ...prev,
-              {
-                role: "assistant",
-                content: errorResponse,
-              },
-            ]);
-          } finally {
-            abortControllerRef.current = null;
-            setIsLoading(false);
-            setLoadingStartTime(undefined);
-            setStreamingText("");
-            setCurrentTool(null);
-            setCurrentToolStartTime(null);
-            currentToolRef.current = null;
-            currentToolStartTimeRef.current = null;
-          }
+        // If command was handled by registry, return
+        if (result?.handled) {
           return;
         }
 
         // Handle unimplemented commands
-        if (UNIMPLEMENTED_COMMANDS.includes(command)) {
+        if (UNIMPLEMENTED_COMMANDS.includes(commandName)) {
           setMessages((prev) => [
             ...prev,
             { role: "user", content: userMessage },
             {
               role: "assistant",
-              content: `/${command} 기능은 현재 준비 중입니다. 곧 사용하실 수 있어요!\n\n사용 가능한 명령어를 보려면 /help를 입력해주세요.`,
+              content: `/${commandName} 기능은 현재 준비 중입니다. 곧 사용하실 수 있어요!\n\n사용 가능한 명령어를 보려면 /help를 입력해주세요.`,
             },
           ]);
           return;
         }
 
-        // Handle unknown commands
-        if (!IMPLEMENTED_COMMANDS.includes(command) && !UNIMPLEMENTED_COMMANDS.includes(command)) {
+        // Handle unknown commands (not in registry and not special/unimplemented)
+        if (!SPECIAL_COMMANDS.includes(commandName) && !UNIMPLEMENTED_COMMANDS.includes(commandName)) {
           setMessages((prev) => [
             ...prev,
             { role: "user", content: userMessage },
             {
               role: "assistant",
-              content: `알 수 없는 명령어입니다: /${command}\n\n사용 가능한 명령어를 보려면 /help를 입력해주세요.`,
+              content: `알 수 없는 명령어입니다: /${commandName}\n\n사용 가능한 명령어를 보려면 /help를 입력해주세요.`,
             },
           ]);
           return;
@@ -1167,7 +553,7 @@ export function App() {
         ]);
       }
     },
-    [client, isLoading, config, sessionManager]
+    [client, isLoading, config, sessionManager, commandRegistry, buildCommandContext]
   );
 
   // Cancel handler - aborts ongoing API requests completely

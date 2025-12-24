@@ -54,6 +54,17 @@ export function createGraphServer(options: GraphServerOptions): GraphServer {
     res.setHeader("X-Frame-Options", "DENY");
     res.setHeader("X-XSS-Protection", "1; mode=block");
     res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader(
+      "Content-Security-Policy",
+      "default-src 'self'; " +
+      "script-src 'self' 'unsafe-inline'; " +  // D3.js 등 인라인 스크립트 허용
+      "style-src 'self' 'unsafe-inline'; " +   // 인라인 스타일 허용
+      "img-src 'self' data:; " +               // data: URI 이미지 허용
+      "connect-src 'self'; " +                 // API 연결은 자기 자신만
+      "font-src 'self'; " +
+      "object-src 'none'; " +                  // Flash 등 플러그인 차단
+      "frame-ancestors 'none'"                 // iframe 삽입 차단
+    );
     next();
   });
 

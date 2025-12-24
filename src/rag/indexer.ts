@@ -46,6 +46,26 @@ export interface IndexIncrementalResult {
 }
 
 /**
+ * Result of index validation
+ */
+export interface ValidationResult {
+  /** Whether the index is valid (no errors found) */
+  valid: boolean;
+  /** Total number of documents (chunks) in the index */
+  totalDocuments: number;
+  /** Total number of note metadata entries */
+  totalMetadata: number;
+  /** Chunk IDs that have no corresponding metadata */
+  orphanedChunks: string[];
+  /** Note paths whose metadata indicates chunks but none exist */
+  missingChunks: string[];
+  /** Number of embeddings with incorrect dimensions */
+  dimensionMismatches: number;
+  /** List of error messages describing validation issues */
+  errors: string[];
+}
+
+/**
  * Metadata stored for each indexed note (for change detection)
  */
 interface IndexedNoteMetadata {
@@ -531,6 +551,93 @@ export class RAGIndexer {
    */
   async getAllDocuments(): Promise<VectorDocument[]> {
     return this.vectorStore.getAllDocuments();
+  }
+
+  /**
+   * Validate index integrity
+   *
+   * Checks for:
+   * - Metadata count vs document count consistency
+   * - Orphaned chunks (documents without corresponding metadata)
+   * - Missing chunks (metadata entries without corresponding documents)
+   * - Embedding dimension consistency (all should be 1536)
+   *
+   * @returns Validation result object with details about any issues found
+   */
+  async validateIndex(): Promise<ValidationResult> {
+    const errors: string[] = [];
+    const orphanedChunks: string[] = [];
+    const missingChunks: string[] = [];
+    let dimensionMismatches = 0;
+
+    const documents = await this.vectorStore.getAllDocuments();
+    const metadata = await this.vectorStore.getIndexedNotes();
+
+    const totalDocuments = documents.length;
+    const totalMetadata = metadata.size;
+
+    // Build a map of noteId -> documents for efficient lookup
+    const documentsByNoteId = new Map<string, VectorDocument[]>();
+    for (const doc of documents) {
+      const existing = documentsByNoteId.get(doc.noteId) || [];
+      existing.push(doc);
+      documentsByNoteId.set(doc.noteId, existing);
+    }
+
+    // Build a set of noteIds that have metadata
+    const noteIdsWithMetadata = new Set<string>(metadata.keys());
+
+    // Check for orphaned chunks (documents without metadata)
+    for (const [noteId, docs] of documentsByNoteId) {
+      if (!noteIdsWithMetadata.has(noteId)) {
+        for (const doc of docs) {
+          orphanedChunks.push(doc.id);
+        }
+        errors.push(`Orphaned chunks found for noteId "${noteId}": no metadata exists`);
+      }
+    }
+
+    // Check for missing chunks and chunk count mismatches
+    for (const [noteId, meta] of metadata) {
+      const docs = documentsByNoteId.get(noteId);
+
+      if (!docs || docs.length === 0) {
+        missingChunks.push(meta.notePath);
+        errors.push(`Missing chunks for note "${meta.notePath}": metadata indicates ${meta.chunkCount} chunks but none found`);
+      } else if (docs.length !== meta.chunkCount) {
+        errors.push(`Chunk count mismatch for note "${meta.notePath}": metadata indicates ${meta.chunkCount} chunks but found ${docs.length}`);
+      }
+    }
+
+    // Check embedding dimension consistency (OpenAI text-embedding-3-small uses 1536 dimensions)
+    const expectedDimension = 1536;
+    for (const doc of documents) {
+      if (doc.embedding && doc.embedding.length > 0) {
+        if (doc.embedding.length !== expectedDimension) {
+          dimensionMismatches++;
+          if (dimensionMismatches <= 5) {
+            // Only log first 5 mismatches to avoid spam
+            errors.push(`Dimension mismatch for chunk "${doc.id}": expected ${expectedDimension}, got ${doc.embedding.length}`);
+          }
+        }
+      }
+    }
+
+    if (dimensionMismatches > 5) {
+      errors.push(`... and ${dimensionMismatches - 5} more dimension mismatches`);
+    }
+
+    const valid = errors.length === 0;
+
+    return {
+      valid,
+      totalDocuments,
+      totalMetadata,
+      orphanedChunks,
+      missingChunks,
+      dimensionMismatches,
+      errors,
+    };
   }
 
   /**
