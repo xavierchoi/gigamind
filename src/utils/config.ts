@@ -3,10 +3,23 @@ import path from "node:path";
 import os from "node:os";
 import yaml from "yaml";
 import { getQuickStats as getGraphQuickStats } from "./graph/index.js";
+import {
+  saveApiKeySecure,
+  loadApiKeySecure,
+  hasApiKeySecure,
+  deleteApiKeySecure,
+} from "./keychain.js";
 
 /**
- * Expand tilde (~) to home directory in a path
- * Also handles Windows %USERPROFILE% environment variable
+ * Expand tilde (~) to home directory in a path.
+ * Also handles Windows %USERPROFILE% environment variable.
+ *
+ * @param inputPath - The path to expand
+ * @returns The expanded absolute path
+ *
+ * @example
+ * expandPath("~/notes"); // "/Users/username/notes" on macOS
+ * expandPath("%USERPROFILE%/notes"); // "C:\\Users\\username\\notes" on Windows
  */
 export function expandPath(inputPath: string): string {
   if (!inputPath) return inputPath;
@@ -69,54 +82,106 @@ export function getConfigDir(): string {
   return path.join(os.homedir(), ".gigamind");
 }
 
+/**
+ * Get the path to the configuration file.
+ *
+ * @returns The absolute path to config.yaml
+ */
 export function getConfigPath(): string {
   return path.join(getConfigDir(), "config.yaml");
 }
 
+/**
+ * Get the path to the sessions directory.
+ *
+ * @returns The absolute path to the sessions directory
+ */
 export function getSessionsDir(): string {
   return path.join(getConfigDir(), "sessions");
 }
 
+/**
+ * Get the path to the credentials file.
+ *
+ * @returns The absolute path to the credentials file
+ */
 export function getCredentialsPath(): string {
   return path.join(getConfigDir(), "credentials");
 }
 
+/**
+ * Securely save the API key.
+ *
+ * Uses OS Keychain when available, falls back to AES-256-GCM encrypted file.
+ * Auto-migrates existing plaintext credentials on first access.
+ *
+ * @param apiKey - The API key to store
+ * @throws {Error} If unable to save to secure storage
+ */
 export async function saveApiKey(apiKey: string): Promise<void> {
   await ensureConfigDir();
-  const credentialsPath = getCredentialsPath();
-  // Note: mode 0o600 (owner read/write only) is Unix-specific.
-  // On Windows, this option is ignored and file permissions are managed
-  // via ACLs. The file will inherit permissions from the parent directory.
-  await fs.writeFile(credentialsPath, apiKey, { mode: 0o600 });
+  await saveApiKeySecure(apiKey);
 }
 
+/**
+ * Securely load the API key from storage.
+ *
+ * Checks in order:
+ * 1. ANTHROPIC_API_KEY environment variable
+ * 2. OS Keychain (if keytar is available)
+ * 3. AES-256-GCM encrypted file
+ *
+ * Auto-migrates existing plaintext credentials on first access.
+ *
+ * @returns The API key or null if not configured
+ */
 export async function loadApiKey(): Promise<string | null> {
-  // First check environment variable
-  if (process.env.ANTHROPIC_API_KEY) {
-    return process.env.ANTHROPIC_API_KEY;
-  }
-
-  // Then check credentials file
-  try {
-    const credentialsPath = getCredentialsPath();
-    const apiKey = await fs.readFile(credentialsPath, "utf-8");
-    return apiKey.trim() || null;
-  } catch {
-    return null;
-  }
+  return loadApiKeySecure();
 }
 
+/**
+ * Check if an API key is configured.
+ *
+ * @returns True if an API key exists and is non-empty
+ */
 export async function hasApiKey(): Promise<boolean> {
-  const apiKey = await loadApiKey();
-  return apiKey !== null && apiKey.length > 0;
+  return hasApiKeySecure();
 }
 
+/**
+ * Delete the API key from all secure storage locations.
+ *
+ * Removes from OS Keychain, encrypted file, and legacy plaintext file.
+ */
+export async function deleteApiKey(): Promise<void> {
+  await deleteApiKeySecure();
+}
+
+/**
+ * Ensure the configuration directory and its subdirectories exist.
+ *
+ * Creates ~/.gigamind and ~/.gigamind/sessions if they don't exist.
+ */
 export async function ensureConfigDir(): Promise<void> {
   const configDir = getConfigDir();
   await fs.mkdir(configDir, { recursive: true });
   await fs.mkdir(getSessionsDir(), { recursive: true });
 }
 
+/**
+ * Load the GigaMind configuration from disk.
+ *
+ * If the configuration file doesn't exist or is unreadable, returns default values.
+ * Partial configurations are merged with defaults for missing values.
+ *
+ * @returns The loaded configuration, merged with defaults for missing values
+ * @throws {Error} If the configuration file is malformed YAML
+ *
+ * @example
+ * const config = await loadConfig();
+ * console.log(config.notesDir); // ~/gigamind-notes
+ * console.log(config.model); // claude-sonnet-4-20250514
+ */
 export async function loadConfig(): Promise<GigaMindConfig> {
   const configPath = getConfigPath();
 
@@ -129,6 +194,12 @@ export async function loadConfig(): Promise<GigaMindConfig> {
   }
 }
 
+/**
+ * Save the configuration to disk.
+ *
+ * @param config - The configuration object to save
+ * @throws {Error} If unable to write to the config file
+ */
 export async function saveConfig(config: GigaMindConfig): Promise<void> {
   await ensureConfigDir();
   const configPath = getConfigPath();
@@ -136,6 +207,15 @@ export async function saveConfig(config: GigaMindConfig): Promise<void> {
   await fs.writeFile(configPath, content, "utf-8");
 }
 
+/**
+ * Update the configuration with partial changes.
+ *
+ * Loads the current configuration, merges with updates, and saves.
+ *
+ * @param updates - Partial configuration object with values to update
+ * @returns The updated configuration
+ * @throws {Error} If unable to read or write the config file
+ */
 export async function updateConfig(
   updates: Partial<GigaMindConfig>
 ): Promise<GigaMindConfig> {
@@ -145,6 +225,11 @@ export async function updateConfig(
   return updated;
 }
 
+/**
+ * Check if the configuration file exists.
+ *
+ * @returns True if config.yaml exists and is accessible
+ */
 export async function configExists(): Promise<boolean> {
   try {
     await fs.access(getConfigPath());
@@ -154,6 +239,19 @@ export async function configExists(): Promise<boolean> {
   }
 }
 
+/**
+ * Ensure the notes directory and its standard subdirectories exist.
+ *
+ * Creates the PARA method directory structure:
+ * - inbox/
+ * - projects/
+ * - areas/
+ * - resources/
+ * - resources/books/
+ * - archive/
+ *
+ * @param notesDir - The notes directory path (supports ~ expansion)
+ */
 export async function ensureNotesDir(notesDir: string): Promise<void> {
   const expandedDir = expandPath(notesDir);
   const dirs = [
@@ -172,11 +270,12 @@ export async function ensureNotesDir(notesDir: string): Promise<void> {
 }
 
 /**
- * 노트 통계 조회
- * 그래프 모듈을 사용하여 정확한 연결 수를 계산
+ * Get statistics about notes in the configured directory.
  *
- * @param notesDir 노트 디렉토리 경로
- * @returns 노트 수와 고유 연결 수
+ * Uses the graph module to calculate accurate connection counts.
+ *
+ * @param notesDir - The notes directory path
+ * @returns Object with noteCount and connectionCount
  */
 export async function getNoteStats(
   notesDir: string
@@ -194,11 +293,12 @@ export async function getNoteStats(
 }
 
 /**
- * 확장 노트 통계 조회
- * Dangling Links, Orphan Notes 등 추가 정보 포함
+ * Get extended statistics about notes in the configured directory.
  *
- * @param notesDir 노트 디렉토리 경로
- * @returns 확장 통계
+ * Includes additional information like dangling links and orphan notes.
+ *
+ * @param notesDir - The notes directory path
+ * @returns Object with noteCount, connectionCount, danglingCount, orphanCount
  */
 export async function getExtendedNoteStats(
   notesDir: string

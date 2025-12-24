@@ -1,0 +1,109 @@
+{
+  "welcome": {
+    "title": "GigaMind에 오신 것을 환영합니다!",
+    "description_partner": "당신의 생각과 지식을 관리하는 AI 파트너입니다.",
+    "description_setup": "몇 가지 설정을 도와드릴게요.",
+    "time_estimate": "약 2분이면 완료됩니다.",
+    "default_hint": "(언제든 Enter를 눌러 기본값을 사용할 수 있어요)",
+    "press_enter": "Enter를 눌러 시작하세요..."
+  },
+  "api_key": {
+    "prompt": "Anthropic API 키를 입력해주세요",
+    "description": "API 키는 AI 기능을 사용하기 위해 필요한 인증 키입니다.",
+    "how_to_get_title": "발급 방법:",
+    "step_1": "1. https://console.anthropic.com 접속",
+    "step_2": "2. 로그인 후 \"API Keys\" 메뉴 클릭",
+    "step_3": "3. \"Create Key\" 버튼으로 새 키 생성",
+    "step_4": "4. 생성된 키(sk-ant-...)를 복사하여 붙여넣기",
+    "placeholder": "sk-ant-...",
+    "input_label": "입력 중:",
+    "input_entered": "입력된 키:",
+    "validating": "API 키를 검증하는 중...",
+    "validated": "API 키가 확인되었습니다!",
+    "retry_hint": "다시 시도하려면 Enter, 이전으로 돌아가려면 ESC",
+    "invalid_hint": "API 키가 올바른지 확인해주세요. 키는 'sk-ant-'로 시작해야 합니다.",
+    "quota_hint": "API 사용량이 초과되었습니다. https://console.anthropic.com 에서 확인해주세요."
+  },
+  "notes_dir": {
+    "prompt": "노트를 어디에 저장할까요?",
+    "options": {
+      "home_default": "~/gigamind-notes (홈 폴더) [기본값]",
+      "documents": "~/Documents/gigamind",
+      "custom": "직접 입력..."
+    },
+    "open_folder_dialog": "[B] 폴더 선택 다이얼로그 열기",
+    "manual_input": "경로 직접 입력:",
+    "placeholder": "경로를 입력하세요...",
+    "folder_dialog_opened": "폴더 선택 다이얼로그가 열렸습니다...",
+    "folder_dialog_hint": "시스템 폴더 선택 다이얼로그에서 폴더를 선택해주세요."
+  },
+  "user_name": {
+    "prompt": "이름이나 별명을 알려주세요 (선택, Enter로 건너뛰기)",
+    "placeholder": "이름 또는 별명..."
+  },
+  "use_cases": {
+    "prompt": "주로 어떤 용도로 사용하실 건가요? (복수 선택 가능)",
+    "options": {
+      "ideas": "개인 생각/아이디어 정리",
+      "projects": "프로젝트 문서화",
+      "reading": "독서 노트",
+      "meetings": "업무 회의록",
+      "learning": "학습 자료 정리"
+    },
+    "controls": {
+      "space_toggle": "Space: 선택/해제",
+      "enter_complete": "Enter: 완료",
+      "esc_back": "ESC: 이전 단계"
+    },
+    "selected_count": "선택됨: {{count}}개"
+  },
+  "existing_notes": {
+    "prompt": "기존 마크다운 노트가 있나요? (Obsidian, 일반 마크다운 등)",
+    "options": {
+      "yes": "네, 가져오고 싶어요",
+      "no": "아니요, 새로 시작할게요"
+    }
+  },
+  "import_source": {
+    "title": "노트 가져오기",
+    "prompt": "어디서 가져올까요?",
+    "options": {
+      "obsidian": "Obsidian Vault",
+      "markdown": "일반 마크다운 폴더"
+    }
+  },
+  "import_path": {
+    "prompt_obsidian": "Obsidian Vault 경로를 입력하세요",
+    "prompt_markdown": "마크다운 폴더 경로를 입력하세요",
+    "placeholder_obsidian_mac": "~/Documents/ObsidianVault",
+    "placeholder_obsidian_windows": "%USERPROFILE%\\Documents\\ObsidianVault",
+    "placeholder_markdown_mac": "~/Documents/notes",
+    "placeholder_markdown_windows": "%USERPROFILE%\\Documents\\notes",
+    "home_hint_mac": "~ 는 홈 디렉토리를 의미합니다",
+    "home_hint_windows": "%USERPROFILE%은 홈 디렉토리를 의미합니다",
+    "manual_input": "경로 직접 입력:",
+    "folder_dialog_hint_obsidian": "시스템 폴더 선택 다이얼로그에서 Obsidian Vault을 선택해주세요.",
+    "folder_dialog_hint_markdown": "시스템 폴더 선택 다이얼로그에서 마크다운 폴더을 선택해주세요."
+  },
+  "importing": {
+    "analyzing": "노트를 분석하는 중...",
+    "markdown_files": "마크다운 파일: {{count}}개",
+    "folders": "폴더: {{count}}개"
+  },
+  "complete": {
+    "title": "설정이 완료되었습니다!",
+    "ready": "GigaMind가 준비되었어요.",
+    "welcome_with_name": "환영합니다, {{name}}님!",
+    "import_scheduled": "노트 가져오기가 예약되었어요.",
+    "import_hint": "채팅에서 \"/import\" 명령어로 진행 상황을 확인할 수 있어요.",
+    "features_title": "핵심 기능 3가지:",
+    "feature_search": "1. /search - 내 노트에서 정보 검색",
+    "feature_clone": "2. /clone - 내 노트 기반으로 나처럼 답변",
+    "feature_natural": "3. 자연어로 \"메모해줘\"라고 말하면 노트 작성",
+    "transition_hint": "잠시 후 채팅 화면으로 이동합니다..."
+  },
+  "navigation": {
+    "step_indicator": "[{{current}}/{{total}}]",
+    "esc_previous": "ESC: 이전 단계"
+  }
+}

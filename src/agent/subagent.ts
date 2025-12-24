@@ -14,7 +14,7 @@ import type {
 } from "@anthropic-ai/sdk/resources/messages";
 import { getToolsForSubagent } from "./tools.js";
 import { executeTool, type ToolResult } from "./executor.js";
-import { getSubagentPrompt, getSubagentTools, subagents, getTimeContext, type SubagentContext } from "./prompts.js";
+import { getSubagentPrompt, getSubagentTools, subagents, getTimeContext, type SubagentContext } from "./agentDefinitions.js";
 import { getLogger } from "../utils/logger.js";
 import {
   SubagentError,

@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { MessageParam, Tool, ToolUseBlock, TextBlock } from "@anthropic-ai/sdk/resources/messages";
-import { SYSTEM_PROMPT } from "./prompts.js";
+import { SYSTEM_PROMPT } from "./agentDefinitions.js";
 import {
   SubagentInvoker,
   detectSubagentIntent,

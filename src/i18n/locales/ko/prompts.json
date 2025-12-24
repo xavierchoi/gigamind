@@ -1,0 +1,7 @@
+{
+  "enterQuery": "검색어를 입력하세요",
+  "selectOption": "옵션을 선택하세요",
+  "confirmAction": "이 작업을 수행하시겠습니까?",
+  "enterPath": "경로를 입력하세요",
+  "enterApiKey": "API 키를 입력하세요"
+}

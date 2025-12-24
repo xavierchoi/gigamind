@@ -1,10 +1,10 @@
 /**
  * Graph API Routes
- * REST endpoints for graph data
+ * REST endpoints for graph data with lazy loading support
  */
 
 import { Router, type Request, type Response } from "express";
-import { analyzeNoteGraph } from "../../utils/graph/analyzer.js";
+import { analyzeNoteGraph, getQuickStats } from "../../utils/graph/analyzer.js";
 import { normalizeNoteTitle } from "../../utils/graph/wikilinks.js";
 import type { NoteGraphStats, BacklinkEntry } from "../../utils/graph/types.js";
 import path from "node:path";
@@ -40,6 +40,23 @@ interface GraphAPIResponse {
     danglingCount: number;
     orphanCount: number;
   };
+  pagination?: {
+    offset: number;
+    limit: number;
+    total: number;
+    hasMore: boolean;
+  };
+}
+
+/**
+ * Quick stats API response
+ */
+interface StatsAPIResponse {
+  noteCount: number;
+  connectionCount: number;
+  orphanCount: number;
+  danglingCount: number;
+  lastUpdated: number;
 }
 
 /**
@@ -178,18 +195,49 @@ function transformGraphStats(stats: NoteGraphStats, notesDir: string): GraphAPIR
 }
 
 /**
- * Get focused graph (single note + 1-hop neighbors)
+ * Get focused graph with configurable depth (N-hop neighbors)
+ * @param fullGraph The complete graph data
+ * @param nodeId The center node ID
+ * @param depth Number of hops from center (default: 1)
+ * @param limit Maximum nodes to return (default: 100)
  */
-function getFocusedGraph(fullGraph: GraphAPIResponse, nodeId: string): GraphAPIResponse {
-  // Find all connected node IDs
-  const connectedIds = new Set<string>([nodeId]);
+function getFocusedGraph(
+  fullGraph: GraphAPIResponse,
+  nodeId: string,
+  depth: number = 1,
+  limit: number = 100
+): GraphAPIResponse {
+  // Build adjacency map for efficient traversal
+  const adjacencyMap = new Map<string, Set<string>>();
 
   for (const link of fullGraph.links) {
-    if (link.source === nodeId) {
-      connectedIds.add(link.target);
+    if (!adjacencyMap.has(link.source)) {
+      adjacencyMap.set(link.source, new Set());
     }
-    if (link.target === nodeId) {
-      connectedIds.add(link.source);
+    if (!adjacencyMap.has(link.target)) {
+      adjacencyMap.set(link.target, new Set());
+    }
+    adjacencyMap.get(link.source)!.add(link.target);
+    adjacencyMap.get(link.target)!.add(link.source);
+  }
+
+  // BFS to find nodes within depth
+  const connectedIds = new Set<string>([nodeId]);
+  const nodeDistances = new Map<string, number>([[nodeId, 0]]);
+  const queue: Array<{ id: string; dist: number }> = [{ id: nodeId, dist: 0 }];
+
+  while (queue.length > 0 && connectedIds.size < limit) {
+    const current = queue.shift()!;
+
+    if (current.dist >= depth) continue;
+
+    const neighbors = adjacencyMap.get(current.id) || new Set();
+    for (const neighbor of neighbors) {
+      if (!connectedIds.has(neighbor) && connectedIds.size < limit) {
+        connectedIds.add(neighbor);
+        nodeDistances.set(neighbor, current.dist + 1);
+        queue.push({ id: neighbor, dist: current.dist + 1 });
+      }
     }
   }
 
@@ -207,32 +255,105 @@ function getFocusedGraph(fullGraph: GraphAPIResponse, nodeId: string): GraphAPIR
 }
 
 /**
+ * Apply pagination to graph nodes and filter links accordingly
+ */
+function paginateGraph(
+  fullGraph: GraphAPIResponse,
+  offset: number,
+  limit: number
+): GraphAPIResponse {
+  const totalNodes = fullGraph.nodes.length;
+  const paginatedNodes = fullGraph.nodes.slice(offset, offset + limit);
+  const paginatedNodeIds = new Set(paginatedNodes.map((n) => n.id));
+
+  // Only include links where both nodes are in the paginated set
+  const paginatedLinks = fullGraph.links.filter(
+    (link) => paginatedNodeIds.has(link.source) && paginatedNodeIds.has(link.target)
+  );
+
+  return {
+    nodes: paginatedNodes,
+    links: paginatedLinks,
+    stats: fullGraph.stats,
+    pagination: {
+      offset,
+      limit,
+      total: totalNodes,
+      hasMore: offset + limit < totalNodes,
+    },
+  };
+}
+
+/**
  * Create the graph API router
  */
 export function createGraphRouter(notesDir: string): Router {
   const router = Router();
 
-  // GET /api/graph - Full graph data
-  router.get("/graph", async (_req: Request, res: Response) => {
+  // GET /api/stats - Quick stats without full graph analysis (lightweight)
+  router.get("/stats", async (_req: Request, res: Response) => {
     try {
+      const stats = await getQuickStats(notesDir);
+      const response: StatsAPIResponse = {
+        noteCount: stats.noteCount,
+        connectionCount: stats.connectionCount,
+        orphanCount: stats.orphanCount,
+        danglingCount: stats.danglingCount,
+        lastUpdated: Date.now(),
+      };
+      res.json(response);
+    } catch (error) {
+      console.error("Error fetching quick stats:", error);
+      res.status(500).json({ error: "Failed to get stats" });
+    }
+  });
+
+  // GET /api/graph - Full graph data with pagination and lazy loading
+  router.get("/graph", async (req: Request, res: Response) => {
+    try {
+      const {
+        depth,       // Hops from center node (only used with center)
+        center,      // Starting node for focused view
+        limit,       // Max nodes to return
+        offset,      // Pagination offset
+      } = req.query;
+
+      const parsedDepth = depth ? parseInt(depth as string, 10) : 2;
+      const parsedLimit = limit ? parseInt(limit as string, 10) : 100;
+      const parsedOffset = offset ? parseInt(offset as string, 10) : 0;
+
       const stats = await analyzeNoteGraph(notesDir, { includeContext: false });
-      const graphData = transformGraphStats(stats, notesDir);
-      res.json(graphData);
+      const fullGraph = transformGraphStats(stats, notesDir);
+
+      // If center is specified, return subgraph within depth of center node
+      if (center) {
+        const decodedCenter = decodeURIComponent(center as string);
+        const subgraph = getFocusedGraph(fullGraph, decodedCenter, parsedDepth, parsedLimit);
+        return res.json(subgraph);
+      }
+
+      // Otherwise return full graph with pagination
+      const paginatedGraph = paginateGraph(fullGraph, parsedOffset, parsedLimit);
+      res.json(paginatedGraph);
     } catch (error) {
       console.error("Error fetching graph data:", error);
       res.status(500).json({ error: "Failed to analyze graph" });
     }
   });
 
-  // GET /api/graph/:nodeId - Focused graph (single note + neighbors)
+  // GET /api/graph/:nodeId - Focused graph (single note + N-hop neighbors)
   router.get("/graph/:nodeId", async (req: Request, res: Response) => {
     try {
       const { nodeId } = req.params;
+      const { depth, limit } = req.query;
+
       const decodedNodeId = decodeURIComponent(nodeId);
+      const parsedDepth = depth ? parseInt(depth as string, 10) : 1;
+      const parsedLimit = limit ? parseInt(limit as string, 10) : 100;
 
       const stats = await analyzeNoteGraph(notesDir, { includeContext: false });
       const fullGraph = transformGraphStats(stats, notesDir);
-      const focusedGraph = getFocusedGraph(fullGraph, decodedNodeId);
+      const focusedGraph = getFocusedGraph(fullGraph, decodedNodeId, parsedDepth, parsedLimit);
 
       res.json(focusedGraph);
     } catch (error) {

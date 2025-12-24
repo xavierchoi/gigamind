@@ -1,0 +1,61 @@
+{
+  "help_description": "Show help",
+  "config_description": "View settings",
+  "clear_description": "Clear conversation history",
+  "search_description": "Search notes",
+  "note_description": "Create new note",
+  "clone_description": "Answer like you, based on your notes",
+  "me_description": "Same as /clone (shortcut)",
+  "import_description": "Import external notes (Obsidian, Markdown)",
+  "graph_description": "Visualize note graph (browser)",
+  "exit_description": "Exit GigaMind",
+  "help_title": "Available Commands",
+  "general_questions": "General questions: \"What can you do?\", \"Help\", \"/help\"",
+  "note_writing": "Note writing: \"Take a note\", \"Remember this\", \"/note\"",
+  "note_search": "Note search: \"Find my notes about...\", \"/search\"",
+  "clone_mode": "Clone mode: \"Answer like me\", \"/clone\", \"/me\"",
+  "import_notes": "Import: \"Import my Obsidian notes\", \"/import\"",
+  "settings": "Settings: \"Change settings\", \"/config\"",
+  "slash_commands_title": "Slash Commands",
+  "command_search": "/search: Search notes",
+  "command_note": "/note: Create new note",
+  "command_clone": "/clone (or /me): Answer based on your notes, like you would",
+  "command_import": "/import: Import external notes (Obsidian, Markdown) to GigaMind",
+  "command_help": "/help: See all commands",
+  "command_config": "/config: Change settings",
+  "command_graph": "/graph: Visualize note graph in browser",
+  "command_clear": "/clear: Clear conversation history",
+  "examples_title": "Examples",
+  "example_organize": "\"Organize what I learned today\" - Create notes through conversation",
+  "example_search": "\"Find project ideas in my notes\" - Search your notes",
+  "example_clone": "\"/clone What do you think about this topic?\" - Answer from your perspective",
+  "init": {
+    "description": "Initialize GigaMind project",
+    "success": "Project initialized successfully",
+    "alreadyInitialized": "Project is already initialized",
+    "creatingConfig": "Creating configuration file..."
+  },
+  "search": {
+    "description": "Search knowledge base",
+    "noResults": "No results found",
+    "searching": "Searching...",
+    "resultsFound": "Found {{count}} results"
+  },
+  "add": {
+    "description": "Add new note",
+    "success": "Note added successfully",
+    "failed": "Failed to add note"
+  },
+  "sync": {
+    "description": "Sync knowledge base",
+    "syncing": "Syncing...",
+    "success": "Sync completed",
+    "failed": "Sync failed"
+  },
+  "graph": {
+    "description": "Visualize knowledge graph",
+    "starting": "Starting graph server...",
+    "running": "Graph server is running",
+    "stopped": "Graph server stopped"
+  }
+}

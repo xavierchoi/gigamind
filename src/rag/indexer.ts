@@ -1,0 +1,640 @@
+/**
+ * RAG Indexer for note indexing and embedding generation.
+ * Handles full reindexing, incremental updates, and progress tracking.
+ *
+ * Integrates with:
+ * - EmbeddingService: OpenAI text-embedding-3-small embeddings
+ * - DocumentChunker: Korean/English sentence-aware chunking
+ * - Graph Analyzer: Connection count for centrality scoring
+ */
+
+import fs from "node:fs/promises";
+import path from "node:path";
+import crypto from "node:crypto";
+import { expandPath } from "../utils/config.js";
+import { parseNote } from "../utils/frontmatter.js";
+import { analyzeNoteGraph } from "../utils/graph/analyzer.js";
+import type { VectorDocument } from "./types.js";
+import { EmbeddingService as ActualEmbeddingService } from "./embeddings.js";
+import { DocumentChunker as ActualDocumentChunker, type Chunk } from "./chunker.js";
+
+/**
+ * Progress information for indexing operations
+ */
+export interface IndexingProgress {
+  total: number;
+  processed: number;
+  currentFile: string;
+  status: "indexing" | "embedding" | "storing" | "complete" | "error";
+}
+
+/**
+ * Result of a full index operation
+ */
+export interface IndexAllResult {
+  indexed: number;
+  errors: string[];
+}
+
+/**
+ * Result of an incremental index operation
+ */
+export interface IndexIncrementalResult {
+  added: number;
+  updated: number;
+  removed: number;
+}
+
+/**
+ * Metadata stored for each indexed note (for change detection)
+ */
+interface IndexedNoteMetadata {
+  notePath: string;
+  contentHash: string;
+  modifiedTime: number;
+  chunkCount: number;
+}
+
+/**
+ * Interface for embedding service
+ * Compatible with both ActualEmbeddingService and custom implementations
+ */
+export interface EmbeddingServiceInterface {
+  embedBatch(texts: string[]): Promise<Array<{ vector: number[] }>>;
+}
+
+/**
+ * Interface for document chunker
+ * Compatible with both ActualDocumentChunker and custom implementations
+ */
+export interface DocumentChunkerInterface {
+  chunk(content: string): Chunk[];
+}
+
+/**
+ * Adapter to wrap ActualEmbeddingService for the interface
+ */
+class EmbeddingServiceAdapter implements EmbeddingServiceInterface {
+  private service: ActualEmbeddingService;
+
+  constructor() {
+    this.service = new ActualEmbeddingService();
+  }
+
+  async embedBatch(texts: string[]): Promise<Array<{ vector: number[] }>> {
+    return this.service.embedBatch(texts);
+  }
+}
+
+/**
+ * In-memory vector store for development
+ * TODO: Replace with persistent SQLite + vector extension or external vector DB
+ */
+class InMemoryVectorStore {
+  private documents: Map<string, VectorDocument> = new Map();
+  private noteMetadata: Map<string, IndexedNoteMetadata> = new Map();
+
+  async store(documents: VectorDocument[]): Promise<void> {
+    for (const doc of documents) {
+      this.documents.set(doc.id, doc);
+    }
+  }
+
+  async remove(noteId: string): Promise<number> {
+    let removed = 0;
+    for (const [id, doc] of this.documents) {
+      if (doc.noteId === noteId) {
+        this.documents.delete(id);
+        removed++;
+      }
+    }
+    this.noteMetadata.delete(noteId);
+    return removed;
+  }
+
+  async removeByPath(notePath: string): Promise<number> {
+    let removed = 0;
+    for (const [id, doc] of this.documents) {
+      if (doc.notePath === notePath) {
+        this.documents.delete(id);
+        removed++;
+      }
+    }
+    // Remove metadata by path
+    for (const [noteId, meta] of this.noteMetadata) {
+      if (meta.notePath === notePath) {
+        this.noteMetadata.delete(noteId);
+        break;
+      }
+    }
+    return removed;
+  }
+
+  async clear(): Promise<void> {
+    this.documents.clear();
+    this.noteMetadata.clear();
+  }
+
+  async getIndexedNotes(): Promise<Map<string, IndexedNoteMetadata>> {
+    return new Map(this.noteMetadata);
+  }
+
+  async setNoteMetadata(noteId: string, metadata: IndexedNoteMetadata): Promise<void> {
+    this.noteMetadata.set(noteId, metadata);
+  }
+
+  async getAllDocuments(): Promise<VectorDocument[]> {
+    return Array.from(this.documents.values());
+  }
+
+  getSize(): number {
+    return this.documents.size;
+  }
+}
+
+/**
+ * Configuration for RAGIndexer
+ */
+export interface RAGIndexerConfig {
+  /** Directory containing notes to index */
+  notesDir: string;
+  /** Path to store the vector database (future use for persistence) */
+  dbPath: string;
+  /** Custom embedding service (optional, uses OpenAI by default) */
+  embeddingService?: EmbeddingServiceInterface;
+  /** Custom document chunker (optional, uses default Korean/English chunker) */
+  chunker?: DocumentChunkerInterface;
+}
+
+/**
+ * RAG Indexer class for indexing notes
+ *
+ * Features:
+ * - Full reindex capability with progress tracking
+ * - Incremental indexing (only changed files based on content hash)
+ * - Single note indexing for real-time updates
+ * - Graph centrality integration from existing analyzer
+ *
+ * @example
+ * ```typescript
+ * const indexer = new RAGIndexer({
+ *   notesDir: '~/notes',
+ *   dbPath: '~/.gigamind/vectors.db'
+ * });
+ *
+ * // Full reindex with progress
+ * await indexer.indexAll((progress) => {
+ *   console.log(`${progress.processed}/${progress.total}: ${progress.currentFile}`);
+ * });
+ *
+ * // Incremental update
+ * const result = await indexer.indexIncremental();
+ * console.log(`Added: ${result.added}, Updated: ${result.updated}, Removed: ${result.removed}`);
+ * ```
+ */
+export class RAGIndexer {
+  private embeddingService: EmbeddingServiceInterface;
+  private chunker: DocumentChunkerInterface;
+  private notesDir: string;
+  private dbPath: string;
+  private vectorStore: InMemoryVectorStore;
+
+  constructor(config: RAGIndexerConfig) {
+    this.notesDir = expandPath(config.notesDir);
+    this.dbPath = config.dbPath;
+    this.embeddingService = config.embeddingService || new EmbeddingServiceAdapter();
+    this.chunker = config.chunker || new ActualDocumentChunker();
+    this.vectorStore = new InMemoryVectorStore();
+  }
+
+  /**
+   * Perform a full reindex of all notes
+   *
+   * @param onProgress - Optional callback for progress updates
+   * @returns Result containing count of indexed notes and any errors
+   */
+  async indexAll(
+    onProgress?: (p: IndexingProgress) => void
+  ): Promise<IndexAllResult> {
+    const errors: string[] = [];
+    let indexed = 0;
+
+    try {
+      // Clear existing index
+      await this.vectorStore.clear();
+
+      // Collect all markdown files
+      const files = await this.collectMarkdownFiles(this.notesDir);
+      const total = files.length;
+
+      // Get graph data for connection counts
+      const graphStats = await analyzeNoteGraph(this.notesDir, { useCache: false });
+
+      for (let i = 0; i < files.length; i++) {
+        const filePath = files[i];
+        const relativePath = path.relative(this.notesDir, filePath);
+
+        onProgress?.({
+          total,
+          processed: i,
+          currentFile: relativePath,
+          status: "indexing",
+        });
+
+        try {
+          const documents = await this.processNote(filePath, graphStats);
+
+          if (documents.length > 0) {
+            onProgress?.({
+              total,
+              processed: i,
+              currentFile: relativePath,
+              status: "embedding",
+            });
+
+            // Generate embeddings in batch
+            const texts = documents.map((d) => d.content);
+            const embeddings = await this.embeddingService.embedBatch(texts);
+
+            // Attach embeddings to documents
+            for (let j = 0; j < documents.length; j++) {
+              documents[j].embedding = embeddings[j].vector;
+            }
+
+            onProgress?.({
+              total,
+              processed: i,
+              currentFile: relativePath,
+              status: "storing",
+            });
+
+            // Store documents
+            await this.vectorStore.store(documents);
+
+            // Store note metadata for incremental indexing
+            const content = await fs.readFile(filePath, "utf-8");
+            const stat = await fs.stat(filePath);
+            await this.vectorStore.setNoteMetadata(documents[0].noteId, {
+              notePath: filePath,
+              contentHash: this.hashContent(content),
+              modifiedTime: stat.mtimeMs,
+              chunkCount: documents.length,
+            });
+
+            indexed++;
+          }
+        } catch (err) {
+          const errorMsg = err instanceof Error ? err.message : String(err);
+          errors.push(`${relativePath}: ${errorMsg}`);
+        }
+      }
+
+      onProgress?.({
+        total,
+        processed: total,
+        currentFile: "",
+        status: "complete",
+      });
+
+      return { indexed, errors };
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      errors.push(`Fatal error: ${errorMsg}`);
+
+      onProgress?.({
+        total: 0,
+        processed: 0,
+        currentFile: "",
+        status: "error",
+      });
+
+      return { indexed, errors };
+    }
+  }
+
+  /**
+   * Perform incremental indexing (only changed files)
+   *
+   * Uses content hash to detect changes, avoiding unnecessary re-embedding.
+   *
+   * @param onProgress - Optional callback for progress updates
+   * @returns Result containing counts of added, updated, and removed notes
+   */
+  async indexIncremental(
+    onProgress?: (p: IndexingProgress) => void
+  ): Promise<IndexIncrementalResult> {
+    let added = 0;
+    let updated = 0;
+    let removed = 0;
+
+    try {
+      // Get current files
+      const currentFiles = await this.collectMarkdownFiles(this.notesDir);
+      const currentFilesSet = new Set(currentFiles);
+
+      // Get indexed notes
+      const indexedNotes = await this.vectorStore.getIndexedNotes();
+
+      // Get graph data for connection counts
+      const graphStats = await analyzeNoteGraph(this.notesDir, { useCache: false });
+
+      const total = currentFiles.length + indexedNotes.size;
+      let processed = 0;
+
+      // Check for removed files
+      for (const [_noteId, metadata] of indexedNotes) {
+        if (!currentFilesSet.has(metadata.notePath)) {
+          onProgress?.({
+            total,
+            processed,
+            currentFile: path.relative(this.notesDir, metadata.notePath),
+            status: "indexing",
+          });
+
+          await this.vectorStore.removeByPath(metadata.notePath);
+          removed++;
+          processed++;
+        }
+      }
+
+      // Check for new or modified files
+      for (const filePath of currentFiles) {
+        const relativePath = path.relative(this.notesDir, filePath);
+
+        onProgress?.({
+          total,
+          processed,
+          currentFile: relativePath,
+          status: "indexing",
+        });
+
+        try {
+          const content = await fs.readFile(filePath, "utf-8");
+          const stat = await fs.stat(filePath);
+          const currentHash = this.hashContent(content);
+
+          // Find existing metadata by path
+          let existingMetadata: IndexedNoteMetadata | undefined;
+          let existingNoteId: string | undefined;
+          for (const [noteId, meta] of indexedNotes) {
+            if (meta.notePath === filePath) {
+              existingMetadata = meta;
+              existingNoteId = noteId;
+              break;
+            }
+          }
+
+          const needsReindex =
+            !existingMetadata ||
+            existingMetadata.contentHash !== currentHash ||
+            existingMetadata.modifiedTime < stat.mtimeMs;
+
+          if (needsReindex) {
+            // Remove old documents if they exist
+            if (existingNoteId) {
+              await this.vectorStore.remove(existingNoteId);
+            }
+
+            onProgress?.({
+              total,
+              processed,
+              currentFile: relativePath,
+              status: "embedding",
+            });
+
+            const documents = await this.processNote(filePath, graphStats);
+
+            if (documents.length > 0) {
+              // Generate embeddings
+              const texts = documents.map((d) => d.content);
+              const embeddings = await this.embeddingService.embedBatch(texts);
+
+              for (let j = 0; j < documents.length; j++) {
+                documents[j].embedding = embeddings[j].vector;
+              }
+
+              onProgress?.({
+                total,
+                processed,
+                currentFile: relativePath,
+                status: "storing",
+              });
+
+              await this.vectorStore.store(documents);
+              await this.vectorStore.setNoteMetadata(documents[0].noteId, {
+                notePath: filePath,
+                contentHash: currentHash,
+                modifiedTime: stat.mtimeMs,
+                chunkCount: documents.length,
+              });
+
+              if (existingMetadata) {
+                updated++;
+              } else {
+                added++;
+              }
+            }
+          }
+        } catch (err) {
+          // Log error but continue with other files
+          console.debug(`[RAGIndexer] Failed to process ${relativePath}:`, err);
+        }
+
+        processed++;
+      }
+
+      onProgress?.({
+        total,
+        processed: total,
+        currentFile: "",
+        status: "complete",
+      });
+
+      return { added, updated, removed };
+    } catch (err) {
+      onProgress?.({
+        total: 0,
+        processed: 0,
+        currentFile: "",
+        status: "error",
+      });
+
+      throw err;
+    }
+  }
+
+  /**
+   * Index a single note
+   *
+   * Useful for real-time indexing when a note is saved.
+   *
+   * @param notePath - Path to the note (absolute or relative to notesDir)
+   */
+  async indexNote(notePath: string): Promise<void> {
+    const expandedPath = path.isAbsolute(notePath)
+      ? notePath
+      : path.join(this.notesDir, notePath);
+
+    // Get graph data for connection counts
+    const graphStats = await analyzeNoteGraph(this.notesDir, { useCache: false });
+
+    // Remove existing documents for this note
+    await this.vectorStore.removeByPath(expandedPath);
+
+    // Process the note
+    const documents = await this.processNote(expandedPath, graphStats);
+
+    if (documents.length > 0) {
+      // Generate embeddings
+      const texts = documents.map((d) => d.content);
+      const embeddings = await this.embeddingService.embedBatch(texts);
+
+      for (let j = 0; j < documents.length; j++) {
+        documents[j].embedding = embeddings[j].vector;
+      }
+
+      // Store documents
+      await this.vectorStore.store(documents);
+
+      // Update metadata
+      const content = await fs.readFile(expandedPath, "utf-8");
+      const stat = await fs.stat(expandedPath);
+      await this.vectorStore.setNoteMetadata(documents[0].noteId, {
+        notePath: expandedPath,
+        contentHash: this.hashContent(content),
+        modifiedTime: stat.mtimeMs,
+        chunkCount: documents.length,
+      });
+    }
+  }
+
+  /**
+   * Remove a note from the index
+   *
+   * @param noteId - ID of the note to remove
+   */
+  async removeNote(noteId: string): Promise<void> {
+    await this.vectorStore.remove(noteId);
+  }
+
+  /**
+   * Get the current index size (number of chunks)
+   */
+  getIndexSize(): number {
+    return this.vectorStore.getSize();
+  }
+
+  /**
+   * Get all indexed documents
+   *
+   * Useful for passing to RAGRetriever or for debugging.
+   */
+  async getAllDocuments(): Promise<VectorDocument[]> {
+    return this.vectorStore.getAllDocuments();
+  }
+
+  /**
+   * Process a single note file and return vector documents
+   */
+  private async processNote(
+    notePath: string,
+    graphStats?: Awaited<ReturnType<typeof analyzeNoteGraph>>
+  ): Promise<VectorDocument[]> {
+    const content = await fs.readFile(notePath, "utf-8");
+    const parsed = parseNote(content);
+    const stat = await fs.stat(notePath);
+
+    const noteId = parsed.id || path.basename(notePath, ".md");
+    const title = parsed.title || path.basename(notePath, ".md");
+    const type = parsed.type || "note";
+    const tags = parsed.tags || [];
+
+    // Calculate connection count from graph stats (for centrality scoring)
+    let connectionCount = 0;
+    if (graphStats) {
+      // Count incoming connections (backlinks)
+      const backlinks = graphStats.backlinks.get(title);
+      if (backlinks) {
+        connectionCount += backlinks.length;
+      }
+
+      // Count outgoing connections (forward links)
+      const forwardLinks = graphStats.forwardLinks.get(notePath);
+      if (forwardLinks) {
+        connectionCount += forwardLinks.length;
+      }
+    }
+
+    // Chunk the content using the document chunker
+    const chunks = this.chunker.chunk(parsed.content);
+
+    // Handle empty content case
+    if (chunks.length === 0) {
+      return [];
+    }
+
+    // Create vector documents
+    const documents: VectorDocument[] = chunks.map((chunk) => ({
+      id: `${noteId}_chunk_${chunk.index}`,
+      noteId,
+      notePath,
+      chunkIndex: chunk.index,
+      content: chunk.content,
+      embedding: [], // Will be filled by embedding service
+      metadata: {
+        title,
+        type,
+        tags,
+        created: parsed.created || stat.birthtime.toISOString(),
+        modified: parsed.modified || stat.mtime.toISOString(),
+        connectionCount,
+      },
+    }));
+
+    return documents;
+  }
+
+  /**
+   * Recursively collect all markdown files from a directory
+   */
+  private async collectMarkdownFiles(dir: string): Promise<string[]> {
+    const files: string[] = [];
+
+    try {
+      await fs.access(dir);
+    } catch {
+      return files;
+    }
+
+    const walk = async (currentDir: string): Promise<void> => {
+      try {
+        const entries = await fs.readdir(currentDir, { withFileTypes: true });
+
+        for (const entry of entries) {
+          const fullPath = path.join(currentDir, entry.name);
+
+          if (entry.isDirectory()) {
+            // Skip hidden directories
+            if (!entry.name.startsWith(".")) {
+              await walk(fullPath);
+            }
+          } else if (entry.name.endsWith(".md")) {
+            files.push(fullPath);
+          }
+        }
+      } catch {
+        // Skip inaccessible directories
+      }
+    };
+
+    await walk(dir);
+    return files;
+  }
+
+  /**
+   * Generate a SHA-256 hash of content for change detection
+   */
+  private hashContent(content: string): string {
+    return crypto.createHash("sha256").update(content).digest("hex");
+  }
+}

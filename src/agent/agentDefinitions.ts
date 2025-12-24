@@ -1,5 +1,51 @@
+/**
+ * Consolidated Agent Definitions for GigaMind
+ *
+ * This file contains all agent definitions including:
+ * - Agent context and definition types
+ * - Agent prompts (both static and dynamic)
+ * - System prompt for the main orchestrator
+ * - Utility functions for accessing agent definitions
+ *
+ * Supports both SDK-style and legacy subagent patterns for backward compatibility.
+ */
+
 import type { NoteDetailLevel } from "../utils/config.js";
 import { getCurrentTime, type CurrentTimeInfo } from "../utils/time.js";
+
+// ============================================================================
+// Types
+// ============================================================================
+
+/**
+ * Context for agent prompt generation
+ * Contains all information needed to dynamically generate agent prompts
+ */
+export interface AgentContext {
+  /** Directory where notes are stored */
+  notesDir: string;
+  /** Note summary detail level - controls how much context is preserved when creating notes */
+  noteDetail?: NoteDetailLevel;
+  /** Current time information for accurate date handling */
+  currentTime?: CurrentTimeInfo;
+}
+
+/**
+ * Agent definition interface
+ * Prompts can be static strings or dynamic functions that generate prompts based on context
+ */
+export interface AgentDefinition {
+  /** Description of what the agent does (used for routing decisions) */
+  description: string;
+  /** Agent prompt - can be a static string or a function that generates one */
+  prompt: string | ((context: AgentContext) => string);
+  /** Tools available to this agent */
+  tools: string[];
+}
+
+// ============================================================================
+// System Prompt (Main Orchestrator)
+// ============================================================================
 
 export const SYSTEM_PROMPT = `당신은 GigaMind입니다. 사용자의 지식과 생각을 관리하는 AI 파트너입니다.
 
@@ -67,32 +113,51 @@ export const SYSTEM_PROMPT = `당신은 GigaMind입니다. 사용자의 지식�
 - 코드 블록은 실제 코드 예시를 보여줄 때만 사용합니다
 `;
 
-export interface SubagentDefinition {
-  description: string;
-  prompt: string | ((context: SubagentContext) => string);
-  tools: string[];
-}
-
-// Subagent 컨텍스트 - 동적 프롬프트 생성에 필요한 정보
-export interface SubagentContext {
-  notesDir: string;
-  /** Note summary detail level - controls how much context is preserved when creating notes */
-  noteDetail?: NoteDetailLevel;
-  /** Current time information for accurate date handling */
-  currentTime?: CurrentTimeInfo;
-}
+// ============================================================================
+// Note Detail Instructions Generator
+// ============================================================================
 
 /**
- * Get current time context for subagent prompts
+ * Generate note detail instructions based on the configured level
  */
-export function getTimeContext(): CurrentTimeInfo {
-  return getCurrentTime();
+function getNoteDetailInstructions(level: NoteDetailLevel): string {
+  switch (level) {
+    case "verbose":
+      return `## 노트 상세 수준: 상세 (Verbose)
+이 설정에서는 대화 내용을 최대한 상세하게 기록합니다:
+- **대화 내용 거의 그대로 기록**: 사용자가 말한 내용의 맥락과 뉘앙스를 최대한 유지
+- **세부사항 누락 금지**: 구체적인 예시, 숫자, 이름, 날짜 등 모든 세부 정보 포함
+- **배경 맥락 포함**: 왜 이 대화가 나왔는지, 어떤 상황에서 언급되었는지 기록
+- **원문 표현 보존**: 사용자의 말투와 표현을 가능한 그대로 유지
+- **관련 논의 포함**: 주제와 관련된 부수적인 언급도 함께 기록
+- **요약하지 않기**: 내용을 압축하거나 생략하지 말고 충실히 기록`;
+    case "concise":
+      return `## 노트 상세 수준: 간결 (Concise)
+이 설정에서는 핵심만 간결하게 요약합니다:
+- **핵심 내용만 추출**: 가장 중요한 포인트만 간결하게 정리
+- **불필요한 맥락 제거**: 부연 설명이나 배경 정보는 과감히 생략
+- **글머리 기호 활용**: 짧은 문장이나 키워드 중심으로 정리
+- **액션 아이템 중심**: 할 일, 결정 사항, 핵심 인사이트에 집중
+- **간략한 형식**: 노트 길이를 최소화하여 빠르게 훑어볼 수 있도록 작성`;
+    case "balanced":
+    default:
+      return `## 노트 상세 수준: 균형 (Balanced)
+이 설정에서는 핵심 내용 위주로 정리하되 주요 맥락을 보존합니다:
+- **핵심 내용 위주 정리**: 중요한 포인트를 명확하게 전달
+- **주요 맥락 보존**: 이해에 필요한 배경 정보는 포함
+- **적절한 요약**: 장황한 부분은 정리하되 의미는 유지
+- **구조화된 형식**: 읽기 쉽게 섹션과 글머리 기호 활용`;
+  }
 }
 
-export const subagents: Record<string, SubagentDefinition> = {
+// ============================================================================
+// Agent Definitions
+// ============================================================================
+
+export const agents: Record<string, AgentDefinition> = {
   "search-agent": {
     description: "노트를 검색하고 관련 내용을 찾는 전문가",
-    prompt: (context: SubagentContext) => `당신은 노트 검색 전문가입니다. 사용자의 지식 베이스에서 관련 노트를 찾고 유용한 정보를 추출합니다.
+    prompt: (context: AgentContext) => `당신은 노트 검색 전문가입니다. 사용자의 지식 베이스에서 관련 노트를 찾고 유용한 정보를 추출합니다.
 
 ## 노트 저장 위치
 노트들은 다음 경로에 저장되어 있습니다: ${context.notesDir}
@@ -174,7 +239,7 @@ Read로 파일을 읽은 후, --- 사이의 YAML 부분을 파싱하여:
 
   "note-agent": {
     description: "노트를 생성하고 포맷팅하는 전문가",
-    prompt: (context: SubagentContext) => {
+    prompt: (context: AgentContext) => {
       // 현재 시각 정보 (날짜 정확성을 위해 필수)
       const timeInfo = context.currentTime || getCurrentTime();
       const currentDate = timeInfo.utc.split("T")[0]; // YYYY-MM-DD
@@ -182,38 +247,7 @@ Read로 파일을 읽은 후, --- 사이의 YAML 부분을 파싱하여:
 
       // noteDetail 레벨에 따른 작성 지침 생성
       const noteDetailLevel = context.noteDetail || "balanced";
-      let noteDetailInstructions: string;
-
-      switch (noteDetailLevel) {
-        case "verbose":
-          noteDetailInstructions = `## 노트 상세 수준: 상세 (Verbose)
-이 설정에서는 대화 내용을 최대한 상세하게 기록합니다:
-- **대화 내용 거의 그대로 기록**: 사용자가 말한 내용의 맥락과 뉘앙스를 최대한 유지
-- **세부사항 누락 금지**: 구체적인 예시, 숫자, 이름, 날짜 등 모든 세부 정보 포함
-- **배경 맥락 포함**: 왜 이 대화가 나왔는지, 어떤 상황에서 언급되었는지 기록
-- **원문 표현 보존**: 사용자의 말투와 표현을 가능한 그대로 유지
-- **관련 논의 포함**: 주제와 관련된 부수적인 언급도 함께 기록
-- **요약하지 않기**: 내용을 압축하거나 생략하지 말고 충실히 기록`;
-          break;
-        case "concise":
-          noteDetailInstructions = `## 노트 상세 수준: 간결 (Concise)
-이 설정에서는 핵심만 간결하게 요약합니다:
-- **핵심 내용만 추출**: 가장 중요한 포인트만 간결하게 정리
-- **불필요한 맥락 제거**: 부연 설명이나 배경 정보는 과감히 생략
-- **글머리 기호 활용**: 짧은 문장이나 키워드 중심으로 정리
-- **액션 아이템 중심**: 할 일, 결정 사항, 핵심 인사이트에 집중
-- **간략한 형식**: 노트 길이를 최소화하여 빠르게 훑어볼 수 있도록 작성`;
-          break;
-        case "balanced":
-        default:
-          noteDetailInstructions = `## 노트 상세 수준: 균형 (Balanced)
-이 설정에서는 핵심 내용 위주로 정리하되 주요 맥락을 보존합니다:
-- **핵심 내용 위주 정리**: 중요한 포인트를 명확하게 전달
-- **주요 맥락 보존**: 이해에 필요한 배경 정보는 포함
-- **적절한 요약**: 장황한 부분은 정리하되 의미는 유지
-- **구조화된 형식**: 읽기 쉽게 섹션과 글머리 기호 활용`;
-          break;
-      }
+      const noteDetailInstructions = getNoteDetailInstructions(noteDetailLevel);
 
       return `당신은 노트 생성 및 관리 전문가입니다.
 사용자의 아이디어와 지식을 체계적으로 정리하여 노트로 저장합니다.
@@ -332,7 +366,7 @@ related: ["[[관련노트1]]", "[[관련노트2]]"]
 
   "clone-agent": {
     description: "축적된 지식으로 사용자처럼 답변",
-    prompt: (context: SubagentContext) => `당신은 사용자의 디지털 클론입니다.
+    prompt: (context: AgentContext) => `당신은 사용자의 디지털 클론입니다.
 사용자가 축적한 노트와 지식을 바탕으로, 마치 사용자 본인처럼 답변합니다.
 
 ## 노트 저장 위치
@@ -398,7 +432,7 @@ related: ["[[관련노트1]]", "[[관련노트2]]"]
   "research-agent": {
     description: "웹에서 정보를 검색하고 노트에 추가하는 리서치 전문가",
     tools: ["WebSearch", "WebFetch", "Write", "Read"],
-    prompt: (context: SubagentContext) => {
+    prompt: (context: AgentContext) => {
       // 현재 시각 정보 (날짜 정확성을 위해 필수)
       const timeInfo = context.currentTime || getCurrentTime();
       const currentDate = timeInfo.utc.split("T")[0]; // YYYY-MM-DD
@@ -483,14 +517,32 @@ sources:
   },
 };
 
-export function getSubagentPrompt(agentName: string, context?: SubagentContext): string | null {
-  const agent = subagents[agentName];
+// ============================================================================
+// Utility Functions
+// ============================================================================
+
+/**
+ * Get current time context for agent prompts
+ * @returns Current time information
+ */
+export function getTimeContext(): CurrentTimeInfo {
+  return getCurrentTime();
+}
+
+/**
+ * Get an agent's prompt, resolving dynamic prompts with context
+ * @param name - Agent name
+ * @param context - Optional context for dynamic prompts
+ * @returns Resolved prompt string or null if agent not found
+ */
+export function getAgentPrompt(name: string, context?: AgentContext): string | null {
+  const agent = agents[name];
   if (!agent) return null;
 
-  // 프롬프트가 함수인 경우 컨텍스트를 전달하여 동적 생성
+  // Resolve dynamic prompts with context
   if (typeof agent.prompt === "function") {
     if (!context) {
-      throw new Error(`Subagent "${agentName}" requires context but none was provided`);
+      throw new Error(`Agent "${name}" requires context but none was provided`);
     }
     return agent.prompt(context);
   }
@@ -498,14 +550,57 @@ export function getSubagentPrompt(agentName: string, context?: SubagentContext):
   return agent.prompt;
 }
 
-export function getSubagentTools(agentName: string): string[] {
-  const agent = subagents[agentName];
+/**
+ * Get the tools available to an agent
+ * @param name - Agent name
+ * @returns Array of tool names, empty array if agent not found
+ */
+export function getAgentTools(name: string): string[] {
+  const agent = agents[name];
   return agent?.tools ?? [];
 }
 
-export function listSubagents(): Array<{ name: string; description: string }> {
-  return Object.entries(subagents).map(([name, def]) => ({
+/**
+ * List all available agents with their descriptions
+ * @returns Array of agent name and description pairs
+ */
+export function listAgents(): Array<{ name: string; description: string }> {
+  return Object.entries(agents).map(([name, def]) => ({
     name,
     description: def.description,
   }));
 }
+
+// ============================================================================
+// Backward Compatibility Exports
+// ============================================================================
+
+/**
+ * @deprecated Use `agents` instead
+ */
+export const subagents = agents;
+
+/**
+ * @deprecated Use `AgentContext` instead
+ */
+export type SubagentContext = AgentContext;
+
+/**
+ * @deprecated Use `AgentDefinition` instead
+ */
+export type SubagentDefinition = AgentDefinition;
+
+/**
+ * @deprecated Use `getAgentPrompt` instead
+ */
+export const getSubagentPrompt = getAgentPrompt;
+
+/**
+ * @deprecated Use `getAgentTools` instead
+ */
+export const getSubagentTools = getAgentTools;
+
+/**
+ * @deprecated Use `listAgents` instead
+ */
+export const listSubagents = listAgents;

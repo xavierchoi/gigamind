@@ -201,9 +201,9 @@ export function Chat({
 
     // Tab: Autocomplete command
     if (key.tab && matchingCommands.length > 0) {
-      const nextIndex = (tabIndex + 1) % matchingCommands.length;
-      setTabIndex(nextIndex);
+      // Use current tabIndex for selection, then advance for next Tab press
       setInput(matchingCommands[tabIndex].command);
+      setTabIndex((tabIndex + 1) % matchingCommands.length);
       return;
     }
 

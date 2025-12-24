@@ -3,6 +3,11 @@ import path from "node:path";
 import os from "node:os";
 import type { ChatMessage } from "./client.js";
 import { getTimezoneInfo } from "../utils/time.js";
+import {
+  encryptSession,
+  decryptOrParse,
+  isEncrypted,
+} from "../utils/sessionEncryption.js";
 
 export interface Session {
   id: string;
@@ -133,7 +138,12 @@ export class SessionManager {
             const filePath = path.join(monthDir, file);
             try {
               const content = await fs.readFile(filePath, "utf-8");
-              const session = JSON.parse(content) as Session;
+              // Reconstruct session ID from path for decryption
+              const [year, month] = entry.name.split("-");
+              const [day, time] = file.replace(".json", "").split("_");
+              const sessionId = `${year}${month}${day}_${time}`;
+              // Use decryptOrParse for backward compatibility with plaintext sessions
+              const session = decryptOrParse<Session>(content, sessionId);
 
               this.index.sessions[session.id] = this.createIndexEntry(
                 session,
@@ -212,7 +222,8 @@ export class SessionManager {
 
           try {
             const content = await fs.readFile(oldPath, "utf-8");
-            const session = JSON.parse(content) as Session;
+            // Use decryptOrParse for backward compatibility with plaintext sessions
+            const session = decryptOrParse<Session>(content, sessionId);
 
             // Calculate new path
             const monthDir = this.getMonthDir(sessionId);
@@ -223,8 +234,11 @@ export class SessionManager {
             // Create monthly directory
             await fs.mkdir(newDirPath, { recursive: true });
 
-            // Move file to new location
-            await fs.writeFile(newFilePath, content);
+            // Move file to new location, encrypting if not already encrypted
+            const newContent = isEncrypted(content)
+              ? content
+              : encryptSession(session, sessionId);
+            await fs.writeFile(newFilePath, newContent);
             await fs.unlink(oldPath);
 
             // Add to index
@@ -306,7 +320,8 @@ export class SessionManager {
 
     try {
       const content = await fs.readFile(filePath, "utf-8");
-      this.currentSession = JSON.parse(content) as Session;
+      // Use decryptOrParse for backward compatibility with plaintext sessions
+      this.currentSession = decryptOrParse<Session>(content, sessionId);
       return this.currentSession;
     } catch {
       // Try fallback: scan for the file in case index is out of sync
@@ -320,7 +335,8 @@ export class SessionManager {
       const flatPath = path.join(this.sessionsDir, `${sessionId}.json`);
       try {
         const content = await fs.readFile(flatPath, "utf-8");
-        this.currentSession = JSON.parse(content) as Session;
+        // Use decryptOrParse for backward compatibility with plaintext sessions
+        this.currentSession = decryptOrParse<Session>(content, sessionId);
         return this.currentSession;
       } catch {
         // Not in flat structure
@@ -332,7 +348,8 @@ export class SessionManager {
 
       try {
         const content = await fs.readFile(expectedPath, "utf-8");
-        this.currentSession = JSON.parse(content) as Session;
+        // Use decryptOrParse for backward compatibility with plaintext sessions
+        this.currentSession = decryptOrParse<Session>(content, sessionId);
 
         // Update index with correct path
         await this.updateIndexEntry(this.currentSession);
@@ -403,7 +420,8 @@ export class SessionManager {
       allSessions.sort((a, b) => b.id.localeCompare(a.id));
 
       const content = await fs.readFile(allSessions[0].path, "utf-8");
-      this.currentSession = JSON.parse(content) as Session;
+      // Use decryptOrParse for backward compatibility with plaintext sessions
+      this.currentSession = decryptOrParse<Session>(content, allSessions[0].id);
       return this.currentSession;
     } catch {
       return null;
@@ -422,9 +440,15 @@ export class SessionManager {
 
     const filePath = this.getSessionPath(this.currentSession.id);
 
+    // Encrypt session data before saving
+    const encryptedContent = encryptSession(
+      this.currentSession,
+      this.currentSession.id
+    );
+
     // Atomic write
     const tempPath = `${filePath}.tmp`;
-    await fs.writeFile(tempPath, JSON.stringify(this.currentSession, null, 2));
+    await fs.writeFile(tempPath, encryptedContent);
     await fs.rename(tempPath, filePath);
 
     // Update index
@@ -610,7 +634,8 @@ export class SessionManager {
 
     try {
       const content = await fs.readFile(filePath, "utf-8");
-      const session = JSON.parse(content) as Session;
+      // Use decryptOrParse for backward compatibility with plaintext sessions
+      const session = decryptOrParse<Session>(content, sessionId);
 
       const firstUserMessage = session.messages.find((m) => m.role === "user");
       const firstMessage = firstUserMessage

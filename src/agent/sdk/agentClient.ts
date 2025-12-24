@@ -13,7 +13,7 @@ import { query, type Options } from "@anthropic-ai/claude-agent-sdk";
 import type { NoteDetailLevel } from "../../utils/config.js";
 import type { StreamCallbacks } from "../client.js";
 import type { SubagentCallbacks, SubagentResult } from "../subagent.js";
-import type { SubagentContext } from "../prompts.js";
+import type { AgentContext } from "../agentDefinitions.js";
 import { createAgentDefinitions } from "./agentDefinitions.js";
 import { createSecurityHooks } from "./hooks.js";
 import { getLogger } from "../../utils/logger.js";
@@ -121,8 +121,8 @@ export class AgentClient {
     let fullResponse = "";
 
     try {
-      // Create subagent context for agent definitions
-      const context: SubagentContext = {
+      // Create agent context for agent definitions
+      const context: AgentContext = {
         notesDir: this.notesDir,
         noteDetail: this.noteDetail,
       };
@@ -257,8 +257,8 @@ export class AgentClient {
     try {
       callbacks?.onThinking?.();
 
-      // Create subagent context for agent definitions
-      const context: SubagentContext = {
+      // Create agent context for agent definitions
+      const context: AgentContext = {
         notesDir: this.notesDir,
         noteDetail: this.noteDetail,
       };

@@ -3,7 +3,7 @@
  * Express server for serving the graph visualization UI
  */
 
-import express, { type Express, type Request, type Response } from "express";
+import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createGraphRouter } from "./routes/api.js";
@@ -35,10 +35,25 @@ export function createGraphServer(options: GraphServerOptions): GraphServer {
   // Middleware
   app.use(express.json());
 
-  // CORS for local development
-  app.use((_req: Request, res: Response, next) => {
-    res.header("Access-Control-Allow-Origin", "*");
-    res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+  // CORS restricted to localhost origins only
+  app.use((_req: Request, res: Response, next: NextFunction) => {
+    const origin = _req.headers.origin;
+    const allowedOrigins = [
+      `http://localhost:${port}`,
+      `http://127.0.0.1:${port}`,
+    ];
+    if (origin && allowedOrigins.includes(origin)) {
+      res.header("Access-Control-Allow-Origin", origin);
+    }
+    res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
+    next();
+  });
+
+  // Security headers
+  app.use((_req: Request, res: Response, next: NextFunction) => {
+    res.setHeader("X-Frame-Options", "DENY");
+    res.setHeader("X-XSS-Protection", "1; mode=block");
+    res.setHeader("X-Content-Type-Options", "nosniff");
     next();
   });
 
@@ -82,8 +97,8 @@ export function createGraphServer(options: GraphServerOptions): GraphServer {
     }
   };
 
-  // Start server
-  server = app.listen(port, () => {
+  // Start server - bind to localhost only for security
+  server = app.listen(port, "127.0.0.1", () => {
     console.log(`Graph server running at http://localhost:${port}`);
   });
 

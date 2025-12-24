@@ -1,0 +1,91 @@
+{
+  "greeting": {
+    "hello": "안녕하세요",
+    "hello_with_name": "안녕하세요, {{name}}님!",
+    "what_can_i_help": "무엇을 도와드릴까요?",
+    "welcome_to_gigamind": "GigaMind에 오신 것을 환영합니다!"
+  },
+  "loading": {
+    "loading_app": "GigaMind를 불러오는 중...",
+    "validating_api_key": "API 키를 검증하는 중...",
+    "analyzing_notes": "노트를 분석하는 중...",
+    "folder_dialog_opened": "폴더 선택 다이얼로그가 열렸습니다..."
+  },
+  "processing": {
+    "processing": "처리 중...",
+    "searching_notes": "노트를 검색하는 중...",
+    "writing_note": "노트를 작성하는 중...",
+    "analyzing_my_notes": "내 노트를 분석하는 중...",
+    "starting_graph_server": "그래프 시각화 서버를 시작하는 중...",
+    "files_matched": "{{count}}개 파일에서 매치",
+    "files_found": "{{count}}개 파일 발견",
+    "related_files_checked": "{{count}}개 관련 파일 확인"
+  },
+  "thinking": {
+    "thinking": "생각하는 중...",
+    "thinking_with_time": "생각하는 중... ({{seconds}}초)"
+  },
+  "working": {
+    "using_tool": "{{toolName}} 도구 사용 중...",
+    "exploring_notes_with_tool": "{{toolName}} 도구로 노트 탐색 중..."
+  },
+  "cancel_hint": {
+    "esc_to_cancel": "Esc: 취소"
+  },
+  "request_cancelled": {
+    "cancelled": "요청이 취소되었습니다. 다른 걸 부탁하시겠어요?"
+  },
+  "settings_saved": {
+    "saved": "설정이 저장되었습니다.",
+    "cancelled": "설정이 취소되었습니다."
+  },
+  "time_display": {
+    "current_time": "현재 시각",
+    "minutes_ago": "{{count}}분 전",
+    "last_activity": "마지막 활동"
+  },
+  "help_hint": {
+    "help_command": "/help를 입력하면 사용 가능한 명령어를 볼 수 있어요."
+  },
+  "input": {
+    "placeholder": "메시지 입력... (/help로 도움말 보기)",
+    "waiting_for_response": "응답을 기다리는 중...",
+    "enter_message": "메시지를 입력해주세요",
+    "characters": "{{count}}자"
+  },
+  "keyboard_shortcuts": {
+    "ctrl_c_exit": "Ctrl+C: 종료",
+    "enter_send": "Enter: 전송",
+    "arrows_history": "방향키 위/아래: 입력 히스토리",
+    "esc_cancel": "Esc: 취소",
+    "shortcuts_footer": "Ctrl+C: 종료 | Enter: 전송 | ↑↓: 히스토리"
+  },
+  "session": {
+    "previous_session_found": "이전 세션이 발견되었습니다",
+    "message_count": "메시지 수: {{count}}개",
+    "first_message": "첫 메시지",
+    "last_message": "마지막 메시지",
+    "continue_session_prompt": "이전 세션을 이어서 진행하시겠습니까?",
+    "restore_session": "[Y] 세션 복원",
+    "new_session": "[N] 새 세션 시작",
+    "session_restored": "세션이 복원되었습니다. ({{count}}개 메시지)\n이어서 대화를 계속하세요!",
+    "no_saved_sessions": "저장된 세션이 없습니다.",
+    "session_manager_not_initialized": "세션 매니저가 초기화되지 않았습니다.",
+    "recent_sessions_list": "최근 세션 목록",
+    "session_exported": "세션이 마크다운으로 저장되었습니다.\n\n저장 위치: {{path}}",
+    "session_export_failed": "세션 내보내기 실패: {{error}}",
+    "no_messages": "(메시지 없음)"
+  },
+  "example_prompts": {
+    "title": "이렇게 시작해보세요:",
+    "hint": "숫자 키를 눌러 선택하거나 직접 입력하세요",
+    "organize_today": "오늘 배운 것을 정리해줘",
+    "brainstorm_ideas": "프로젝트 아이디어 브레인스토밍 해줘",
+    "create_todo_list": "이번 주 할 일 목록 만들어줘",
+    "find_project_ideas": "내 노트에서 프로젝트 아이디어 찾아줘",
+    "what_did_i_think": "내가 이 주제에 대해 어떻게 생각했더라?"
+  },
+  "command_hints": {
+    "available_commands": "사용 가능한 명령어 (Tab: 자동완성):"
+  }
+}

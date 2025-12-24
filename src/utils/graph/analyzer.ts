@@ -25,6 +25,41 @@ import type {
 } from "./types.js";
 
 /**
+ * Parallel map with concurrency limit
+ * Executes async operations on items with a maximum number of concurrent operations
+ */
+async function parallelMap<T, R>(
+  items: T[],
+  fn: (item: T) => Promise<R>,
+  concurrency = 10
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let currentIndex = 0;
+
+  async function worker(): Promise<void> {
+    while (currentIndex < items.length) {
+      const index = currentIndex++;
+      results[index] = await fn(items[index]);
+    }
+  }
+
+  const workers = Array.from(
+    { length: Math.min(concurrency, items.length) },
+    () => worker()
+  );
+  await Promise.all(workers);
+
+  return results;
+}
+
+/**
+ * Get IO concurrency from environment variable
+ */
+function getIOConcurrency(): number {
+  return parseInt(process.env.GIGAMIND_IO_CONCURRENCY || "10", 10);
+}
+
+/**
  * 디렉토리에서 모든 마크다운 파일 수집 (재귀)
  */
 async function collectMarkdownFiles(dir: string): Promise<string[]> {
@@ -126,12 +161,16 @@ export async function analyzeNoteGraph(
 
   // 2. 존재하는 노트 목록 구축 (정규화된 제목 -> 메타데이터)
   const existingNotes = new Map<string, NoteMetadata>();
-  const noteMetadataList: NoteMetadata[] = [];
 
-  for (const file of files) {
-    const metadata = await extractNoteMetadata(file);
-    noteMetadataList.push(metadata);
+  // Parallel metadata extraction
+  const noteMetadataList = await parallelMap(
+    files,
+    (file) => extractNoteMetadata(file),
+    getIOConcurrency()
+  );
 
+  // Build lookup maps from extracted metadata
+  for (const metadata of noteMetadataList) {
     // 여러 키로 매핑 (제목, 파일명, ID)
     existingNotes.set(normalizeNoteTitle(metadata.title), metadata);
     existingNotes.set(normalizeNoteTitle(metadata.basename), metadata);
@@ -154,74 +193,89 @@ export async function analyzeNoteGraph(
     Map<string, { noteId: string; notePath: string; noteTitle: string; count: number }>
   >();
 
-  for (const metadata of noteMetadataList) {
-    try {
-      const content = await fs.readFile(metadata.path, "utf-8");
-      const parsedLinks = parseWikilinks(content);
-      const uniqueTargets = extractWikilinks(content);
+  // Parallel file content reading
+  const fileContents = await parallelMap(
+    noteMetadataList,
+    async (metadata) => {
+      try {
+        const content = await fs.readFile(metadata.path, "utf-8");
+        return { metadata, content, error: null };
+      } catch (err) {
+        return { metadata, content: null, error: err };
+      }
+    },
+    getIOConcurrency()
+  );
 
-      totalMentions += parsedLinks.length;
-      forwardLinks.set(metadata.path, uniqueTargets);
+  // Process file contents (synchronous processing after parallel I/O)
+  for (const { metadata, content, error } of fileContents) {
+    if (error || content === null) {
+      console.debug(`[analyzer] Cannot process file: ${metadata.path}`, error);
+      continue;
+    }
 
-      // 각 링크 처리
-      for (const link of parsedLinks) {
-        const normalizedTarget = normalizeNoteTitle(link.target);
-        const targetNote = existingNotes.get(normalizedTarget);
+    const parsedLinks = parseWikilinks(content);
+    const uniqueTargets = extractWikilinks(content);
 
-        if (targetNote) {
-          // 존재하는 노트 -> Backlink 등록
-          const targetKey = targetNote.title;
-          if (!backlinks.has(targetKey)) {
-            backlinks.set(targetKey, []);
+    totalMentions += parsedLinks.length;
+    forwardLinks.set(metadata.path, uniqueTargets);
+
+    // 각 링크 처리
+    for (const link of parsedLinks) {
+      const normalizedTarget = normalizeNoteTitle(link.target);
+      const targetNote = existingNotes.get(normalizedTarget);
+
+      if (targetNote) {
+        // 존재하는 노트 -> Backlink 등록
+        const targetKey = targetNote.title;
+        if (!backlinks.has(targetKey)) {
+          backlinks.set(targetKey, []);
+        }
+
+        // 중복 backlink 방지
+        const existingBacklinks = backlinks.get(targetKey)!;
+        const alreadyExists = existingBacklinks.some(
+          (bl) => bl.notePath === metadata.path
+        );
+
+        if (!alreadyExists) {
+          const entry: BacklinkEntry = {
+            noteId: metadata.id,
+            notePath: metadata.path,
+            noteTitle: metadata.title,
+            alias: link.alias,
+          };
+
+          if (includeContext) {
+            entry.context = extractContext(content, link, contextLength);
           }
 
-          // 중복 backlink 방지
-          const existingBacklinks = backlinks.get(targetKey)!;
-          const alreadyExists = existingBacklinks.some(
-            (bl) => bl.notePath === metadata.path
-          );
+          existingBacklinks.push(entry);
+        }
 
-          if (!alreadyExists) {
-            const entry: BacklinkEntry = {
-              noteId: metadata.id,
-              notePath: metadata.path,
-              noteTitle: metadata.title,
-              alias: link.alias,
-            };
+        // 고유 연결 쌍 등록
+        const pairKey = `${metadata.path}::${targetNote.path}`;
+        uniqueConnectionPairs.add(pairKey);
+      } else {
+        // 존재하지 않는 노트 -> Dangling link 등록
+        if (!danglingLinksMap.has(link.target)) {
+          danglingLinksMap.set(link.target, new Map());
+        }
 
-            if (includeContext) {
-              entry.context = extractContext(content, link, contextLength);
-            }
+        const sources = danglingLinksMap.get(link.target)!;
+        const existing = sources.get(metadata.path);
 
-            existingBacklinks.push(entry);
-          }
-
-          // 고유 연결 쌍 등록
-          const pairKey = `${metadata.path}::${targetNote.path}`;
-          uniqueConnectionPairs.add(pairKey);
+        if (existing) {
+          existing.count++;
         } else {
-          // 존재하지 않는 노트 -> Dangling link 등록
-          if (!danglingLinksMap.has(link.target)) {
-            danglingLinksMap.set(link.target, new Map());
-          }
-
-          const sources = danglingLinksMap.get(link.target)!;
-          const existing = sources.get(metadata.path);
-
-          if (existing) {
-            existing.count++;
-          } else {
-            sources.set(metadata.path, {
-              noteId: metadata.id,
-              notePath: metadata.path,
-              noteTitle: metadata.title,
-              count: 1,
-            });
-          }
+          sources.set(metadata.path, {
+            noteId: metadata.id,
+            notePath: metadata.path,
+            noteTitle: metadata.title,
+            count: 1,
+          });
         }
       }
-    } catch (err) {
-      console.debug(`[analyzer] Cannot process file: ${metadata.path}`, err);
     }
   }
 
