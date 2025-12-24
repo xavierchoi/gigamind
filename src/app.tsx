@@ -883,6 +883,7 @@ export function App() {
         isFirstSession={isFirstSession}
         currentTool={currentTool}
         currentToolStartTime={currentToolStartTime}
+        notesDir={config?.notesDir}
       />
     </Box>
   );

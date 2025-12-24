@@ -4,6 +4,7 @@ import TextInput from "ink-text-input";
 import Spinner from "ink-spinner";
 import { MarkdownText } from "../utils/markdown.js";
 import { ToolUsageIndicator } from "./ToolUsageIndicator.js";
+import { StatusLine } from "./StatusLine.js";
 
 // Available slash commands
 const SLASH_COMMANDS = [
@@ -50,6 +51,7 @@ interface ChatProps {
   isFirstSession?: boolean;
   currentTool?: string | null;
   currentToolStartTime?: number | null;
+  notesDir?: string;
 }
 
 function MessageBubble({ message }: { message: Message }) {
@@ -173,6 +175,7 @@ export function Chat({
   isFirstSession = false,
   currentTool,
   currentToolStartTime,
+  notesDir,
 }: ChatProps) {
   const [input, setInput] = useState("");
   const [inputHistory, setInputHistory] = useState<string[]>([]);
@@ -367,6 +370,13 @@ export function Chat({
           Ctrl+C: 종료 | Enter: 전송 | ↑↓: 히스토리{isLoading ? " | Esc: 취소" : ""}
         </Text>
       </Box>
+
+      {/* StatusLine - 실시간 상태 표시 */}
+      {notesDir && (
+        <Box marginTop={1}>
+          <StatusLine notesDir={notesDir} />
+        </Box>
+      )}
     </Box>
   );
 }
