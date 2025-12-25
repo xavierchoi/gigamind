@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2025-12-25
+
+### Added
+
+#### API Key Management Enhancement
+- **API Key Management in ConfigMenu**: New API key configuration section in `/config` command
+  - View API key status (configured/not configured)
+  - Update API key with validation
+  - Masked key display for security (sk-ant-****...1234)
+
+### Fixed
+
+- **API Key Loss After App Restart**: Fixed critical issue where API key was lost after application restart
+  - Previously: keychain success → encrypted file skipped → load fails if keychain locked
+  - Now: Always save to both storage methods (keychain AND encrypted file) for redundancy
+  - Ensures API key persistence across sessions even if one storage method becomes unavailable
+
+### Technical
+
+- **API Key Storage Reliability**: Improved credential storage with dual-write strategy
+  - Debug logging added for API key storage operations
+  - Warning logs added when keychain access fails
+  - Redundant storage prevents credential loss in edge cases
+
 ## [0.3.0] - 2025-12-25
 
 ### Added
