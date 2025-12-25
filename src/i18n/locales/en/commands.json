@@ -57,5 +57,12 @@
     "starting": "Starting graph server...",
     "running": "Graph server is running",
     "stopped": "Graph server stopped"
+  },
+  "unknown_command": {
+    "message": "Unknown command: /{{command}}",
+    "see_help": "Type /help to see available commands."
+  },
+  "ambiguous_command": {
+    "message": "Multiple commands match /{{command}}: {{matches}}\nPlease be more specific."
   }
 }

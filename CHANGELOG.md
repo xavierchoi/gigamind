@@ -5,6 +5,53 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.7] - 2025-12-24
+
+### Fixed
+
+#### Graph Visualization CSP Issue
+- **CSP Policy Update** (`src/graph-server/server.ts`): Resolved "Failed to load graph data" error in graph visualization
+  - Root cause: Content Security Policy (CSP) was blocking external CDN resources
+  - Added D3.js CDN to script-src directive: `https://d3js.org`
+  - Added Google Fonts CSS to style-src directive: `https://fonts.googleapis.com`
+  - Added Google Fonts files to font-src directive: `https://fonts.gstatic.com`
+  - Graph visualization now properly loads external dependencies without CSP violations
+
+---
+
+## [0.2.6] - 2025-12-24
+
+### Added
+
+#### Command Prefix Autocomplete Feature
+- **Prefix Matching System**: Users can now type partial commands and have them automatically resolved
+  - Example: `/conf` automatically resolves to `/config`, `/hel` resolves to `/help`
+  - Improves discoverability and reduces typing for frequently used commands
+- **CommandRegistry Enhancement** (`src/commands/index.ts`): Added `findByPrefix()` method
+  - Performs efficient prefix-based command lookup
+  - Supports matching against registry commands and special commands (config, import, sync)
+- **Ambiguous Command Handling**: When multiple commands match a prefix, displays user-friendly message
+  - Shows all matching commands to user for clarification
+  - Example: `/cl` matches both `/clear` and `/clone` with helpful message
+
+### Changed
+
+#### Command Resolution Logic
+- **app.tsx**: Enhanced `handleSubmit()` function with prefix matching
+  - Added `resolveCommandName()` helper function for command name resolution
+  - Automatic prefix expansion when single match exists
+  - Clear error messaging for ambiguous or unknown commands
+
+### Technical Details
+
+#### Modified Files
+- `src/commands/index.ts`: Added `findByPrefix()` method to CommandRegistry class
+- `src/app.tsx`: Implemented `resolveCommandName()` helper and integrated prefix matching logic
+- `src/i18n/locales/ko/commands.json`: Added `ambiguous_command` and `unknown_command` translations
+- `src/i18n/locales/en/commands.json`: Added `ambiguous_command` and `unknown_command` translations
+
+---
+
 ## [0.2.5] - 2025-12-24
 
 ### Added

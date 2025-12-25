@@ -108,6 +108,43 @@ export class CommandRegistry {
   }
 
   /**
+   * Find commands by prefix matching.
+   * Returns exact match if found, otherwise returns all commands that start with the prefix.
+   * @param prefix - Command prefix (without leading /)
+   * @returns Array of matching command names (primary names only, not aliases)
+   */
+  findByPrefix(prefix: string): string[] {
+    const normalizedPrefix = prefix.toLowerCase();
+
+    // Check for exact match first (including aliases)
+    if (this.has(normalizedPrefix)) {
+      const command = this.get(normalizedPrefix);
+      if (command) {
+        return [command.name];
+      }
+    }
+
+    // Find all commands and aliases that start with the prefix
+    const matches = new Set<string>();
+
+    // Check command names
+    for (const name of this.commands.keys()) {
+      if (name.startsWith(normalizedPrefix)) {
+        matches.add(name);
+      }
+    }
+
+    // Check aliases and resolve to primary names
+    for (const [alias, primaryName] of this.aliasMap.entries()) {
+      if (alias.startsWith(normalizedPrefix)) {
+        matches.add(primaryName);
+      }
+    }
+
+    return Array.from(matches);
+  }
+
+  /**
    * Execute a command by name.
    * @param commandName - Command name (without leading /)
    * @param args - Command arguments

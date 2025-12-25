@@ -96,6 +96,9 @@
     "message": "알 수 없는 명령어입니다: /{{command}}",
     "see_help": "사용 가능한 명령어를 보려면 /help를 입력해주세요."
   },
+  "ambiguous_command": {
+    "message": "/{{command}}와 일치하는 명령어가 여러 개 있습니다: {{matches}}\n좀 더 구체적으로 입력해주세요."
+  },
   "welcome_message": {
     "setup_complete": "설정이 완료되었습니다!",
     "setup_complete_with_name": "설정이 완료되었습니다, {{name}}님!",

@@ -401,12 +401,67 @@ export function App() {
       // Handle special commands using CommandRegistry
       if (userMessage.startsWith("/")) {
         const parts = userMessage.slice(1).split(" ");
-        const commandName = parts[0].toLowerCase();
+        let commandName = parts[0].toLowerCase();
         const args = parts.slice(1);
 
         // Commands that require special handling (not in registry)
         const SPECIAL_COMMANDS = ["config", "import", "sync"];
         const UNIMPLEMENTED_COMMANDS: string[] = [];
+
+        // Helper function to resolve command name with prefix matching
+        const resolveCommandName = (input: string): { resolved: string | null; ambiguous: string[] } => {
+          // Check exact match first for special commands
+          if (SPECIAL_COMMANDS.includes(input) || UNIMPLEMENTED_COMMANDS.includes(input)) {
+            return { resolved: input, ambiguous: [] };
+          }
+
+          // Check registry for exact match
+          if (commandRegistry.has(input)) {
+            return { resolved: input, ambiguous: [] };
+          }
+
+          // Try prefix matching in registry
+          const registryMatches = commandRegistry.findByPrefix(input);
+
+          // Also check special commands for prefix match
+          const specialMatches = SPECIAL_COMMANDS.filter(cmd => cmd.startsWith(input));
+
+          // Combine all matches
+          const allMatches = [...new Set([...registryMatches, ...specialMatches])];
+
+          if (allMatches.length === 1) {
+            return { resolved: allMatches[0], ambiguous: [] };
+          } else if (allMatches.length > 1) {
+            return { resolved: null, ambiguous: allMatches };
+          }
+
+          return { resolved: null, ambiguous: [] };
+        };
+
+        // Resolve command name with prefix matching
+        const { resolved, ambiguous } = resolveCommandName(commandName);
+
+        // Handle ambiguous commands (multiple matches)
+        if (ambiguous.length > 0) {
+          const matchList = ambiguous.map(cmd => `/${cmd}`).join(", ");
+          setMessages((prev) => [
+            ...prev,
+            { role: "user", content: userMessage },
+            {
+              role: "assistant",
+              content: t('commands:ambiguous_command.message', {
+                command: commandName,
+                matches: matchList
+              }),
+            },
+          ]);
+          return;
+        }
+
+        // Use resolved command name if found
+        if (resolved) {
+          commandName = resolved;
+        }
 
         // Handle config command (transitions to config state)
         if (commandName === "config") {

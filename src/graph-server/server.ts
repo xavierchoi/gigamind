@@ -57,11 +57,11 @@ export function createGraphServer(options: GraphServerOptions): GraphServer {
     res.setHeader(
       "Content-Security-Policy",
       "default-src 'self'; " +
-      "script-src 'self' 'unsafe-inline'; " +  // D3.js 등 인라인 스크립트 허용
-      "style-src 'self' 'unsafe-inline'; " +   // 인라인 스타일 허용
+      "script-src 'self' 'unsafe-inline' https://d3js.org; " +  // D3.js CDN 허용
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +   // Google Fonts CSS 허용
       "img-src 'self' data:; " +               // data: URI 이미지 허용
       "connect-src 'self'; " +                 // API 연결은 자기 자신만
-      "font-src 'self'; " +
+      "font-src 'self' https://fonts.gstatic.com; " +  // Google Fonts 폰트 파일 허용
       "object-src 'none'; " +                  // Flash 등 플러그인 차단
       "frame-ancestors 'none'"                 // iframe 삽입 차단
     );
