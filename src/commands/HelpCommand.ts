@@ -1,6 +1,7 @@
 import { BaseCommand } from "./BaseCommand.js";
 import type { CommandContext, CommandResult } from "./types.js";
 import type { Message } from "../components/Chat.js";
+import { t } from "../i18n/index.js";
 
 /**
  * Help command - displays available commands and usage hints.
@@ -8,38 +9,38 @@ import type { Message } from "../components/Chat.js";
  */
 export class HelpCommand extends BaseCommand {
   readonly name = "help";
-  readonly description = "도움말";
+  readonly description = t('commands:help.description');
   readonly usage = "/help";
 
   async execute(_args: string[], context: CommandContext): Promise<CommandResult> {
     const { setMessages } = context;
 
-    const helpText = `**사용 가능한 명령어:**
-/help - 도움말
-/config - 설정 보기
-/clear - 대화 내역 정리
-/import - 외부 노트 가져오기
-/session list - 최근 세션 목록 보기
-/session export - 현재 세션 마크다운으로 저장
-/graph - 노트 그래프 시각화 (브라우저)
-/search <query> - 노트 검색
-/clone <질문> - 내 노트 기반으로 나처럼 답변
-/note <내용> - 새 노트 작성
-/sync - Git 동기화 (준비 중)
+    const helpText = `**${t('commands:help.title')}**
+/help - ${t('commands:help.description')}
+/config - ${t('commands:config.description')}
+/clear - ${t('commands:clear.description')}
+/import - ${t('commands:import.description')}
+/session list - ${t('commands:session.list_description')}
+/session export - ${t('commands:session.export_description')}
+/graph - ${t('commands:graph.description')}
+/search <query> - ${t('commands:search.description')}
+/clone <질문> - ${t('commands:clone.description')}
+/note <내용> - ${t('commands:note.description')}
+/sync - ${t('commands:sync.description')}
 
 ---
 
-**이렇게 말해도 돼요:**
-- "프로젝트 관련 노트 찾아줘" -> 노트 검색
-- "내가 이 주제에 대해 어떻게 생각했더라?" -> 클론 모드
-- "내 노트에서 OO 찾아줘" -> 노트 검색
-- "OO에 대해 메모해줘" -> 노트 작성
-- "내 관점에서 설명해줘" -> 클론 모드
+**${t('commands:help.natural_language_section')}**
+- ${t('commands:help.natural_language_examples.search_notes')}
+- ${t('commands:help.natural_language_examples.clone_mode')}
+- ${t('commands:help.natural_language_examples.find_in_notes')}
+- ${t('commands:help.natural_language_examples.take_memo')}
+- ${t('commands:help.natural_language_examples.my_perspective')}
 
-**키보드 단축키:**
-- Ctrl+C: 종료
-- Esc: 응답 취소
-- 방향키 위/아래: 입력 히스토리`;
+**${t('commands:help.shortcuts_section')}**
+- ${t('commands:help.shortcuts.exit')}
+- ${t('commands:help.shortcuts.cancel')}
+- ${t('commands:help.shortcuts.history')}`;
 
     setMessages((prev: Message[]) => [
       ...prev,

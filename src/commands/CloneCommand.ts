@@ -8,11 +8,12 @@ import type { CommandContext, CommandResult } from "./types.js";
 import { createSubagentInvoker } from "../agent/subagent.js";
 import { AbortError } from "../agent/client.js";
 import { loadApiKey } from "../utils/config.js";
+import { t } from "../i18n/index.js";
 
 export class CloneCommand extends BaseCommand {
   name = "clone";
   aliases = ["me"];
-  description = "축적된 지식으로 사용자처럼 답변";
+  description = t('commands:clone.description');
   usage = "/clone <질문>";
   requiresArgs = true;
   category = "ai" as const;
@@ -29,16 +30,16 @@ export class CloneCommand extends BaseCommand {
       this.addMessages(
         context,
         userInput || `/${this.name}`,
-        `질문을 입력해주세요.
+        `${t('commands:clone.enter_question')}
 
-**사용법:** /clone <질문> 또는 /me <질문>
+**${t('commands:clone.usage')}**
 
-**예시:**
-- /clone 이 프로젝트에 대해 어떻게 생각해?
-- /me 생산성을 높이는 방법이 뭐야?
-- /clone 최근에 읽은 책 중 추천할 만한 건?
+**${t('commands:clone.examples.title')}**
+- ${t('commands:clone.examples.project_opinion')}
+- ${t('commands:clone.examples.productivity')}
+- ${t('commands:clone.examples.book_recommendation')}
 
-내 노트에 기록된 내용을 바탕으로 나처럼 답변해드릴게요!`
+${t('commands:clone.help_text')}`
       );
       return { handled: true };
     }
@@ -48,14 +49,14 @@ export class CloneCommand extends BaseCommand {
 
     // Start loading state
     const controller = this.startLoading(context);
-    context.setStreamingText("내 노트를 분석하는 중...");
+    context.setStreamingText(t('common:processing.analyzing_my_notes'));
     const currentGeneration = this.getCurrentGeneration(context);
 
     try {
       // Load API key
       const apiKey = await loadApiKey();
       if (!apiKey) {
-        throw new Error("API 키가 설정되지 않았습니다.");
+        throw new Error(t('errors:api_key_not_set'));
       }
 
       // Create subagent invoker
@@ -71,8 +72,8 @@ export class CloneCommand extends BaseCommand {
 
       // Create streaming callbacks with custom messages
       const callbacks = this.createStreamingCallbacks(context, currentGeneration, {
-        thinkingMessage: "내 노트를 분석하는 중...",
-        toolUseMessage: (toolName) => `${toolName} 도구로 노트 탐색 중...`,
+        thinkingMessage: t('common:processing.analyzing_my_notes'),
+        toolUseMessage: (toolName) => t('common:working.exploring_notes_with_tool', { toolName }),
       });
 
       // Override onText for clone-specific behavior
@@ -110,7 +111,7 @@ export class CloneCommand extends BaseCommand {
 
         return { handled: true };
       } else {
-        const errorResponse = `클론 모드 실행 중 오류가 발생했습니다: ${result.error}`;
+        const errorResponse = t('errors:clone.error_during_clone', { error: result.error });
 
         // Sync error to histories
         this.syncToHistory(context, userInput, errorResponse);
@@ -127,7 +128,7 @@ export class CloneCommand extends BaseCommand {
       }
 
       const errorMessage = err instanceof Error ? err.message : String(err);
-      const errorResponse = `클론 모드 실행 중 오류가 발생했습니다: ${errorMessage}`;
+      const errorResponse = t('errors:clone.error_during_clone', { error: errorMessage });
 
       // Sync error to histories
       this.syncToHistory(context, userInput, errorResponse);

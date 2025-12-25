@@ -5,6 +5,127 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.5] - 2025-12-24
+
+### Added
+
+#### Full i18n Integration and Language Selection
+- **Language Configuration Option**: Added language (Language) selection to ConfigMenu
+  - Supports Korean (한국어) and English (English)
+  - Changes apply immediately across the entire UI
+  - Language preference persists in configuration
+
+#### Comprehensive i18n Implementation
+- **Full Internationalization Rollout**: Replaced approximately 300 hardcoded Korean strings with i18n t() function calls
+  - **app.tsx**: Error messages, welcome messages, session messages, and app-wide notifications
+  - **components/**:
+    - Chat.tsx: Message rendering and user interactions
+    - ConfigMenu.tsx: Configuration labels and descriptions
+    - StatusBar.tsx, StatusLine.tsx: Status information display
+    - UnifiedLoadingState.tsx: Loading state messages
+    - ToolUsageIndicator.tsx: Tool usage information
+    - SplashScreen.tsx: Splash screen text
+  - **commands/**:
+    - HelpCommand.ts: Help text and command descriptions
+    - ClearCommand.ts: Action confirmations
+    - GraphCommand.ts: Graph visualization messages
+    - SearchCommand.ts: Search results display
+    - CloneCommand.ts: Clone operation messages
+    - NoteCommand.ts: Note management messages
+    - SessionCommand.ts: Session management messages
+
+- **Translation Files Update**:
+  - `src/i18n/locales/ko/common.json`: Added ~150 missing Korean translation keys
+  - `src/i18n/locales/en/common.json`: Added ~150 missing English translation keys
+
+### Fixed
+
+#### Config Menu Navigation Bug
+- **useEffect Dependency Issue** (`src/components/ConfigMenu.tsx`): Fixed issue where config screen would immediately return to chat screen
+  - Corrected dependency array in useEffect hook
+  - Config menu now properly persists until user navigates away
+  - Prevents accidental dismissal of configuration options
+
+### Changed
+
+#### UI Localization
+- **Entire User Interface**: Now dynamically responds to language selection
+  - Error messages, confirmations, and status information update instantly
+  - User-facing text consistently delivered in selected language
+  - Chat interactions and command responses follow selected language preference
+
+### Technical Details
+
+#### Modified Files
+- `src/app.tsx`: i18n integration in error messages, welcome messages, and session notifications
+- `src/components/Chat.tsx`: Localized message rendering and user interactions
+- `src/components/ConfigMenu.tsx`: Fixed useEffect dependency array, added language selection
+- `src/components/StatusBar.tsx`, `StatusLine.tsx`: Localized status text
+- `src/components/UnifiedLoadingState.tsx`: Localized loading messages
+- `src/components/ToolUsageIndicator.tsx`: Localized tool information
+- `src/components/SplashScreen.tsx`: Localized splash screen text
+- `src/commands/HelpCommand.ts`, `ClearCommand.ts`, `GraphCommand.ts`, `SearchCommand.ts`, `CloneCommand.ts`, `NoteCommand.ts`, `SessionCommand.ts`: Full i18n integration
+- `src/i18n/locales/ko/common.json`: Expanded with 150+ new Korean translation keys
+- `src/i18n/locales/en/common.json`: Expanded with 150+ new English translation keys
+
+#### Translation Coverage
+- **Korean Localization**: Comprehensive coverage of all user-facing strings (한국어)
+- **English Localization**: Complete English translations for international users
+- **Consistency**: Uniform terminology across all components and commands
+
+---
+
+## [0.2.4] - 2025-12-24
+
+### Added
+
+#### Splash Screen with Pulse Animation
+- **SplashScreen Component** (`src/components/SplashScreen.tsx`): New animated splash screen displayed on app startup
+  - Brain-shaped ASCII art as visual centerpiece
+  - Pulse animation with color cycling sequence:
+    - Dim gray → gray → white → cyan → cyan bold → reverse sequence
+  - Auto-transition to loading screen after 2.5 seconds
+  - Smooth color animations for premium visual effect
+
+### Changed
+
+#### App State Management
+- **AppState Type Extension** (`src/commands/types.ts`): Added "splash" state to AppState union type
+  - Enables proper state management for splash screen display
+  - Allows seamless transition between splash and loading states
+
+#### App Component Integration
+- **SplashScreen Integration** (`src/app.tsx`): Integrated splash screen into app startup flow
+  - Splash screen displays on application launch
+  - Automatic transition after 2.5 second delay
+  - Proper state management for splash → loading transition
+
+### Technical Details
+
+#### New Files
+```
+src/components/SplashScreen.tsx    # Splash screen component with pulse animation
+```
+
+#### Modified Files
+- `src/commands/types.ts`: Extended AppState type with "splash" state
+- `src/app.tsx`: Integrated SplashScreen component with state transitions
+
+#### Component Props
+```typescript
+interface SplashScreenProps {
+  onComplete?: () => void;          // Callback when splash screen completes
+}
+```
+
+#### Animation Details
+- **Pulse Sequence**: Smooth color transitions creating breathing effect
+- **Duration**: 2500ms total (2.5 seconds) before auto-transition
+- **Visual Effect**: Premium feel with carefully chosen color progression
+- **Performance**: Minimal CPU usage with efficient animation implementation
+
+---
+
 ## [0.2.3] - 2025-12-24
 
 ### Added

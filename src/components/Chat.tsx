@@ -5,32 +5,37 @@ import Spinner from "ink-spinner";
 import { MarkdownText } from "../utils/markdown.js";
 import { ToolUsageIndicator } from "./ToolUsageIndicator.js";
 import { StatusLine } from "./StatusLine.js";
+import { t } from "../i18n/index.js";
 
-// Available slash commands
-const SLASH_COMMANDS = [
-  { command: "/help", description: "도움말 보기" },
-  { command: "/config", description: "설정 보기" },
-  { command: "/clear", description: "대화 내역 정리" },
-  { command: "/search", description: "노트 검색" },
-  { command: "/note", description: "새 노트 작성" },
-  { command: "/clone", description: "내 노트 기반으로 나처럼 답변" },
-  { command: "/me", description: "/clone과 동일 (단축 명령)" },
-  { command: "/import", description: "외부 노트 가져오기 (Obsidian, 마크다운)" },
-  { command: "/session", description: "세션 관리 (list, export)" },
-  { command: "/session list", description: "최근 세션 목록 보기" },
-  { command: "/session export", description: "현재 세션 마크다운으로 저장" },
-  { command: "/graph", description: "노트 그래프 시각화 (브라우저)" },
-  { command: "/sync", description: "Git 동기화 (준비 중)" },
-];
+// Available slash commands - descriptions are loaded dynamically via t() in getSlashCommands()
+function getSlashCommands() {
+  return [
+    { command: "/help", description: t("commands:help.description") },
+    { command: "/config", description: t("commands:config.description") },
+    { command: "/clear", description: t("commands:clear.description") },
+    { command: "/search", description: t("commands:search.description") },
+    { command: "/note", description: t("commands:note.description") },
+    { command: "/clone", description: t("commands:clone.description") },
+    { command: "/me", description: t("commands:clone.short_description") },
+    { command: "/import", description: t("commands:import.description") },
+    { command: "/session", description: t("commands:session.description") },
+    { command: "/session list", description: t("commands:session.list_description") },
+    { command: "/session export", description: t("commands:session.export_description") },
+    { command: "/graph", description: t("commands:graph.description") },
+    { command: "/sync", description: t("commands:sync.description") },
+  ];
+}
 
-// Example prompts for first-time users
-const EXAMPLE_PROMPTS = [
-  { label: "1", text: "오늘 배운 것을 정리해줘" },
-  { label: "2", text: "프로젝트 아이디어 브레인스토밍 해줘" },
-  { label: "3", text: "이번 주 할 일 목록 만들어줘" },
-  { label: "4", text: "내 노트에서 프로젝트 아이디어 찾아줘" },
-  { label: "5", text: "내가 이 주제에 대해 어떻게 생각했더라?" },
-];
+// Example prompts for first-time users - loaded dynamically via t()
+function getExamplePrompts() {
+  return [
+    { label: "1", text: t("common:example_prompts.organize_today") },
+    { label: "2", text: t("common:example_prompts.brainstorm_ideas") },
+    { label: "3", text: t("common:example_prompts.create_todo_list") },
+    { label: "4", text: t("common:example_prompts.find_project_ideas") },
+    { label: "5", text: t("common:example_prompts.what_did_i_think") },
+  ];
+}
 
 // Max input history size
 const MAX_HISTORY_SIZE = 10;
@@ -92,7 +97,8 @@ function CommandHints({ input, selectedIndex }: { input: string; selectedIndex: 
   // Show hints when input starts with "/" but is not a complete command
   if (!input.startsWith("/") || input.includes(" ")) return null;
 
-  const matchingCommands = SLASH_COMMANDS.filter(cmd =>
+  const slashCommands = getSlashCommands();
+  const matchingCommands = slashCommands.filter(cmd =>
     cmd.command.startsWith(input.toLowerCase())
   );
 
@@ -100,7 +106,7 @@ function CommandHints({ input, selectedIndex }: { input: string; selectedIndex: 
 
   return (
     <Box flexDirection="column" marginBottom={1} paddingX={1}>
-      <Text color="gray" dimColor>사용 가능한 명령어 (Tab: 자동완성):</Text>
+      <Text color="gray" dimColor>{t("common:command_hints.available_commands")}</Text>
       {matchingCommands.map((cmd, idx) => (
         <Box key={cmd.command}>
           <Text color={idx === selectedIndex ? "yellow" : "cyan"} bold={idx === selectedIndex}>
@@ -131,23 +137,24 @@ function LoadingIndicator({ startTime }: { startTime?: number }) {
       <Text color="yellow">
         <Spinner type="dots" />
       </Text>
-      <Text color="gray"> 생각하는 중... ({elapsed}초)</Text>
-      <Text color="gray" dimColor> | Esc: 취소</Text>
+      <Text color="gray"> {t("common:thinking.thinking_with_time", { seconds: elapsed })}</Text>
+      <Text color="gray" dimColor> | {t("common:cancel_hint.esc_to_cancel")}</Text>
     </Box>
   );
 }
 
 function ExamplePrompts({ onSelect }: { onSelect: (text: string) => void }) {
+  const examplePrompts = getExamplePrompts();
   return (
     <Box flexDirection="column" marginBottom={1} paddingX={1}>
-      <Text color="yellow">이렇게 시작해보세요:</Text>
-      {EXAMPLE_PROMPTS.map((prompt) => (
+      <Text color="yellow">{t("common:example_prompts.title")}</Text>
+      {examplePrompts.map((prompt) => (
         <Box key={prompt.label}>
           <Text color="cyan">[{prompt.label}]</Text>
           <Text color="gray"> {prompt.text}</Text>
         </Box>
       ))}
-      <Text color="gray" dimColor>숫자 키를 눌러 선택하거나 직접 입력하세요</Text>
+      <Text color="gray" dimColor>{t("common:example_prompts.hint")}</Text>
     </Box>
   );
 }
@@ -159,7 +166,7 @@ function CharacterCounter({ count }: { count: number }) {
 
   return (
     <Text color={color} dimColor>
-      {count}자
+      {t("common:input.characters", { count })}
     </Text>
   );
 }
@@ -185,8 +192,9 @@ export function Chat({
   const [showEmptyWarning, setShowEmptyWarning] = useState(false);
 
   // Get matching commands for current input
+  const slashCommands = getSlashCommands();
   const matchingCommands = input.startsWith("/") && !input.includes(" ")
-    ? SLASH_COMMANDS.filter(cmd => cmd.command.startsWith(input.toLowerCase()))
+    ? slashCommands.filter(cmd => cmd.command.startsWith(input.toLowerCase()))
     : [];
 
   useInput((inputChar, key) => {
@@ -249,8 +257,9 @@ export function Chat({
     // Number keys for example prompts (only on first session with empty messages)
     if (isFirstSession && messages.length <= 1 && !isLoading) {
       const num = parseInt(inputChar);
-      if (num >= 1 && num <= EXAMPLE_PROMPTS.length) {
-        const prompt = EXAMPLE_PROMPTS[num - 1];
+      const examplePrompts = getExamplePrompts();
+      if (num >= 1 && num <= examplePrompts.length) {
+        const prompt = examplePrompts[num - 1];
         if (prompt) {
           onSubmit(prompt.text);
           addToHistory(prompt.text);
@@ -349,7 +358,7 @@ export function Chat({
             value={input}
             onChange={handleInputChange}
             onSubmit={handleSubmit}
-            placeholder={isLoading ? "응답을 기다리는 중..." : "메시지 입력... (/help로 도움말 보기)"}
+            placeholder={isLoading ? t("common:input.waiting_for_response") : t("common:input.placeholder")}
           />
         </Box>
         <Box marginLeft={1}>
@@ -360,14 +369,14 @@ export function Chat({
       {/* Empty input warning */}
       {showEmptyWarning && (
         <Box marginTop={1}>
-          <Text color="red">메시지를 입력해주세요</Text>
+          <Text color="red">{t("common:input.enter_message")}</Text>
         </Box>
       )}
 
       {/* Help text */}
       <Box marginTop={1}>
         <Text color="gray" dimColor>
-          Ctrl+C: 종료 | Enter: 전송 | ↑↓: 히스토리{isLoading ? " | Esc: 취소" : ""}
+          {t("common:keyboard_shortcuts.shortcuts_footer")}{isLoading ? ` | ${t("common:keyboard_shortcuts.esc_cancel")}` : ""}
         </Text>
       </Box>
 

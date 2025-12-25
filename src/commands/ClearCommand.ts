@@ -1,5 +1,6 @@
 import { BaseCommand } from "./BaseCommand.js";
 import type { CommandContext, CommandResult } from "./types.js";
+import { t } from "../i18n/index.js";
 
 /**
  * Clear command - clears the chat history and shows welcome message.
@@ -7,16 +8,17 @@ import type { CommandContext, CommandResult } from "./types.js";
  */
 export class ClearCommand extends BaseCommand {
   readonly name = "clear";
-  readonly description = "화면 지우기";
+  readonly description = t('commands:clear.description');
   readonly usage = "/clear";
 
   async execute(_args: string[], context: CommandContext): Promise<CommandResult> {
     const { setMessages, config } = context;
 
     // Build welcome message with optional user name
-    const welcomeMessage = config?.userName
-      ? `안녕하세요, ${config.userName}님! 무엇을 도와드릴까요?\n\n💡 /help를 입력하면 사용 가능한 명령어를 볼 수 있어요.`
-      : "안녕하세요! 무엇을 도와드릴까요?\n\n💡 /help를 입력하면 사용 가능한 명령어를 볼 수 있어요.";
+    const greeting = config?.userName
+      ? t('common:greeting.hello_with_name', { name: config.userName })
+      : t('common:greeting.hello');
+    const welcomeMessage = `${greeting} ${t('common:greeting.what_can_i_help')}\n\n${t('common:help_hint.help_command')}`;
 
     // Clear messages and show welcome
     setMessages([

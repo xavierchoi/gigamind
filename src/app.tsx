@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import { Box, Text, useApp, useInput } from "ink";
 import { Chat, type Message } from "./components/Chat.js";
 import { StatusBar } from "./components/StatusBar.js";
+import { SplashScreen } from "./components/SplashScreen.js";
 import { Onboarding, type OnboardingResult } from "./components/Onboarding.js";
 import { ConfigMenu } from "./components/ConfigMenu.js";
 import { Import, type ImportResult } from "./components/Import.js";
@@ -20,6 +21,7 @@ import {
 } from "./utils/config.js";
 import { getQuickStats } from "./utils/graph/index.js";
 import { getCurrentTime, formatTimeDisplay } from "./utils/time.js";
+import { initI18n, changeLanguage, t } from "./i18n/index.js";
 // CommandRegistry imports
 import {
   CommandRegistry,
@@ -41,35 +43,35 @@ function formatErrorMessage(err: unknown): string {
 
   // API key errors
   if (lowerMessage.includes("invalid") && lowerMessage.includes("api")) {
-    return `API 키가 유효하지 않습니다.\n\n해결 방법:\n- /config로 현재 설정을 확인하세요\n- https://console.anthropic.com 에서 API 키를 다시 확인하세요`;
+    return t('errors:api_key_invalid.full_message');
   }
   if (lowerMessage.includes("authentication") || lowerMessage.includes("unauthorized")) {
-    return `인증에 실패했습니다.\n\n해결 방법:\n- API 키가 올바른지 확인하세요\n- API 키가 만료되지 않았는지 확인하세요`;
+    return t('errors:authentication_failed.full_message');
   }
 
   // Rate limit / quota errors
   if (lowerMessage.includes("rate") && lowerMessage.includes("limit")) {
-    return `요청이 너무 빈번합니다.\n\n해결 방법:\n- 잠시 후 다시 시도해주세요 (약 1분)`;
+    return t('errors:rate_limit.full_message');
   }
   if (lowerMessage.includes("quota") || lowerMessage.includes("exceeded")) {
-    return `API 사용량이 초과되었습니다.\n\n해결 방법:\n- https://console.anthropic.com 에서 사용량을 확인하세요\n- 필요시 플랜을 업그레이드하세요`;
+    return t('errors:quota_exceeded.full_message');
   }
 
   // Network errors
   if (lowerMessage.includes("network") || lowerMessage.includes("fetch") || lowerMessage.includes("enotfound")) {
-    return `네트워크 연결에 문제가 있습니다.\n\n해결 방법:\n- 인터넷 연결을 확인하세요\n- VPN이나 프록시 설정을 확인하세요`;
+    return t('errors:network_error.full_message');
   }
   if (lowerMessage.includes("timeout")) {
-    return `요청 시간이 초과되었습니다.\n\n해결 방법:\n- 네트워크 연결 상태를 확인하세요\n- 잠시 후 다시 시도해주세요`;
+    return t('errors:timeout.full_message');
   }
 
   // Server errors
   if (lowerMessage.includes("500") || lowerMessage.includes("server error")) {
-    return `서버에 일시적인 문제가 발생했습니다.\n\n해결 방법:\n- 잠시 후 다시 시도해주세요\n- 문제가 지속되면 https://status.anthropic.com 을 확인하세요`;
+    return t('errors:server_error.full_message');
   }
 
   // Default error message
-  return `오류가 발생했습니다: ${errorMessage}\n\n문제가 지속되면 설정을 확인하거나 앱을 다시 시작해보세요.`;
+  return t('errors:generic.full_message', { message: errorMessage });
 }
 
 // Error handler component to listen for keyboard shortcuts
@@ -113,21 +115,21 @@ function SessionRestorePrompt({
 
   return (
     <Box flexDirection="column" padding={2}>
-      <Text color="cyan" bold>이전 세션이 발견되었습니다</Text>
+      <Text color="cyan" bold>{t('common:session.previous_session_found')}</Text>
       <Box marginTop={1} flexDirection="column">
-        <Text color="gray">마지막 활동: {lastTime} ({timeDiff}분 전)</Text>
-        <Text color="gray">메시지 수: {session.messageCount}개</Text>
+        <Text color="gray">{t('common:time_display.last_activity')}: {lastTime} ({t('common:time_display.minutes_ago', { count: timeDiff })})</Text>
+        <Text color="gray">{t('common:session.message_count', { count: session.messageCount })}</Text>
         {session.firstMessage && (
-          <Text color="gray">첫 메시지: {session.firstMessage}</Text>
+          <Text color="gray">{t('common:session.first_message')}: {session.firstMessage}</Text>
         )}
         {session.lastMessage && (
-          <Text color="gray">마지막 메시지: {session.lastMessage}</Text>
+          <Text color="gray">{t('common:session.last_message')}: {session.lastMessage}</Text>
         )}
       </Box>
       <Box marginTop={1} flexDirection="column">
-        <Text color="yellow">이전 세션을 이어서 진행하시겠습니까?</Text>
-        <Text color="green">[Y] 세션 복원</Text>
-        <Text color="red">[N] 새 세션 시작</Text>
+        <Text color="yellow">{t('common:session.continue_session_prompt')}</Text>
+        <Text color="green">{t('common:session.restore_session')}</Text>
+        <Text color="red">{t('common:session.new_session')}</Text>
       </Box>
     </Box>
   );
@@ -135,7 +137,7 @@ function SessionRestorePrompt({
 
 export function App() {
   const { exit } = useApp();
-  const [appState, setAppState] = useState<AppState>("loading");
+  const [appState, setAppState] = useState<AppState>("splash");
   const [config, setConfig] = useState<GigaMindConfig | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [retryCounter, setRetryCounter] = useState(0);
@@ -211,8 +213,16 @@ export function App() {
     refreshStats,
   }), [config, client, sessionManager, messages, isLoading, refreshStats]);
 
+  // 스플래시 완료 핸들러
+  const handleSplashComplete = useCallback(() => {
+    setAppState("loading");
+  }, []);
+
   // Initialize app
   useEffect(() => {
+    // loading 상태에서만 초기화 실행 (다른 상태에서는 무시)
+    if (appState !== "loading") return;
+
     async function init() {
       try {
         const hasConfig = await configExists();
@@ -225,6 +235,9 @@ export function App() {
 
         const loadedConfig = await loadConfig();
         setConfig(loadedConfig);
+
+        // Initialize i18n with the configured language
+        await initI18n(loadedConfig.language || 'ko');
 
         // Load API key and setup client
         const apiKey = await loadApiKey();
@@ -267,24 +280,25 @@ export function App() {
         // Add welcome message with /help hint
         const timeInfo = getCurrentTime();
         const timeDisplay = formatTimeDisplay(timeInfo);
+        const greetingText = loadedConfig.userName
+          ? `${t('common:greeting.hello_with_name', { name: loadedConfig.userName })} ${t('common:greeting.what_can_i_help')}`
+          : `${t('common:greeting.hello')}! ${t('common:greeting.what_can_i_help')}`;
         setMessages([
           {
             role: "assistant",
-            content: loadedConfig.userName
-              ? `안녕하세요, ${loadedConfig.userName}님! 무엇을 도와드릴까요?\n\n🕐 현재 시각: ${timeDisplay}\n\n💡 /help를 입력하면 사용 가능한 명령어를 볼 수 있어요.`
-              : `안녕하세요! 무엇을 도와드릴까요?\n\n🕐 현재 시각: ${timeDisplay}\n\n💡 /help를 입력하면 사용 가능한 명령어를 볼 수 있어요.`,
+            content: `${greetingText}\n\n🕐 ${t('common:time_display.current_time')}: ${timeDisplay}\n\n💡 ${t('common:help_hint.help_command')}`,
           },
         ]);
 
         setIsFirstSession(true);
         setAppState("chat");
       } catch (err) {
-        setError(err instanceof Error ? err.message : "초기화 중 오류가 발생했습니다");
+        setError(err instanceof Error ? err.message : t('errors:initialization.error_during_init'));
       }
     }
 
     init();
-  }, [retryCounter]);
+  }, [appState, retryCounter]);
 
   const handleOnboardingComplete = useCallback(async (result: OnboardingResult) => {
     try {
@@ -302,11 +316,15 @@ export function App() {
         },
         model: "claude-sonnet-4-20250514",
         noteDetail: "balanced",
+        language: "ko",
       };
 
       await saveConfig(newConfig);
       await ensureNotesDir(result.notesDir);
       setConfig(newConfig);
+
+      // Initialize i18n with the default language
+      await initI18n(newConfig.language);
 
       // 노트 통계 업데이트
       const stats = await getQuickStats(result.notesDir);
@@ -335,26 +353,29 @@ export function App() {
       const timeInfo = getCurrentTime();
       const timeDisplay = formatTimeDisplay(timeInfo);
       let welcomeMessage = result.userName
-        ? `설정이 완료되었습니다, ${result.userName}님! 이제 GigaMind와 대화를 시작할 수 있어요.`
-        : "설정이 완료되었습니다! 이제 GigaMind와 대화를 시작할 수 있어요.";
+        ? `${t('commands:welcome_message.setup_complete_with_name', { name: result.userName })} ${t('commands:welcome_message.ready_to_chat')}`
+        : `${t('commands:welcome_message.setup_complete')} ${t('commands:welcome_message.ready_to_chat')}`;
 
-      welcomeMessage += `\n\n🕐 현재 시각: ${timeDisplay}`;
+      welcomeMessage += `\n\n🕐 ${t('common:time_display.current_time')}: ${timeDisplay}`;
 
       // Add import info if configured during onboarding
       if (result.importConfig?.sourcePath) {
-        welcomeMessage += `\n\n📥 노트 가져오기가 설정되었어요:\n- 소스: ${result.importConfig.source === "obsidian" ? "Obsidian Vault" : "마크다운 폴더"}\n- 경로: ${result.importConfig.sourcePath}\n\n/import 명령어를 입력해서 가져오기를 시작하세요!`;
+        const importSource = result.importConfig.source === "obsidian"
+          ? t('commands:welcome_message.import_source_obsidian')
+          : t('commands:welcome_message.import_source_markdown');
+        welcomeMessage += `\n\n📥 ${t('commands:welcome_message.import_configured')}\n- ${t('commands:import.source_label')} ${importSource}\n- ${t('commands:welcome_message.import_path_label')} ${result.importConfig.sourcePath}\n\n${t('commands:welcome_message.import_start_hint')}`;
       } else {
-        welcomeMessage += "\n\n무엇을 도와드릴까요?";
+        welcomeMessage += `\n\n${t('common:greeting.what_can_i_help')}`;
       }
 
       welcomeMessage += `
 
-**이런 것들을 할 수 있어요:**
-- "오늘 배운 것을 정리해줘" - 대화로 노트 작성
-- "내 노트에서 프로젝트 아이디어 찾아줘" - 노트 검색
-- /clone 질문 - 내 노트 기반으로 나처럼 답변
+**${t('commands:welcome_message.capabilities_title')}**
+- ${t('commands:welcome_message.capability_organize')}
+- ${t('commands:welcome_message.capability_search')}
+- ${t('commands:welcome_message.capability_clone')}
 
-💡 /help를 입력하면 모든 명령어를 볼 수 있어요.`;
+💡 ${t('common:help_hint.help_command')}`;
 
       setMessages([
         {
@@ -366,7 +387,7 @@ export function App() {
       setIsFirstSession(true);
       setAppState("chat");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "설정 저장 중 오류가 발생했습니다");
+      setError(err instanceof Error ? err.message : t('errors:config.save_error', { error: '' }));
     }
   }, []);
 
@@ -423,7 +444,7 @@ export function App() {
             { role: "user", content: userMessage },
             {
               role: "assistant",
-              content: `/${commandName} 기능은 현재 준비 중입니다. 곧 사용하실 수 있어요!\n\n사용 가능한 명령어를 보려면 /help를 입력해주세요.`,
+              content: `${t('commands:sync.not_implemented', { command: commandName })}\n\n${t('commands:sync.see_help')}`,
             },
           ]);
           return;
@@ -436,7 +457,7 @@ export function App() {
             { role: "user", content: userMessage },
             {
               role: "assistant",
-              content: `알 수 없는 명령어입니다: /${commandName}\n\n사용 가능한 명령어를 보려면 /help를 입력해주세요.`,
+              content: `${t('commands:unknown_command.message', { command: commandName })}\n\n${t('commands:unknown_command.see_help')}`,
             },
           ]);
           return;
@@ -587,7 +608,7 @@ export function App() {
             ...withoutLastUser,
             {
               role: "assistant",
-              content: "요청이 취소되었습니다. 다른 걸 부탁하시겠어요?",
+              content: t('common:request_cancelled.cancelled'),
             },
           ];
         }
@@ -596,7 +617,7 @@ export function App() {
           ...prev,
           {
             role: "assistant",
-            content: "요청이 취소되었습니다. 다른 걸 부탁하시겠어요?",
+            content: t('common:request_cancelled.cancelled'),
           },
         ];
       });
@@ -624,6 +645,11 @@ export function App() {
     try {
       await saveConfig(newConfig);
       setConfig(newConfig);
+
+      // Handle language change
+      if (newConfig.language !== config?.language) {
+        await changeLanguage(newConfig.language);
+      }
 
       // Reinitialize client if model or noteDetail changed
       if (newConfig.model !== config?.model || newConfig.noteDetail !== config?.noteDetail) {
@@ -656,7 +682,7 @@ export function App() {
         ...prev,
         {
           role: "assistant",
-          content: "설정이 저장되었습니다.",
+          content: t('common:settings_saved.saved'),
         },
       ]);
       setAppState("chat");
@@ -665,7 +691,7 @@ export function App() {
         ...prev,
         {
           role: "assistant",
-          content: `설정 저장 중 오류가 발생했습니다: ${err instanceof Error ? err.message : String(err)}`,
+          content: t('errors:config.save_error', { error: err instanceof Error ? err.message : String(err) }),
         },
       ]);
       setAppState("chat");
@@ -677,7 +703,7 @@ export function App() {
       ...prev,
       {
         role: "assistant",
-        content: "설정이 취소되었습니다.",
+        content: t('common:settings_saved.cancelled'),
       },
     ]);
     setAppState("chat");
@@ -695,13 +721,13 @@ export function App() {
 
     let message: string;
     if (result.cancelled) {
-      const imageInfo = result.imagesImported > 0 ? `\n🖼️ ${result.imagesImported}개 이미지를 복사했어요.` : "";
-      message = `⚠️ 가져오기가 취소되었습니다.\n\n📁 취소 전까지 ${result.filesImported}개 노트를 가져왔어요.${imageInfo}\n📂 소스: ${result.sourcePath}\n📍 저장 위치: ${config?.notesDir}/inbox/`;
+      const imageInfo = result.imagesImported > 0 ? `\n🖼️ ${t('commands:import.images_copied', { count: result.imagesImported })}` : "";
+      message = `⚠️ ${t('commands:import.cancelled_partial')}\n\n📁 ${t('commands:import.before_cancel')} ${t('commands:import.notes_imported', { count: result.filesImported })}${imageInfo}\n📂 ${t('commands:import.source_label')} ${result.sourcePath}\n📍 ${t('commands:import.destination_label')} ${config?.notesDir}/inbox/`;
     } else if (result.success) {
-      const imageInfo = result.imagesImported > 0 ? `\n🖼️ ${result.imagesImported}개 이미지를 복사했어요.` : "";
-      message = `✅ 가져오기가 완료되었습니다!\n\n📁 ${result.filesImported}개 노트를 가져왔어요.${imageInfo}\n📂 소스: ${result.sourcePath}\n📍 저장 위치: ${config?.notesDir}/inbox/`;
+      const imageInfo = result.imagesImported > 0 ? `\n🖼️ ${t('commands:import.images_copied', { count: result.imagesImported })}` : "";
+      message = `✅ ${t('commands:import.completed')}\n\n📁 ${t('commands:import.notes_imported', { count: result.filesImported })}${imageInfo}\n📂 ${t('commands:import.source_label')} ${result.sourcePath}\n📍 ${t('commands:import.destination_label')} ${config?.notesDir}/inbox/`;
     } else {
-      message = `❌ 가져오기에 실패했습니다: ${result.error}`;
+      message = `❌ ${t('errors:import.failed', { error: result.error })}`;
     }
 
     setMessages((prev) => [
@@ -719,7 +745,7 @@ export function App() {
       ...prev,
       {
         role: "assistant",
-        content: "가져오기가 취소되었습니다.",
+        content: t('errors:import.cancelled'),
       },
     ]);
     setAppState("chat");
@@ -744,7 +770,7 @@ export function App() {
       // 복원 메시지 추가
       uiMessages.push({
         role: "assistant",
-        content: `세션이 복원되었습니다. (${session.messages.length}개 메시지)\n이어서 대화를 계속하세요!`,
+        content: t('common:session.session_restored', { count: session.messages.length }),
       });
 
       setMessages(uiMessages);
@@ -765,12 +791,13 @@ export function App() {
     // 환영 메시지 설정
     const timeInfo = getCurrentTime();
     const timeDisplay = formatTimeDisplay(timeInfo);
+    const greetingText = config?.userName
+      ? `${t('common:greeting.hello_with_name', { name: config.userName })} ${t('common:greeting.what_can_i_help')}`
+      : `${t('common:greeting.hello')}! ${t('common:greeting.what_can_i_help')}`;
     setMessages([
       {
         role: "assistant",
-        content: config?.userName
-          ? `안녕하세요, ${config.userName}님! 무엇을 도와드릴까요?\n\n🕐 현재 시각: ${timeDisplay}\n\n💡 /help를 입력하면 사용 가능한 명령어를 볼 수 있어요.`
-          : `안녕하세요! 무엇을 도와드릴까요?\n\n🕐 현재 시각: ${timeDisplay}\n\n💡 /help를 입력하면 사용 가능한 명령어를 볼 수 있어요.`,
+        content: `${greetingText}\n\n🕐 ${t('common:time_display.current_time')}: ${timeDisplay}\n\n💡 ${t('common:help_hint.help_command')}`,
       },
     ]);
 
@@ -783,24 +810,28 @@ export function App() {
     return (
       <Box flexDirection="column" padding={2}>
         <Text color="red" bold>
-          오류 발생
+          {t('errors:initialization.title')}
         </Text>
         <Text color="red">{error}</Text>
         <Box marginTop={1} flexDirection="column">
-          <Text color="yellow">해결 방법:</Text>
-          <Text color="gray">- 'r' 키를 눌러 다시 시도</Text>
-          <Text color="gray">- 's' 키를 눌러 설정 초기화</Text>
-          <Text color="gray">- Ctrl+C를 눌러 종료</Text>
+          <Text color="yellow">{t('errors:initialization.solution_header')}</Text>
+          <Text color="gray">- {t('errors:initialization.retry_hint')}</Text>
+          <Text color="gray">- {t('errors:initialization.reset_config_hint')}</Text>
+          <Text color="gray">- {t('errors:initialization.exit_hint')}</Text>
         </Box>
         <ErrorHandler onRetry={handleRetry} onResetConfig={handleResetConfig} />
       </Box>
     );
   }
 
+  if (appState === "splash") {
+    return <SplashScreen onComplete={handleSplashComplete} />;
+  }
+
   if (appState === "loading") {
     return (
       <Box padding={2}>
-        <Text color="cyan">GigaMind를 불러오는 중...</Text>
+        <Text color="cyan">{t('common:loading.loading_app')}</Text>
       </Box>
     );
   }
@@ -826,7 +857,7 @@ export function App() {
           noteCount={noteCount}
           connectionCount={connectionCount}
           showStats={config.feedback.showStats}
-          currentAction={isLoading ? streamingText || "처리 중..." : undefined}
+          currentAction={isLoading ? streamingText || t('common:processing.processing') : undefined}
           danglingCount={danglingCount}
           orphanCount={orphanCount}
           showExtendedStats={true}
@@ -847,7 +878,7 @@ export function App() {
           noteCount={noteCount}
           connectionCount={connectionCount}
           showStats={config.feedback.showStats}
-          currentAction={isLoading ? streamingText || "처리 중..." : undefined}
+          currentAction={isLoading ? streamingText || t('common:processing.processing') : undefined}
           danglingCount={danglingCount}
           orphanCount={orphanCount}
           showExtendedStats={true}
@@ -867,7 +898,7 @@ export function App() {
         noteCount={noteCount}
         connectionCount={connectionCount}
         showStats={config?.feedback.showStats ?? true}
-        currentAction={isLoading ? streamingText || "처리 중..." : undefined}
+        currentAction={isLoading ? streamingText || t('common:processing.processing') : undefined}
         danglingCount={danglingCount}
         orphanCount={orphanCount}
         showExtendedStats={true}

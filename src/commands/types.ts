@@ -8,7 +8,7 @@ import type { Message } from "../components/Chat.js";
  * AppState represents the current state of the application.
  * Commands may transition the app to different states.
  */
-export type AppState = "loading" | "onboarding" | "chat" | "config" | "import" | "session_restore";
+export type AppState = "splash" | "loading" | "onboarding" | "chat" | "config" | "import" | "session_restore";
 
 /**
  * StreamingCallbacks for handling real-time updates during command execution.

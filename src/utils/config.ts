@@ -9,6 +9,7 @@ import {
   hasApiKeySecure,
   deleteApiKeySecure,
 } from "./keychain.js";
+import type { SupportedLanguage } from "../i18n/types.js";
 
 /**
  * Expand tilde (~) to home directory in a path.
@@ -54,6 +55,8 @@ export interface GigaMindConfig {
   model: string;
   /** Note summary detail level - controls how much context is preserved when creating notes */
   noteDetail: NoteDetailLevel;
+  /** UI language setting */
+  language: SupportedLanguage;
 }
 
 const DEFAULT_CONFIG: GigaMindConfig = {
@@ -67,6 +70,7 @@ const DEFAULT_CONFIG: GigaMindConfig = {
   },
   model: "claude-sonnet-4-20250514",
   noteDetail: "balanced",
+  language: "ko",
 };
 
 /**

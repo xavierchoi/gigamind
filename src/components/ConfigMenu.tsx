@@ -2,6 +2,8 @@ import React, { useState, useCallback } from "react";
 import { Box, Text, useInput } from "ink";
 import TextInput from "ink-text-input";
 import type { GigaMindConfig, NoteDetailLevel } from "../utils/config.js";
+import type { SupportedLanguage } from "../i18n/index.js";
+import { t } from "../i18n/index.js";
 
 // Available models
 const AVAILABLE_MODELS = [
@@ -16,14 +18,24 @@ const FEEDBACK_LEVELS: Array<{ label: string; value: "minimal" | "medium" | "det
   { label: "Detailed", value: "detailed" },
 ];
 
-// Note detail levels
-const NOTE_DETAIL_LEVELS: Array<{ label: string; value: NoteDetailLevel; description: string }> = [
-  { label: "상세 (Verbose)", value: "verbose", description: "대화 내용을 거의 그대로 기록" },
-  { label: "균형 (Balanced)", value: "balanced", description: "핵심 위주로 정리, 맥락 보존" },
-  { label: "간결 (Concise)", value: "concise", description: "핵심만 간결하게 요약" },
-];
+// Note detail levels - dynamically loaded
+function getNoteDetailLevels(): Array<{ label: string; value: NoteDetailLevel; description: string }> {
+  return [
+    { label: t("common:config_menu.detail_verbose"), value: "verbose", description: t("common:config_menu.detail_verbose_desc") },
+    { label: t("common:config_menu.detail_balanced"), value: "balanced", description: t("common:config_menu.detail_balanced_desc") },
+    { label: t("common:config_menu.detail_concise"), value: "concise", description: t("common:config_menu.detail_concise_desc") },
+  ];
+}
 
-type MenuItemType = "userName" | "notesDir" | "model" | "feedbackLevel" | "noteDetail" | "save" | "cancel";
+// Language options - dynamically loaded
+function getLanguageOptions(): Array<{ label: string; value: SupportedLanguage; description: string }> {
+  return [
+    { label: t("common:config_menu.lang_korean"), value: "ko", description: t("common:config_menu.lang_korean_desc") },
+    { label: t("common:config_menu.lang_english"), value: "en", description: t("common:config_menu.lang_english_desc") },
+  ];
+}
+
+type MenuItemType = "userName" | "notesDir" | "model" | "feedbackLevel" | "noteDetail" | "language" | "save" | "cancel";
 
 interface MenuItem {
   key: MenuItemType;
@@ -32,59 +44,73 @@ interface MenuItem {
   editable: boolean;
 }
 
-const MENU_ITEMS: MenuItem[] = [
-  {
-    key: "userName",
-    label: "사용자 이름",
-    getValue: (c) => c.userName || "(미설정)",
-    editable: true,
-  },
-  {
-    key: "notesDir",
-    label: "노트 디렉토리",
-    getValue: (c) => c.notesDir,
-    editable: true,
-  },
-  {
-    key: "model",
-    label: "모델",
-    getValue: (c) => {
-      const model = AVAILABLE_MODELS.find((m) => m.value === c.model);
-      return model?.label || c.model;
+function getMenuItems(): MenuItem[] {
+  const noteDetailLevels = getNoteDetailLevels();
+  const languageOptions = getLanguageOptions();
+
+  return [
+    {
+      key: "userName",
+      label: t("common:config_menu.user_name"),
+      getValue: (c) => c.userName || t("common:config_menu.not_set"),
+      editable: true,
     },
-    editable: true,
-  },
-  {
-    key: "feedbackLevel",
-    label: "피드백 레벨",
-    getValue: (c) => {
-      const level = FEEDBACK_LEVELS.find((l) => l.value === c.feedback.level);
-      return level?.label || c.feedback.level;
+    {
+      key: "notesDir",
+      label: t("common:config_menu.notes_dir"),
+      getValue: (c) => c.notesDir,
+      editable: true,
     },
-    editable: true,
-  },
-  {
-    key: "noteDetail",
-    label: "노트 상세 수준",
-    getValue: (c) => {
-      const level = NOTE_DETAIL_LEVELS.find((l) => l.value === c.noteDetail);
-      return level?.label || c.noteDetail || "균형 (Balanced)";
+    {
+      key: "model",
+      label: t("common:config_menu.model"),
+      getValue: (c) => {
+        const model = AVAILABLE_MODELS.find((m) => m.value === c.model);
+        return model?.label || c.model;
+      },
+      editable: true,
     },
-    editable: true,
-  },
-  {
-    key: "save",
-    label: "저장하고 나가기",
-    getValue: () => "",
-    editable: false,
-  },
-  {
-    key: "cancel",
-    label: "취소",
-    getValue: () => "",
-    editable: false,
-  },
-];
+    {
+      key: "feedbackLevel",
+      label: t("common:config_menu.feedback_level"),
+      getValue: (c) => {
+        const level = FEEDBACK_LEVELS.find((l) => l.value === c.feedback.level);
+        return level?.label || c.feedback.level;
+      },
+      editable: true,
+    },
+    {
+      key: "noteDetail",
+      label: t("common:config_menu.note_detail"),
+      getValue: (c) => {
+        const level = noteDetailLevels.find((l) => l.value === c.noteDetail);
+        return level?.label || c.noteDetail || t("common:config_menu.detail_balanced");
+      },
+      editable: true,
+    },
+    {
+      key: "language",
+      label: t("common:config_menu.language"),
+      getValue: (c) => {
+        const lang = languageOptions.find((l) => l.value === c.language);
+        return lang?.label || c.language || t("common:config_menu.lang_korean");
+      },
+      editable: true,
+    },
+    {
+      key: "save",
+      label: t("common:config_menu.save_and_exit"),
+      getValue: () => "",
+      editable: false,
+    },
+    {
+      key: "cancel",
+      label: t("common:config_menu.cancel"),
+      getValue: () => "",
+      editable: false,
+    },
+  ];
+}
 
 interface ConfigMenuProps {
   config: GigaMindConfig;
@@ -92,7 +118,7 @@ interface ConfigMenuProps {
   onCancel: () => void;
 }
 
-type EditMode = null | "userName" | "notesDir" | "model" | "feedbackLevel" | "noteDetail";
+type EditMode = null | "userName" | "notesDir" | "model" | "feedbackLevel" | "noteDetail" | "language";
 
 export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -138,7 +164,7 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
         const selected = AVAILABLE_MODELS[selectIndex];
         setTempConfig((prev) => ({ ...prev, model: selected.value }));
         setEditMode(null);
-        setMessage({ text: "모델이 변경되었습니다", type: "success" });
+        setMessage({ text: t("common:config_menu.model_changed"), type: "success" });
         return;
       }
       return;
@@ -164,13 +190,14 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
           feedback: { ...prev.feedback, level: selected.value },
         }));
         setEditMode(null);
-        setMessage({ text: "피드백 레벨이 변경되었습니다", type: "success" });
+        setMessage({ text: t("common:config_menu.feedback_level_changed"), type: "success" });
         return;
       }
       return;
     }
 
     if (editMode === "noteDetail") {
+      const noteDetailLevels = getNoteDetailLevels();
       if (key.escape) {
         setEditMode(null);
         return;
@@ -180,29 +207,57 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
         return;
       }
       if (key.downArrow) {
-        setSelectIndex((prev) => Math.min(NOTE_DETAIL_LEVELS.length - 1, prev + 1));
+        setSelectIndex((prev) => Math.min(noteDetailLevels.length - 1, prev + 1));
         return;
       }
       if (key.return) {
-        const selected = NOTE_DETAIL_LEVELS[selectIndex];
+        const selected = noteDetailLevels[selectIndex];
         setTempConfig((prev) => ({
           ...prev,
           noteDetail: selected.value,
         }));
         setEditMode(null);
-        setMessage({ text: "노트 상세 수준이 변경되었습니다", type: "success" });
+        setMessage({ text: t("common:config_menu.note_detail_changed"), type: "success" });
+        return;
+      }
+      return;
+    }
+
+    if (editMode === "language") {
+      const languageOptions = getLanguageOptions();
+      if (key.escape) {
+        setEditMode(null);
+        return;
+      }
+      if (key.upArrow) {
+        setSelectIndex((prev) => Math.max(0, prev - 1));
+        return;
+      }
+      if (key.downArrow) {
+        setSelectIndex((prev) => Math.min(languageOptions.length - 1, prev + 1));
+        return;
+      }
+      if (key.return) {
+        const selected = languageOptions[selectIndex];
+        setTempConfig((prev) => ({
+          ...prev,
+          language: selected.value,
+        }));
+        setEditMode(null);
+        setMessage({ text: t("common:config_menu.language_changed"), type: "success" });
         return;
       }
       return;
     }
 
     // Normal menu navigation
+    const menuItems = getMenuItems();
     if (key.upArrow) {
       setSelectedIndex((prev) => Math.max(0, prev - 1));
       return;
     }
     if (key.downArrow) {
-      setSelectedIndex((prev) => Math.min(MENU_ITEMS.length - 1, prev + 1));
+      setSelectedIndex((prev) => Math.min(menuItems.length - 1, prev + 1));
       return;
     }
     if (key.escape) {
@@ -210,13 +265,15 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
       return;
     }
     if (key.return) {
-      const item = MENU_ITEMS[selectedIndex];
+      const item = menuItems[selectedIndex];
       handleSelect(item.key);
       return;
     }
   });
 
   const handleSelect = useCallback((key: MenuItemType) => {
+    const noteDetailLevels = getNoteDetailLevels();
+    const languageOptions = getLanguageOptions();
     switch (key) {
       case "userName":
         setEditMode("userName");
@@ -239,7 +296,13 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
       case "noteDetail":
         setEditMode("noteDetail");
         setSelectIndex(
-          NOTE_DETAIL_LEVELS.findIndex((l) => l.value === tempConfig.noteDetail) || 1
+          noteDetailLevels.findIndex((l) => l.value === tempConfig.noteDetail) || 1
+        );
+        break;
+      case "language":
+        setEditMode("language");
+        setSelectIndex(
+          languageOptions.findIndex((l) => l.value === tempConfig.language) || 0
         );
         break;
       case "save":
@@ -254,11 +317,11 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
   const handleTextSubmit = useCallback((value: string) => {
     if (editMode === "userName") {
       setTempConfig((prev) => ({ ...prev, userName: value.trim() || undefined }));
-      setMessage({ text: "사용자 이름이 변경되었습니다", type: "success" });
+      setMessage({ text: t("common:config_menu.user_name_changed"), type: "success" });
     } else if (editMode === "notesDir") {
       if (value.trim()) {
         setTempConfig((prev) => ({ ...prev, notesDir: value.trim() }));
-        setMessage({ text: "노트 디렉토리가 변경되었습니다", type: "success" });
+        setMessage({ text: t("common:config_menu.notes_dir_changed"), type: "success" });
       }
     }
     setEditMode(null);
@@ -277,7 +340,7 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
           flexDirection="column"
         >
           <Text color="cyan" bold>
-            모델 선택
+            {t("common:config_menu.select_model")}
           </Text>
           <Box marginTop={1} flexDirection="column">
             {AVAILABLE_MODELS.map((model, idx) => (
@@ -287,7 +350,7 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
                   {model.label}
                 </Text>
                 {model.value === tempConfig.model && (
-                  <Text color="green"> (현재)</Text>
+                  <Text color="green"> {t("common:config_menu.current")}</Text>
                 )}
               </Box>
             ))}
@@ -295,7 +358,7 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
         </Box>
         <Box marginTop={1}>
           <Text color="gray">
-            ↑↓: 이동 | Enter: 선택 | Esc: 취소
+            {t("common:config_menu.nav_select_cancel")}
           </Text>
         </Box>
       </Box>
@@ -314,7 +377,7 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
           flexDirection="column"
         >
           <Text color="cyan" bold>
-            피드백 레벨 선택
+            {t("common:config_menu.select_feedback_level")}
           </Text>
           <Box marginTop={1} flexDirection="column">
             {FEEDBACK_LEVELS.map((level, idx) => (
@@ -324,7 +387,7 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
                   {level.label}
                 </Text>
                 {level.value === tempConfig.feedback.level && (
-                  <Text color="green"> (현재)</Text>
+                  <Text color="green"> {t("common:config_menu.current")}</Text>
                 )}
               </Box>
             ))}
@@ -332,7 +395,7 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
         </Box>
         <Box marginTop={1}>
           <Text color="gray">
-            ↑↓: 이동 | Enter: 선택 | Esc: 취소
+            {t("common:config_menu.nav_select_cancel")}
           </Text>
         </Box>
       </Box>
@@ -341,6 +404,7 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
 
   // Render note detail level selection
   if (editMode === "noteDetail") {
+    const noteDetailLevels = getNoteDetailLevels();
     return (
       <Box flexDirection="column" padding={1}>
         <Box
@@ -351,13 +415,13 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
           flexDirection="column"
         >
           <Text color="cyan" bold>
-            노트 상세 수준 선택
+            {t("common:config_menu.select_note_detail")}
           </Text>
           <Text color="gray" dimColor>
-            노트 작성 시 대화 내용을 얼마나 상세하게 기록할지 설정합니다.
+            {t("common:config_menu.note_detail_description")}
           </Text>
           <Box marginTop={1} flexDirection="column">
-            {NOTE_DETAIL_LEVELS.map((level, idx) => (
+            {noteDetailLevels.map((level, idx) => (
               <Box key={level.value} flexDirection="column">
                 <Box>
                   <Text color={idx === selectIndex ? "yellow" : "white"}>
@@ -365,7 +429,7 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
                     {level.label}
                   </Text>
                   {level.value === tempConfig.noteDetail && (
-                    <Text color="green"> (현재)</Text>
+                    <Text color="green"> {t("common:config_menu.current")}</Text>
                   )}
                 </Box>
                 {idx === selectIndex && (
@@ -379,7 +443,55 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
         </Box>
         <Box marginTop={1}>
           <Text color="gray">
-            ↑↓: 이동 | Enter: 선택 | Esc: 취소
+            {t("common:config_menu.nav_select_cancel")}
+          </Text>
+        </Box>
+      </Box>
+    );
+  }
+
+  // Render language selection
+  if (editMode === "language") {
+    const languageOptions = getLanguageOptions();
+    return (
+      <Box flexDirection="column" padding={1}>
+        <Box
+          borderStyle="round"
+          borderColor="cyan"
+          paddingX={2}
+          paddingY={1}
+          flexDirection="column"
+        >
+          <Text color="cyan" bold>
+            {t("common:config_menu.select_language")}
+          </Text>
+          <Text color="gray" dimColor>
+            {t("common:config_menu.language_description")}
+          </Text>
+          <Box marginTop={1} flexDirection="column">
+            {languageOptions.map((lang, idx) => (
+              <Box key={lang.value} flexDirection="column">
+                <Box>
+                  <Text color={idx === selectIndex ? "yellow" : "white"}>
+                    {idx === selectIndex ? "> " : "  "}
+                    {lang.label}
+                  </Text>
+                  {lang.value === tempConfig.language && (
+                    <Text color="green"> {t("common:config_menu.current_bilingual")}</Text>
+                  )}
+                </Box>
+                {idx === selectIndex && (
+                  <Box marginLeft={4}>
+                    <Text color="gray" dimColor>{lang.description}</Text>
+                  </Box>
+                )}
+              </Box>
+            ))}
+          </Box>
+        </Box>
+        <Box marginTop={1}>
+          <Text color="gray">
+            {t("common:config_menu.nav_bilingual")}
           </Text>
         </Box>
       </Box>
@@ -388,8 +500,8 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
 
   // Render text input
   if (editMode === "userName" || editMode === "notesDir") {
-    const label = editMode === "userName" ? "사용자 이름" : "노트 디렉토리";
-    const placeholder = editMode === "userName" ? "이름 입력..." : "경로 입력...";
+    const label = editMode === "userName" ? t("common:config_menu.user_name") : t("common:config_menu.notes_dir");
+    const placeholder = editMode === "userName" ? t("common:config_menu.name_placeholder") : t("common:config_menu.path_placeholder");
 
     return (
       <Box flexDirection="column" padding={1}>
@@ -401,7 +513,7 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
           flexDirection="column"
         >
           <Text color="cyan" bold>
-            {label} 편집
+            {label} {t("common:config_menu.edit")}
           </Text>
           <Box marginTop={1}>
             <Text color="cyan">{"> "}</Text>
@@ -415,7 +527,7 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
         </Box>
         <Box marginTop={1}>
           <Text color="gray">
-            Enter: 저장 | Esc: 취소
+            {t("common:config_menu.nav_save_cancel")}
           </Text>
         </Box>
       </Box>
@@ -423,6 +535,7 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
   }
 
   // Render main menu
+  const menuItems = getMenuItems();
   return (
     <Box flexDirection="column" padding={1}>
       <Box
@@ -433,10 +546,10 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
         flexDirection="column"
       >
         <Text color="cyan" bold>
-          설정
+          {t("common:config_menu.title")}
         </Text>
         <Box marginTop={1} flexDirection="column">
-          {MENU_ITEMS.map((item, idx) => {
+          {menuItems.map((item, idx) => {
             const isSelected = idx === selectedIndex;
             const isSeparator = item.key === "save";
             const value = item.getValue(tempConfig);
@@ -473,7 +586,7 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
 
       <Box marginTop={1}>
         <Text color="gray">
-          ↑↓: 이동 | Enter: 편집 | Esc: 취소
+          {t("common:config_menu.nav_edit_cancel")}
         </Text>
       </Box>
     </Box>

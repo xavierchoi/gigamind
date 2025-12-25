@@ -10,10 +10,11 @@
 import { BaseCommand } from "./BaseCommand.js";
 import type { CommandContext, CommandResult } from "./types.js";
 import type { Message } from "../components/Chat.js";
+import { t } from "../i18n/index.js";
 
 export class SessionCommand extends BaseCommand {
   readonly name = "session";
-  readonly description = "세션 관리";
+  readonly description = t('commands:session.description');
   readonly usage = "/session [list|export]";
   readonly category = "session" as const;
 
@@ -47,9 +48,9 @@ export class SessionCommand extends BaseCommand {
    */
   private showUsage(context: CommandContext): CommandResult {
     const { setMessages } = context;
-    const helpMessage = `/session 명령어 사용법:
-- /session list - 최근 세션 목록 보기
-- /session export - 현재 세션을 마크다운으로 저장`;
+    const helpMessage = `${t('commands:session.usage_title')}
+- ${t('commands:session.usage_list')}
+- ${t('commands:session.usage_export')}`;
 
     setMessages((prev: Message[]) => [...prev, { role: "assistant", content: helpMessage }]);
 
@@ -64,7 +65,7 @@ export class SessionCommand extends BaseCommand {
     const { setMessages, sessionManager } = context;
 
     if (!sessionManager) {
-      const errorMessage = "세션 매니저가 초기화되지 않았습니다.";
+      const errorMessage = t('common:session.session_manager_not_initialized');
       setMessages((prev: Message[]) => [...prev, { role: "assistant", content: errorMessage }]);
       return { handled: true, error: errorMessage };
     }
@@ -72,17 +73,17 @@ export class SessionCommand extends BaseCommand {
     const sessions = await sessionManager.listSessionsWithSummary(10);
 
     if (sessions.length === 0) {
-      const message = "저장된 세션이 없습니다.";
+      const message = t('common:session.no_saved_sessions');
       setMessages((prev: Message[]) => [...prev, { role: "assistant", content: message }]);
       return { handled: true };
     }
 
-    let listMessage = "**최근 세션 목록**\n\n";
+    let listMessage = `**${t('common:session.recent_sessions_list')}**\n\n`;
     for (const session of sessions) {
       const date = new Date(session.createdAt).toLocaleString("ko-KR");
-      const preview = session.firstMessage || "(메시지 없음)";
+      const preview = session.firstMessage || t('common:session.no_messages');
       listMessage += `- **${session.id}** (${date})\n`;
-      listMessage += `  메시지: ${session.messageCount}개 | ${preview}\n\n`;
+      listMessage += `  ${t('common:session.message_count', { count: session.messageCount })} | ${preview}\n\n`;
     }
 
     setMessages((prev: Message[]) => [...prev, { role: "assistant", content: listMessage }]);
@@ -98,7 +99,7 @@ export class SessionCommand extends BaseCommand {
     const { setMessages, sessionManager } = context;
 
     if (!sessionManager) {
-      const errorMessage = "세션 매니저가 초기화되지 않았습니다.";
+      const errorMessage = t('common:session.session_manager_not_initialized');
       setMessages((prev: Message[]) => [...prev, { role: "assistant", content: errorMessage }]);
       return { handled: true, error: errorMessage };
     }
@@ -106,12 +107,12 @@ export class SessionCommand extends BaseCommand {
     const result = await sessionManager.exportSession();
 
     if (result.success) {
-      const successMessage = `세션이 마크다운으로 저장되었습니다.\n\n저장 위치: ${result.filePath}`;
+      const successMessage = t('common:session.session_exported', { path: result.filePath });
       setMessages((prev: Message[]) => [...prev, { role: "assistant", content: successMessage }]);
       return { handled: true };
     }
 
-    const errorMessage = `세션 내보내기 실패: ${result.error}`;
+    const errorMessage = t('common:session.session_export_failed', { error: result.error });
     setMessages((prev: Message[]) => [...prev, { role: "assistant", content: errorMessage }]);
     return { handled: true, error: result.error };
   }

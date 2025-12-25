@@ -1,5 +1,6 @@
 import React from "react";
 import { Box, Text } from "ink";
+import { t } from "../i18n/index.js";
 
 interface StatusBarProps {
   noteCount: number;
@@ -27,13 +28,13 @@ function formatRelativeTime(date: Date): string {
   const diffDay = Math.floor(diffHour / 24);
 
   if (diffSec < 60) {
-    return "방금 전";
+    return t("common:status.just_now");
   } else if (diffMin < 60) {
-    return `${diffMin}분 전`;
+    return t("common:status.minutes_ago", { count: diffMin });
   } else if (diffHour < 24) {
-    return `${diffHour}시간 전`;
+    return t("common:status.hours_ago", { count: diffHour });
   } else {
-    return `${diffDay}일 전`;
+    return t("common:status.days_ago", { count: diffDay });
   }
 }
 
@@ -63,30 +64,30 @@ export function StatusBar({
         </Text>
         <Box gap={2}>
           <Text>
-            <Text color="blue">노트:</Text>{" "}
+            <Text color="blue">{t("common:status.notes")}</Text>{" "}
             <Text color="white">{noteCount}</Text>
           </Text>
           <Text>
-            <Text color="green">연결:</Text>{" "}
+            <Text color="green">{t("common:status.connections")}</Text>{" "}
             <Text color="white">{connectionCount}</Text>
           </Text>
           {/* 확장 통계: Dangling Links */}
           {showExtendedStats && danglingCount !== undefined && danglingCount > 0 && (
             <Text>
-              <Text color="yellow">미생성:</Text>{" "}
+              <Text color="yellow">{t("common:status.dangling")}</Text>{" "}
               <Text color="yellow">{danglingCount}</Text>
             </Text>
           )}
           {/* 확장 통계: Orphan Notes */}
           {showExtendedStats && orphanCount !== undefined && orphanCount > 0 && (
             <Text>
-              <Text color="gray">고립:</Text>{" "}
+              <Text color="gray">{t("common:status.orphan")}</Text>{" "}
               <Text color="gray">{orphanCount}</Text>
             </Text>
           )}
           {lastSync && (
             <Text>
-              <Text color="yellow">동기화:</Text>{" "}
+              <Text color="yellow">{t("common:status.sync")}</Text>{" "}
               <Text color="gray">{formatRelativeTime(lastSync)}</Text>
             </Text>
           )}

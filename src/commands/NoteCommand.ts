@@ -9,10 +9,11 @@ import { createSubagentInvoker } from "../agent/subagent.js";
 import { AbortError } from "../agent/client.js";
 import { loadApiKey } from "../utils/config.js";
 import { getQuickStats } from "../utils/graph/index.js";
+import { t } from "../i18n/index.js";
 
 export class NoteCommand extends BaseCommand {
   name = "note";
-  description = "노트 작성";
+  description = t('commands:note.description');
   usage = "/note <내용>";
   requiresArgs = true;
   category = "notes" as const;
@@ -29,16 +30,16 @@ export class NoteCommand extends BaseCommand {
       this.addMessages(
         context,
         userInput || `/${this.name}`,
-        `노트 내용을 입력해주세요.
+        `${t('commands:note.enter_content')}
 
-**사용법:** /note <내용>
+**${t('commands:note.usage')}**
 
-**예시:**
-- /note 오늘 회의에서 새로운 프로젝트 아이디어가 나왔다
-- /note React 18의 Suspense 기능 정리
-- /note 독서 메모: "원씽" - 핵심은 가장 중요한 한 가지에 집중하는 것
+**${t('commands:note.examples.title')}**
+- ${t('commands:note.examples.meeting_idea')}
+- ${t('commands:note.examples.react_summary')}
+- ${t('commands:note.examples.book_memo')}
 
-입력하신 내용을 바탕으로 노트를 작성해드릴게요!`
+${t('commands:note.help_text')}`
       );
       return { handled: true };
     }
@@ -48,14 +49,14 @@ export class NoteCommand extends BaseCommand {
 
     // Start loading state
     const controller = this.startLoading(context);
-    context.setStreamingText("노트를 작성하는 중...");
+    context.setStreamingText(t('common:processing.writing_note'));
     const currentGeneration = this.getCurrentGeneration(context);
 
     try {
       // Load API key
       const apiKey = await loadApiKey();
       if (!apiKey) {
-        throw new Error("API 키가 설정되지 않았습니다.");
+        throw new Error(t('errors:api_key_not_set'));
       }
 
       // Create subagent invoker
@@ -71,8 +72,8 @@ export class NoteCommand extends BaseCommand {
 
       // Create streaming callbacks with custom messages
       const callbacks = this.createStreamingCallbacks(context, currentGeneration, {
-        thinkingMessage: "노트를 작성하는 중...",
-        toolUseMessage: (toolName) => `${toolName} 도구 사용 중...`,
+        thinkingMessage: t('common:processing.writing_note'),
+        toolUseMessage: (toolName) => t('common:working.using_tool', { toolName }),
       });
 
       // Override onText for note-specific behavior
@@ -89,7 +90,7 @@ export class NoteCommand extends BaseCommand {
       const onProgress = (info: { filesFound?: number; filesMatched?: number }) => {
         if (context.requestGenerationRef.current !== currentGeneration) return;
         if (info.filesFound !== undefined && info.filesFound > 0) {
-          context.setStreamingText(`노트를 작성하는 중... (${info.filesFound}개 관련 파일 확인)`);
+          context.setStreamingText(`${t('common:processing.writing_note')} (${t('common:processing.related_files_checked', { count: info.filesFound })})`);
         }
       };
 
@@ -129,7 +130,7 @@ export class NoteCommand extends BaseCommand {
 
         return { handled: true };
       } else {
-        const errorResponse = `노트 작성 중 오류가 발생했습니다: ${result.error}`;
+        const errorResponse = t('errors:note.error_during_note', { error: result.error });
 
         // Sync error to histories
         this.syncToHistory(context, userInput, errorResponse);
@@ -146,7 +147,7 @@ export class NoteCommand extends BaseCommand {
       }
 
       const errorMessage = err instanceof Error ? err.message : String(err);
-      const errorResponse = `노트 작성 중 문제가 발생했습니다.\n\n${errorMessage}`;
+      const errorResponse = `${t('errors:note.error_during_note_friendly')}\n\n${errorMessage}`;
 
       // Sync error to histories
       this.syncToHistory(context, userInput, errorResponse);

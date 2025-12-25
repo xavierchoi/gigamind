@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Box, Text } from "ink";
 import { getQuickStats, type QuickNoteStats } from "../utils/graph/index.js";
+import { t } from "../i18n/index.js";
 
 interface StatusLineProps {
   notesDir: string;
@@ -53,22 +54,22 @@ export function StatusLine({
   return (
     <Box paddingX={1}>
       <Text>
-        <Text color="blue">노트:</Text>{" "}
+        <Text color="blue">{t("common:status.notes")}</Text>{" "}
         <Text color="white">{stats.noteCount}</Text>
         {"  "}
-        <Text color="green">연결:</Text>{" "}
+        <Text color="green">{t("common:status.connections")}</Text>{" "}
         <Text color="white">{stats.connectionCount}</Text>
         {stats.danglingCount > 0 && (
           <>
             {"  "}
-            <Text color="yellow">미생성:</Text>{" "}
+            <Text color="yellow">{t("common:status.dangling")}</Text>{" "}
             <Text color="yellow">{stats.danglingCount}</Text>
           </>
         )}
         {stats.orphanCount > 0 && (
           <>
             {"  "}
-            <Text color="gray">고립:</Text>{" "}
+            <Text color="gray">{t("common:status.orphan")}</Text>{" "}
             <Text color="gray">{stats.orphanCount}</Text>
           </>
         )}

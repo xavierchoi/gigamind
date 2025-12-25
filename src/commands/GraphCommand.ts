@@ -6,10 +6,11 @@
 import { BaseCommand } from "./BaseCommand.js";
 import type { CommandContext, CommandResult } from "./types.js";
 import type { Message } from "../components/Chat.js";
+import { t } from "../i18n/index.js";
 
 export class GraphCommand extends BaseCommand {
   readonly name = "graph";
-  readonly description = "그래프 시각화";
+  readonly description = t('commands:graph.description');
   readonly usage = "/graph";
 
   /**
@@ -23,7 +24,7 @@ export class GraphCommand extends BaseCommand {
     setMessages((prev: Message[]) => [
       ...prev,
       { role: "user", content: userInput },
-      { role: "assistant", content: "그래프 시각화 서버를 시작하는 중..." },
+      { role: "assistant", content: t('common:processing.starting_graph_server') },
     ]);
 
     try {
@@ -38,18 +39,18 @@ export class GraphCommand extends BaseCommand {
         ...prev.slice(0, -1),
         {
           role: "assistant",
-          content: `그래프가 브라우저에서 열렸습니다.
+          content: `${t('commands:graph.opened_message')}
 
-**URL:** ${result.url}
+**${t('commands:graph.url_label')}** ${result.url}
 
-**단축키:**
-- / : 노트 검색
-- +/- : 확대/축소
-- 0 : 뷰 초기화
-- ESC : 포커스 모드 종료
-- F : 전체화면
+**${t('commands:graph.shortcuts_title')}**
+- ${t('commands:graph.shortcuts.search')}
+- ${t('commands:graph.shortcuts.zoom')}
+- ${t('commands:graph.shortcuts.reset_view')}
+- ${t('commands:graph.shortcuts.exit_focus')}
+- ${t('commands:graph.shortcuts.fullscreen')}
 
-서버는 30분 동안 비활성 시 자동 종료됩니다.`,
+${t('commands:graph.auto_shutdown')}`,
         },
       ]);
 
@@ -62,7 +63,7 @@ export class GraphCommand extends BaseCommand {
         ...prev.slice(0, -1),
         {
           role: "assistant",
-          content: `그래프 서버 시작 중 오류가 발생했습니다: ${errorMessage}`,
+          content: t('errors:graph.error_starting_server', { error: errorMessage }),
         },
       ]);
 

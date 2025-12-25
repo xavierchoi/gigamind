@@ -8,10 +8,11 @@ import type { CommandContext, CommandResult } from "./types.js";
 import { createSubagentInvoker } from "../agent/subagent.js";
 import { AbortError } from "../agent/client.js";
 import { loadApiKey } from "../utils/config.js";
+import { t } from "../i18n/index.js";
 
 export class SearchCommand extends BaseCommand {
   name = "search";
-  description = "노트 검색";
+  description = t('commands:search.description');
   usage = "/search <query>";
   requiresArgs = true;
   category = "ai" as const;
@@ -28,11 +29,11 @@ export class SearchCommand extends BaseCommand {
       this.addMessages(
         context,
         userInput || `/${this.name}`,
-        `검색어를 입력해주세요.
+        `${t('commands:search.enter_query')}
 
-**사용법:** /search <검색어>
+**${t('commands:search.usage')}**
 
-**예시:**
+**${t('commands:search.example')}**
 - /search 프로젝트 아이디어
 - /search 미팅 노트
 - /search TODO
@@ -47,14 +48,14 @@ export class SearchCommand extends BaseCommand {
 
     // Start loading state
     const controller = this.startLoading(context);
-    context.setStreamingText("노트를 검색하는 중...");
+    context.setStreamingText(t('common:processing.searching_notes'));
     const currentGeneration = this.getCurrentGeneration(context);
 
     try {
       // Load API key
       const apiKey = await loadApiKey();
       if (!apiKey) {
-        throw new Error("API 키가 설정되지 않았습니다.");
+        throw new Error(t('errors:api_key_not_set'));
       }
 
       // Create subagent invoker
@@ -70,8 +71,8 @@ export class SearchCommand extends BaseCommand {
 
       // Create streaming callbacks with custom messages
       const callbacks = this.createStreamingCallbacks(context, currentGeneration, {
-        thinkingMessage: "노트를 검색하는 중...",
-        toolUseMessage: (toolName) => `${toolName} 도구로 검색 중...`,
+        thinkingMessage: t('common:processing.searching_notes'),
+        toolUseMessage: (toolName) => t('common:working.using_tool', { toolName }),
       });
 
       // Override onText for search-specific behavior
@@ -107,7 +108,7 @@ export class SearchCommand extends BaseCommand {
 
         return { handled: true };
       } else {
-        const errorResponse = `검색 중 오류가 발생했습니다: ${result.error}`;
+        const errorResponse = t('errors:search.error_during_search', { error: result.error });
 
         // Sync to history even on error
         this.syncToHistory(context, userInput, errorResponse);
@@ -122,7 +123,7 @@ export class SearchCommand extends BaseCommand {
       }
 
       const errorMessage = err instanceof Error ? err.message : String(err);
-      const errorResponse = `검색 중 오류가 발생했습니다: ${errorMessage}`;
+      const errorResponse = t('errors:search.error_during_search', { error: errorMessage });
 
       // Sync to history even on error
       this.syncToHistory(context, userInput, errorResponse);

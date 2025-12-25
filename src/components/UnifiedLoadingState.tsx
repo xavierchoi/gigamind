@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Box, Text } from "ink";
 import Spinner from "ink-spinner";
+import { t } from "../i18n/index.js";
 
 export type LoadingPhase = 'thinking' | 'searching' | 'reading' | 'writing' | 'analyzing' | 'delegating';
 
@@ -12,13 +13,13 @@ export interface LoadingState {
   startTime: number;
 }
 
-const PHASE_CONFIG: Record<LoadingPhase, { color: string; labelKo: string }> = {
-  thinking: { color: 'yellow', labelKo: '생각하는 중' },
-  searching: { color: 'cyan', labelKo: '검색 중' },
-  reading: { color: 'blue', labelKo: '읽는 중' },
-  writing: { color: 'green', labelKo: '작성 중' },
-  analyzing: { color: 'magenta', labelKo: '분석 중' },
-  delegating: { color: 'white', labelKo: '위임 중' },
+const PHASE_CONFIG: Record<LoadingPhase, { color: string; labelKey: string }> = {
+  thinking: { color: 'yellow', labelKey: 'common:loading_phases.thinking' },
+  searching: { color: 'cyan', labelKey: 'common:loading_phases.searching' },
+  reading: { color: 'blue', labelKey: 'common:loading_phases.reading' },
+  writing: { color: 'green', labelKey: 'common:loading_phases.writing' },
+  analyzing: { color: 'magenta', labelKey: 'common:loading_phases.analyzing' },
+  delegating: { color: 'white', labelKey: 'common:loading_phases.delegating' },
 };
 
 export function UnifiedLoadingState({ state, showCancel = true }: { state: LoadingState; showCancel?: boolean }) {
@@ -42,10 +43,10 @@ export function UnifiedLoadingState({ state, showCancel = true }: { state: Loadi
       )}
       <Box>
         <Text color={config.color}><Spinner type="dots" /></Text>
-        <Text color={config.color} bold> {config.labelKo} </Text>
+        <Text color={config.color} bold> {t(config.labelKey)} </Text>
         {state.progress && <Text color="gray">({state.progress.current}/{state.progress.total} {state.progress.unit})</Text>}
         <Text color="white"> ({elapsed}s)</Text>
-        {showCancel && <Text color="gray" dimColor> | Esc: 취소</Text>}
+        {showCancel && <Text color="gray" dimColor> | {t("common:cancel_hint.esc_to_cancel")}</Text>}
       </Box>
     </Box>
   );

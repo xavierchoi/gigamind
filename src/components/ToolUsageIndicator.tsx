@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Box, Text } from "ink";
 import Spinner from "ink-spinner";
+import { t } from "../i18n/index.js";
 
 export interface ToolUsageIndicatorProps {
   startTime?: number;           // overall request start time
@@ -57,8 +58,8 @@ export function ToolUsageIndicator({
   // Determine status text
   const getStatusText = (): string => {
     if (statusMessage) return statusMessage;
-    if (currentTool) return "작업 중...";
-    return "생각하는 중...";
+    if (currentTool) return t("common:status.working");
+    return t("common:thinking.thinking");
   };
 
   return (
@@ -81,7 +82,7 @@ export function ToolUsageIndicator({
         </Text>
         <Text color="gray">{` ${getStatusText()} `}</Text>
         <Text color="white">{`(${formatTime(elapsed)})`}</Text>
-        <Text color="gray" dimColor>{" | Esc: 취소"}</Text>
+        <Text color="gray" dimColor>{` | ${t("common:cancel_hint.esc_to_cancel")}`}</Text>
       </Box>
     </Box>
   );

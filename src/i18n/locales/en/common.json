@@ -53,5 +53,160 @@
   "no": "No",
   "help": "Help",
   "version": "Version",
-  "language": "Language"
+  "language": "Language",
+  "greeting": {
+    "hello": "Hello",
+    "hello_with_name": "Hello, {{name}}!",
+    "what_can_i_help": "How can I help you?",
+    "welcome_to_gigamind": "Welcome to GigaMind!"
+  },
+  "loading": {
+    "loading_app": "Loading GigaMind...",
+    "validating_api_key": "Validating API key...",
+    "analyzing_notes": "Analyzing notes...",
+    "folder_dialog_opened": "Folder selection dialog opened..."
+  },
+  "processing": {
+    "processing": "Processing...",
+    "searching_notes": "Searching notes...",
+    "writing_note": "Writing note...",
+    "analyzing_my_notes": "Analyzing my notes...",
+    "starting_graph_server": "Starting graph visualization server...",
+    "files_matched": "Matched in {{count}} files",
+    "files_found": "{{count}} files found",
+    "related_files_checked": "{{count}} related files checked"
+  },
+  "thinking": {
+    "thinking": "Thinking...",
+    "thinking_with_time": "Thinking... ({{seconds}}s)"
+  },
+  "working": {
+    "using_tool": "Using {{toolName}} tool...",
+    "exploring_notes_with_tool": "Exploring notes with {{toolName}}..."
+  },
+  "cancel_hint": {
+    "esc_to_cancel": "Esc: Cancel"
+  },
+  "request_cancelled": {
+    "cancelled": "Request cancelled. Would you like to ask something else?"
+  },
+  "settings_saved": {
+    "saved": "Settings saved.",
+    "cancelled": "Settings cancelled."
+  },
+  "time_display": {
+    "current_time": "Current time",
+    "minutes_ago": "{{count}} minutes ago",
+    "last_activity": "Last activity"
+  },
+  "help_hint": {
+    "help_command": "Type /help to see available commands."
+  },
+  "input": {
+    "placeholder": "Type a message... (/help for commands)",
+    "waiting_for_response": "Waiting for response...",
+    "enter_message": "Please enter a message",
+    "characters": "{{count}} chars"
+  },
+  "keyboard_shortcuts": {
+    "ctrl_c_exit": "Ctrl+C: Exit",
+    "enter_send": "Enter: Send",
+    "arrows_history": "Up/Down arrows: Input history",
+    "esc_cancel": "Esc: Cancel",
+    "shortcuts_footer": "Ctrl+C: Exit | Enter: Send | Up/Down: History"
+  },
+  "session": {
+    "previous_session_found": "Previous session found",
+    "message_count": "Message count: {{count}}",
+    "first_message": "First message",
+    "last_message": "Last message",
+    "continue_session_prompt": "Would you like to continue from the previous session?",
+    "restore_session": "[Y] Restore session",
+    "new_session": "[N] Start new session",
+    "session_restored": "Session restored. ({{count}} messages)\nContinue the conversation!",
+    "no_saved_sessions": "No saved sessions.",
+    "session_manager_not_initialized": "Session manager not initialized.",
+    "recent_sessions_list": "Recent sessions",
+    "session_exported": "Session exported as markdown.\n\nSaved to: {{path}}",
+    "session_export_failed": "Session export failed: {{error}}",
+    "no_messages": "(No messages)"
+  },
+  "example_prompts": {
+    "title": "Try these to get started:",
+    "hint": "Press a number key to select or type your own",
+    "organize_today": "Organize what I learned today",
+    "brainstorm_ideas": "Brainstorm project ideas",
+    "create_todo_list": "Create a todo list for this week",
+    "find_project_ideas": "Find project ideas in my notes",
+    "what_did_i_think": "What did I think about this topic?"
+  },
+  "command_hints": {
+    "available_commands": "Available commands (Tab: autocomplete):"
+  },
+  "status": {
+    "notes": "Notes:",
+    "connections": "Links:",
+    "dangling": "Missing:",
+    "orphan": "Orphan:",
+    "sync": "Sync:",
+    "just_now": "Just now",
+    "minutes_ago": "{{count}} min ago",
+    "hours_ago": "{{count}} hr ago",
+    "days_ago": "{{count}} days ago",
+    "working": "Working..."
+  },
+  "loading_phases": {
+    "thinking": "Thinking",
+    "searching": "Searching",
+    "reading": "Reading",
+    "writing": "Writing",
+    "analyzing": "Analyzing",
+    "delegating": "Delegating"
+  },
+  "splash": {
+    "waking_up": "Waking up the brain..."
+  },
+  "config_menu": {
+    "title": "Settings",
+    "user_name": "User Name",
+    "notes_dir": "Notes Directory",
+    "model": "Model",
+    "feedback_level": "Feedback Level",
+    "note_detail": "Note Detail Level",
+    "language": "Language",
+    "save_and_exit": "Save and Exit",
+    "cancel": "Cancel",
+    "not_set": "(Not set)",
+    "current": "(Current)",
+    "current_bilingual": "(current)",
+    "model_changed": "Model changed",
+    "feedback_level_changed": "Feedback level changed",
+    "note_detail_changed": "Note detail level changed",
+    "language_changed": "Language changed",
+    "user_name_changed": "User name changed",
+    "notes_dir_changed": "Notes directory changed",
+    "select_model": "Select Model",
+    "select_feedback_level": "Select Feedback Level",
+    "select_note_detail": "Select Note Detail Level",
+    "select_language": "Select Language",
+    "note_detail_description": "Set how detailed the conversation content is recorded when writing notes.",
+    "language_description": "Select the app interface language.",
+    "edit": "Edit",
+    "name_placeholder": "Enter name...",
+    "path_placeholder": "Enter path...",
+    "nav_select_cancel": "Up/Down: Navigate | Enter: Select | Esc: Cancel",
+    "nav_edit_cancel": "Up/Down: Navigate | Enter: Edit | Esc: Cancel",
+    "nav_save_cancel": "Enter: Save | Esc: Cancel",
+    "nav_bilingual": "Up/Down: Navigate | Enter: Select | Esc: Cancel",
+    "detail_verbose": "Verbose",
+    "detail_balanced": "Balanced",
+    "detail_concise": "Concise",
+    "detail_verbose_desc": "Record conversation content almost verbatim",
+    "detail_balanced_desc": "Summarize key points while preserving context",
+    "detail_concise_desc": "Keep only the essentials",
+    "lang_korean": "Korean",
+    "lang_english": "English",
+    "lang_korean_desc": "Display interface in Korean",
+    "lang_english_desc": "Display interface in English"
+  }
 }
