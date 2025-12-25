@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] - 2025-12-25
+
+### Fixed
+
+- **API Key Runtime Update Issue**: Fixed critical bug where API key changes in ConfigMenu were not applied to the running client
+  - Root cause: GigaMindClient instance was only recreated when model or noteDetail changed, ignoring API key updates
+  - Solution: Added `setApiKey()` method to GigaMindClient for runtime API key updates without full client recreation
+  - ConfigMenu now properly updates the running client instance when user changes API key
+  - Ensures API key changes take effect immediately without requiring app restart
+
 ## [0.3.1] - 2025-12-25
 
 ### Added
