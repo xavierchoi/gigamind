@@ -252,7 +252,22 @@
     "reset_confirm_note": "User name and notes directory will be preserved.",
     "reset_confirm_prompt": "Y: Confirm | N/Esc: Cancel",
     "reset_success": "Settings have been reset to defaults",
-    "reset_cancelled": "Reset cancelled"
+    "reset_cancelled": "Reset cancelled",
+    "api_key": "API Key",
+    "api_key_checking": "(Checking...)",
+    "api_key_configured": "(Configured)",
+    "api_key_not_configured": "(Not configured)",
+    "api_key_description": "Enter your Anthropic API key. It will be stored securely.",
+    "api_key_placeholder": "sk-ant-...",
+    "api_key_input_label": "Entered key:",
+    "api_key_input_entered": "Entered key:",
+    "api_key_validating": "Validating API key...",
+    "api_key_changed": "API key updated successfully",
+    "api_key_error_empty": "Please enter an API key",
+    "api_key_error_format": "Invalid API key format (must start with sk-ant-)",
+    "api_key_error_invalid": "Invalid API key",
+    "api_key_error_unknown": "An unknown error occurred",
+    "api_key_error_validation": "Validation error: {{error}}"
   },
   "path_validation": {
     "empty": "Please enter a path",

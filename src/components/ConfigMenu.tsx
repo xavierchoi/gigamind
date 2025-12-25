@@ -1,8 +1,10 @@
 import React, { useState, useCallback, useMemo } from "react";
 import { Box, Text, useInput } from "ink";
 import TextInput from "ink-text-input";
+import Spinner from "ink-spinner";
 import type { GigaMindConfig, NoteDetailLevel, PathValidationResult } from "../utils/config.js";
-import { DEFAULT_CONFIG, validatePathSync } from "../utils/config.js";
+import { DEFAULT_CONFIG, validatePathSync, saveApiKey, hasApiKey } from "../utils/config.js";
+import { GigaMindClient } from "../agent/client.js";
 import type { SupportedLanguage } from "../i18n/index.js";
 import { t } from "../i18n/index.js";
 
@@ -36,7 +38,7 @@ function getLanguageOptions(): Array<{ label: string; value: SupportedLanguage; 
   ];
 }
 
-type MenuItemType = "userName" | "notesDir" | "model" | "feedbackLevel" | "noteDetail" | "language" | "resetDefaults" | "save" | "cancel";
+type MenuItemType = "userName" | "notesDir" | "apiKey" | "model" | "feedbackLevel" | "noteDetail" | "language" | "resetDefaults" | "save" | "cancel";
 
 interface MenuItem {
   key: MenuItemType;
@@ -45,7 +47,7 @@ interface MenuItem {
   editable: boolean;
 }
 
-function getMenuItems(): MenuItem[] {
+function getMenuItems(apiKeyStatus: string): MenuItem[] {
   const noteDetailLevels = getNoteDetailLevels();
   const languageOptions = getLanguageOptions();
 
@@ -60,6 +62,12 @@ function getMenuItems(): MenuItem[] {
       key: "notesDir",
       label: t("common:config_menu.notes_dir"),
       getValue: (c) => c.notesDir,
+      editable: true,
+    },
+    {
+      key: "apiKey",
+      label: t("common:config_menu.api_key"),
+      getValue: () => apiKeyStatus,
       editable: true,
     },
     {
@@ -125,7 +133,7 @@ interface ConfigMenuProps {
   onCancel: () => void;
 }
 
-type EditMode = null | "userName" | "notesDir" | "model" | "feedbackLevel" | "noteDetail" | "language" | "resetConfirm";
+type EditMode = null | "userName" | "notesDir" | "apiKey" | "apiKeyValidating" | "model" | "feedbackLevel" | "noteDetail" | "language" | "resetConfirm";
 
 export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -133,7 +141,16 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
   const [editValue, setEditValue] = useState("");
   const [tempConfig, setTempConfig] = useState<GigaMindConfig>({ ...config });
   const [selectIndex, setSelectIndex] = useState(0);
-  const [message, setMessage] = useState<{ text: string; type: "success" | "info" } | null>(null);
+  const [message, setMessage] = useState<{ text: string; type: "success" | "info" | "error" } | null>(null);
+  const [apiKeyStatus, setApiKeyStatus] = useState<string>(t("common:config_menu.api_key_checking"));
+  const [apiKeyError, setApiKeyError] = useState<string>("");
+
+  // Check API key status on mount
+  React.useEffect(() => {
+    hasApiKey().then((hasKey) => {
+      setApiKeyStatus(hasKey ? t("common:config_menu.api_key_configured") : t("common:config_menu.api_key_not_configured"));
+    });
+  }, []);
 
   // Handle keyboard input
   useInput((input, key) => {
@@ -143,13 +160,19 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
     }
 
     // In edit mode for text input
-    if (editMode === "userName" || editMode === "notesDir") {
+    if (editMode === "userName" || editMode === "notesDir" || editMode === "apiKey") {
       if (key.escape) {
         setEditMode(null);
         setEditValue("");
+        setApiKeyError("");
         return;
       }
       // TextInput handles Enter
+      return;
+    }
+
+    // API key validating mode - no input allowed
+    if (editMode === "apiKeyValidating") {
       return;
     }
 
@@ -280,7 +303,7 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
     }
 
     // Normal menu navigation
-    const menuItems = getMenuItems();
+    const menuItems = getMenuItems(apiKeyStatus);
     if (key.upArrow) {
       setSelectedIndex((prev) => Math.max(0, prev - 1));
       return;
@@ -311,6 +334,11 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
       case "notesDir":
         setEditMode("notesDir");
         setEditValue(tempConfig.notesDir);
+        break;
+      case "apiKey":
+        setEditMode("apiKey");
+        setEditValue("");
+        setApiKeyError("");
         break;
       case "model":
         setEditMode("model");
@@ -376,6 +404,52 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
     };
   }, []);
 
+  // Mask API key for display (show first 7 chars "sk-ant-" and last 4 chars)
+  const maskApiKey = useCallback((key: string): string => {
+    if (key.length <= 11) return "*".repeat(key.length);
+    return key.slice(0, 7) + "*".repeat(Math.min(key.length - 11, 20)) + "..." + key.slice(-4);
+  }, []);
+
+  // Validate and save API key
+  const validateAndSaveApiKey = useCallback(async (key: string) => {
+    const trimmed = key.trim();
+
+    // Basic format validation
+    if (!trimmed) {
+      setApiKeyError(t("common:config_menu.api_key_error_empty"));
+      return;
+    }
+    if (!trimmed.startsWith("sk-ant-")) {
+      setApiKeyError(t("common:config_menu.api_key_error_format"));
+      return;
+    }
+
+    // Start validation
+    setEditMode("apiKeyValidating");
+    setApiKeyError("");
+
+    try {
+      const result = await GigaMindClient.validateApiKey(trimmed);
+
+      if (result.valid) {
+        // Save the API key
+        await saveApiKey(trimmed);
+        setApiKeyStatus(t("common:config_menu.api_key_configured"));
+        setMessage({ text: t("common:config_menu.api_key_changed"), type: "success" });
+        setEditMode(null);
+        setEditValue("");
+        setApiKeyError("");
+      } else {
+        setApiKeyError(result.error || t("common:config_menu.api_key_error_invalid"));
+        setEditMode("apiKey");
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : t("common:config_menu.api_key_error_unknown");
+      setApiKeyError(t("common:config_menu.api_key_error_validation", { error: errorMessage }));
+      setEditMode("apiKey");
+    }
+  }, []);
+
   const handleTextSubmit = useCallback((value: string) => {
     if (editMode === "userName") {
       setTempConfig((prev) => ({ ...prev, userName: value.trim() || undefined }));
@@ -391,8 +465,10 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
         setEditValue("");
       }
       // If invalid, don't close edit mode - let user see the error
+    } else if (editMode === "apiKey") {
+      validateAndSaveApiKey(value);
     }
-  }, [editMode]);
+  }, [editMode, validateAndSaveApiKey]);
 
   // Render model selection
   if (editMode === "model") {
@@ -682,8 +758,84 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
     );
   }
 
+  // Render API key validating state
+  if (editMode === "apiKeyValidating") {
+    return (
+      <Box flexDirection="column" padding={1}>
+        <Box
+          borderStyle="round"
+          borderColor="cyan"
+          paddingX={2}
+          paddingY={1}
+          flexDirection="column"
+        >
+          <Text color="cyan" bold>
+            {t("common:config_menu.api_key")} {t("common:config_menu.edit")}
+          </Text>
+          <Box marginTop={1}>
+            <Text color="cyan">
+              <Spinner type="dots" />
+            </Text>
+            <Text color="gray"> {t("common:config_menu.api_key_validating")}</Text>
+          </Box>
+          <Box marginTop={1}>
+            <Text color="gray">{t("common:config_menu.api_key_input_entered")} {maskApiKey(editValue)}</Text>
+          </Box>
+        </Box>
+      </Box>
+    );
+  }
+
+  // Render text input for API key
+  if (editMode === "apiKey") {
+    return (
+      <Box flexDirection="column" padding={1}>
+        <Box
+          borderStyle="round"
+          borderColor="cyan"
+          paddingX={2}
+          paddingY={1}
+          flexDirection="column"
+        >
+          <Text color="cyan" bold>
+            {t("common:config_menu.api_key")} {t("common:config_menu.edit")}
+          </Text>
+          <Box marginTop={1}>
+            <Text color="gray">{t("common:config_menu.api_key_description")}</Text>
+          </Box>
+          <Box marginTop={1}>
+            <Text color="cyan">{"> "}</Text>
+            <TextInput
+              value={editValue}
+              onChange={setEditValue}
+              onSubmit={handleTextSubmit}
+              placeholder={t("common:config_menu.api_key_placeholder")}
+            />
+          </Box>
+          {/* Show masked key while typing */}
+          {editValue.length > 0 && (
+            <Box marginTop={1}>
+              <Text color="gray">{t("common:config_menu.api_key_input_label")} {maskApiKey(editValue)}</Text>
+            </Box>
+          )}
+          {/* Error message */}
+          {apiKeyError && (
+            <Box marginTop={1}>
+              <Text color="red">{apiKeyError}</Text>
+            </Box>
+          )}
+        </Box>
+        <Box marginTop={1}>
+          <Text color="gray">
+            {t("common:config_menu.nav_save_cancel")}
+          </Text>
+        </Box>
+      </Box>
+    );
+  }
+
   // Render main menu
-  const menuItems = getMenuItems();
+  const menuItems = getMenuItems(apiKeyStatus);
   return (
     <Box flexDirection="column" padding={1}>
       <Box
@@ -726,7 +878,7 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
 
       {message && (
         <Box marginTop={1}>
-          <Text color={message.type === "success" ? "green" : "cyan"}>
+          <Text color={message.type === "success" ? "green" : message.type === "error" ? "red" : "cyan"}>
             {message.text}
           </Text>
         </Box>

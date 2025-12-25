@@ -190,12 +190,18 @@ async function saveToKeychain(apiKey: string): Promise<boolean> {
 async function loadFromKeychain(): Promise<string | null> {
   const keytar = await tryLoadKeytar();
   if (!keytar) {
+    console.debug("[keychain] keytar module not available");
     return null;
   }
 
   try {
     return await keytar.getPassword(SERVICE_NAME, ACCOUNT_NAME);
-  } catch {
+  } catch (error) {
+    // Log keychain access failures (e.g., locked keychain, permission denied)
+    console.warn(
+      "[keychain] Failed to access OS keychain:",
+      error instanceof Error ? error.message : String(error)
+    );
     return null;
   }
 }
@@ -257,15 +263,34 @@ async function deleteEncryptedFile(): Promise<boolean> {
 
 /**
  * Save API key securely.
- * Tries OS Keychain first, falls back to encrypted file storage.
+ * Saves to BOTH OS Keychain and encrypted file for redundancy.
+ * This ensures the API key is available even if keychain access fails later.
  */
 export async function saveApiKeySecure(apiKey: string): Promise<void> {
-  // Try OS Keychain first
+  // Try OS Keychain first (for quick access)
   const savedToKeychain = await saveToKeychain(apiKey);
+  if (savedToKeychain) {
+    console.debug("[keychain] API key saved to OS keychain");
+  } else {
+    console.debug("[keychain] OS keychain not available, skipping");
+  }
 
-  if (!savedToKeychain) {
-    // Fall back to encrypted file
+  // ALWAYS save to encrypted file as backup (regardless of keychain success)
+  // This provides redundancy if keychain access fails on next load
+  try {
     await saveToEncryptedFile(apiKey);
+    console.debug("[keychain] API key saved to encrypted file backup");
+  } catch (error) {
+    // If keychain succeeded, we can continue; otherwise this is critical
+    if (!savedToKeychain) {
+      throw new Error(
+        `Failed to save API key: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+    console.warn(
+      "[keychain] Failed to save encrypted file backup:",
+      error instanceof Error ? error.message : String(error)
+    );
   }
 }
 
@@ -277,22 +302,35 @@ export async function saveApiKeySecure(apiKey: string): Promise<void> {
 export async function loadApiKeySecure(): Promise<string | null> {
   // First check environment variable
   if (process.env.ANTHROPIC_API_KEY) {
+    console.debug("[keychain] API key loaded from ANTHROPIC_API_KEY env var");
     return process.env.ANTHROPIC_API_KEY;
   }
 
   // Check for plaintext credentials to migrate
   if (await hasPlaintextCredentials()) {
+    console.debug("[keychain] Migrating plaintext credentials to secure storage");
     await migratePlaintextCredentials();
   }
 
   // Try OS Keychain first
   const keychainKey = await loadFromKeychain();
   if (keychainKey) {
+    console.debug("[keychain] API key loaded from OS keychain");
     return keychainKey;
   }
 
   // Fall back to encrypted file
-  return await loadFromEncryptedFile();
+  const encryptedKey = await loadFromEncryptedFile();
+  if (encryptedKey) {
+    console.debug("[keychain] API key loaded from encrypted file backup");
+    return encryptedKey;
+  }
+
+  // Both methods failed
+  console.warn(
+    "[keychain] Failed to load API key: not found in keychain or encrypted file"
+  );
+  return null;
 }
 
 /**
