@@ -384,8 +384,8 @@ export function App() {
         const args = parts.slice(1);
 
         // Commands that require special handling (not in registry)
-        const SPECIAL_COMMANDS = ["config", "import"];
-        const UNIMPLEMENTED_COMMANDS = ["sync"];
+        const SPECIAL_COMMANDS = ["config", "import", "sync"];
+        const UNIMPLEMENTED_COMMANDS: string[] = [];
 
         // Handle config command (transitions to config state)
         if (commandName === "config") {

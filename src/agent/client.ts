@@ -3,7 +3,6 @@ import type { MessageParam, Tool, ToolUseBlock, TextBlock } from "@anthropic-ai/
 import { SYSTEM_PROMPT } from "./agentDefinitions.js";
 import {
   SubagentInvoker,
-  detectSubagentIntent,
   type SubagentCallbacks,
   type SubagentResult,
 } from "./subagent.js";
@@ -56,6 +55,20 @@ const DELEGATE_TOOL: Tool = {
 - "find in my notes", "search my notes"
 주의: "웹/인터넷/온라인" 키워드가 없고, 노트 검색 의도가 명확할 때만
 
+### 5. import-agent - 외부 노트 가져오기
+트리거 키워드: 가져오기, 임포트, import, 외부 노트, Obsidian, 마크다운 폴더
+예시:
+- "Obsidian에서 노트 가져와줘", "마크다운 파일 import해줘"
+- "외부 노트를 GigaMind로 옮겨줘"
+- "import my notes from...", "bring in my markdown files"
+
+### 6. sync-agent - Git 동기화
+트리거 키워드: 동기화, 백업, sync, backup, pull, push, git status, 깃
+예시:
+- "노트 동기화해줘", "백업해줘"
+- "sync my notes", "push 해줘", "pull 해줘"
+- "동기화 상태 확인해줘", "sync status"
+
 ## 중요한 행동 원칙
 - 위 기준에 해당하면 망설이지 말고 즉시 이 도구를 호출하세요
 - 도구를 호출하지 않고 "~할 수 있습니다"라고 설명만 하지 마세요
@@ -65,12 +78,14 @@ const DELEGATE_TOOL: Tool = {
     properties: {
       agent: {
         type: "string",
-        enum: ["search-agent", "note-agent", "clone-agent", "research-agent"],
+        enum: ["search-agent", "note-agent", "clone-agent", "research-agent", "import-agent", "sync-agent"],
         description: `호출할 에이전트:
 - research-agent: 웹 검색, 인터넷 리서치, 최신 정보 조사 (웹/온라인 키워드 있을 때)
 - note-agent: 노트 생성, 메모, 기록, 저장
 - clone-agent: 사용자 노트 기반으로 사용자처럼 답변
-- search-agent: 기존 노트에서 검색, 찾기 (웹 검색 아님!)`,
+- search-agent: 기존 노트에서 검색, 찾기 (웹 검색 아님!)
+- import-agent: 외부 노트 가져오기 (Obsidian, 마크다운 폴더)
+- sync-agent: Git 동기화 (pull, push, backup, status)`,
       },
       task: {
         type: "string",
@@ -82,7 +97,7 @@ const DELEGATE_TOOL: Tool = {
 };
 
 interface DelegateToolInput {
-  agent: "search-agent" | "note-agent" | "clone-agent" | "research-agent";
+  agent: "search-agent" | "note-agent" | "clone-agent" | "research-agent" | "import-agent" | "sync-agent";
   task: string;
 }
 

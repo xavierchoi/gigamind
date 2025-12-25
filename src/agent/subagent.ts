@@ -56,6 +56,8 @@ Analyze the user's message and determine which specialized agent should handle i
 | search-agent | Search existing notes, find saved information | "노트에서 찾아줘", "검색해줘", "find in my notes", "어디에 적었더라", "探してください" |
 | note-agent | Create new notes, save information, record memos | "메모해줘", "기록해줘", "저장해줘", "save this", "write a note", "記録して" |
 | clone-agent | Answer from user's perspective based on their notes | "내 생각은?", "나라면?", "내 관점에서", "what would I think?", "from my notes" |
+| import-agent | Import external notes (Obsidian, markdown folders) | "노트 가져와", "import", "Obsidian에서", "마크다운 폴더에서" |
+| sync-agent | Git synchronization, backup, pull/push | "동기화해줘", "백업해줘", "sync", "push", "pull", "git status" |
 | null | General chat, greetings, help requests, simple questions | "안녕", "hi", "도와줘", "help", "뭘 할 수 있어?" |
 
 ## Decision Rules (in priority order)
@@ -72,7 +74,13 @@ Analyze the user's message and determine which specialized agent should handle i
 4. **Note search keywords** (when NOT web search) → search-agent
    - Keywords: 검색, 찾아, 어디에, find, search (without web/online context)
 
-5. **Everything else** → null (general conversation)
+5. **Import external notes keywords** → import-agent
+   - Keywords: 가져오기, 임포트, import, Obsidian, 마크다운 폴더, external notes
+
+6. **Git sync/backup keywords** → sync-agent
+   - Keywords: 동기화, 백업, sync, backup, push, pull, git status
+
+7. **Everything else** → null (general conversation)
 
 ## Response Format
 
@@ -105,7 +113,8 @@ Important:
  * AI 기반 의도 감지 함수
  *
  * Claude API를 사용하여 사용자 메시지의 의도를 파악하고 적절한 에이전트를 선택합니다.
- * 빠른 응답을 위해 가벼운 모델(Haiku)을 사용하며, 실패 시 기존 하드코딩 방식으로 폴백합니다.
+ * 빠른 응답을 위해 가벼운 모델(Haiku)을 사용합니다.
+ * 실패 시 null을 반환하여 메인 AI 모델에 의도 판단을 위임합니다.
  *
  * @param message - 사용자 메시지
  * @param apiKey - Anthropic API 키
@@ -156,8 +165,8 @@ export async function detectSubagentIntentWithAI(
     );
 
     if (!textBlock?.text) {
-      logger.warn("AI intent detection returned empty response, falling back to hardcoded");
-      return detectSubagentIntent(message);
+      logger.warn("AI intent detection returned empty response");
+      return null;
     }
 
     // JSON 파싱 시도
@@ -183,10 +192,10 @@ export async function detectSubagentIntentWithAI(
       }
 
       // 유효한 에이전트인지 확인
-      const validAgents = ["research-agent", "search-agent", "note-agent", "clone-agent", "import-agent"];
+      const validAgents = ["research-agent", "search-agent", "note-agent", "clone-agent", "import-agent", "sync-agent"];
       if (!validAgents.includes(result.agent)) {
-        logger.warn(`Invalid agent detected: ${result.agent}, falling back to hardcoded`);
-        return detectSubagentIntent(message);
+        logger.warn(`Invalid agent detected: ${result.agent}`);
+        return null;
       }
 
       return {
@@ -195,18 +204,18 @@ export async function detectSubagentIntentWithAI(
       };
     } catch (parseError) {
       logger.warn(`Failed to parse AI intent response: ${textBlock.text}`, parseError);
-      return detectSubagentIntent(message);
+      return null;
     }
   } catch (error) {
-    // 타임아웃 또는 기타 오류 시 하드코딩 방식으로 폴백
+    // 타임아웃 또는 기타 오류 시 null 반환 (AI 모델에 위임)
     if (error instanceof Error) {
       if (error.name === "AbortError") {
-        logger.warn("AI intent detection timed out, falling back to hardcoded");
+        logger.warn("AI intent detection timed out");
       } else {
-        logger.warn(`AI intent detection failed: ${error.message}, falling back to hardcoded`);
+        logger.warn(`AI intent detection failed: ${error.message}`);
       }
     }
-    return detectSubagentIntent(message);
+    return null;
   }
 }
 
@@ -605,113 +614,4 @@ export class SubagentInvoker {
 // Factory function
 export function createSubagentInvoker(config: SubagentConfig): SubagentInvoker {
   return new SubagentInvoker(config);
-}
-
-// Detect if a message should trigger a subagent
-export function detectSubagentIntent(
-  message: string
-): { agent: string; task: string } | null {
-  const lowerMessage = message.toLowerCase();
-
-  // Research agent triggers - 웹 검색 (search-agent보다 먼저 체크해야 함)
-  if (
-    lowerMessage.includes("웹에서") ||
-    lowerMessage.includes("웹 검색") ||
-    lowerMessage.includes("웹검색") ||
-    lowerMessage.includes("웹을 검색") ||
-    lowerMessage.includes("인터넷에서") ||
-    lowerMessage.includes("인터넷 검색") ||
-    lowerMessage.includes("온라인에서") ||
-    lowerMessage.includes("온라인 검색") ||
-    lowerMessage.includes("리서치") ||
-    lowerMessage.includes("조사해") ||
-    lowerMessage.includes("검색해서 알려") ||
-    lowerMessage.includes("검색하여") ||
-    lowerMessage.includes("찾아서 정리") ||
-    lowerMessage.includes("research") ||
-    lowerMessage.includes("look up online") ||
-    lowerMessage.includes("search the web") ||
-    lowerMessage.includes("search online")
-  ) {
-    return { agent: "research-agent", task: message };
-  }
-
-  // Search agent triggers
-  if (
-    // 기존 트리거
-    lowerMessage.includes("검색") ||
-    lowerMessage.includes("찾아") ||
-    lowerMessage.includes("search") ||
-    lowerMessage.includes("find") ||
-    // 노트 검색 관련 표현
-    lowerMessage.includes("노트 검색") ||
-    lowerMessage.includes("노트에서 찾") ||
-    // 기록 위치 찾기
-    lowerMessage.includes("어디에 기록") ||
-    lowerMessage.includes("어디 적었") ||
-    lowerMessage.includes("어디에 적었") ||
-    lowerMessage.includes("어디에 썼") ||
-    // 관련 노트 찾기
-    lowerMessage.includes("관련 노트") ||
-    lowerMessage.includes("비슷한 노트") ||
-    lowerMessage.includes("연관 노트") ||
-    // 특정 주제 노트
-    lowerMessage.includes("에 대한 노트") ||
-    lowerMessage.includes("관련된 노트")
-  ) {
-    return { agent: "search-agent", task: message };
-  }
-
-  // Note agent triggers
-  if (
-    lowerMessage.includes("노트 작성") ||
-    lowerMessage.includes("기록해") ||
-    lowerMessage.includes("메모해") ||
-    lowerMessage.includes("저장해") ||
-    lowerMessage.includes("write note") ||
-    lowerMessage.includes("create note")
-  ) {
-    return { agent: "note-agent", task: message };
-  }
-
-  // Clone agent triggers - 사용자의 노트 기반 답변 요청
-  if (
-    // 기존 트리거
-    lowerMessage.includes("내가 어떻게 생각") ||
-    lowerMessage.includes("나라면") ||
-    lowerMessage.includes("내 관점") ||
-    lowerMessage.includes("what would i think") ||
-    lowerMessage.includes("as me") ||
-    // 노트 기반 답변 요청
-    lowerMessage.includes("내 노트에서") ||
-    lowerMessage.includes("내가 기록한") ||
-    lowerMessage.includes("내가 작성한") ||
-    lowerMessage.includes("노트 기반으로") ||
-    lowerMessage.includes("내 지식으로") ||
-    // 클론 모드 명시적 요청
-    lowerMessage.includes("클론 모드") ||
-    lowerMessage.includes("나처럼 대답") ||
-    lowerMessage.includes("나처럼 답변") ||
-    // 개인 경험/생각/관점 기반 요청
-    lowerMessage.includes("내 경험에서") ||
-    lowerMessage.includes("내 생각에서") ||
-    lowerMessage.includes("내 관점에서") ||
-    // 영어 추가 트리거
-    lowerMessage.includes("from my notes") ||
-    lowerMessage.includes("based on my knowledge") ||
-    lowerMessage.includes("clone mode")
-  ) {
-    return { agent: "clone-agent", task: message };
-  }
-
-  // Import agent triggers
-  if (
-    lowerMessage.includes("가져오기") ||
-    lowerMessage.includes("import") ||
-    lowerMessage.includes("obsidian")
-  ) {
-    return { agent: "import-agent", task: message };
-  }
-
-  return null;
 }

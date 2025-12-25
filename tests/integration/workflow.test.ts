@@ -22,7 +22,6 @@ import {
   addTags,
   hasFrontmatter,
 } from "../../src/utils/frontmatter.js";
-import { detectSubagentIntent } from "../../src/agent/subagent.js";
 
 describe("Workflow Integration Tests", () => {
   const testNotesDir = path.join(os.tmpdir(), "gigamind-workflow-test");
@@ -366,69 +365,6 @@ More text in section B.`;
 
       const newParsed = parseNote(verifyResult.output);
       expect(newParsed.modified).not.toBe(originalModified);
-    });
-  });
-
-  describe("Intent Detection and Routing Workflow", () => {
-    it("should route search requests to search-agent", () => {
-      const searchQueries = [
-        "JavaScript 관련 노트 검색해줘",
-        "find notes about TypeScript",
-        "프로젝트 어디에 기록했지?",
-        "AI에 대한 노트 있어?",
-      ];
-
-      for (const query of searchQueries) {
-        const intent = detectSubagentIntent(query);
-        expect(intent).not.toBeNull();
-        expect(intent?.agent).toBe("search-agent");
-      }
-    });
-
-    it("should route note creation to note-agent", () => {
-      const createQueries = [
-        "회의 내용 메모해줘",
-        "이 아이디어 기록해",
-        "create note about project plans",
-        "새 노트 작성해줘",
-      ];
-
-      for (const query of createQueries) {
-        const intent = detectSubagentIntent(query);
-        expect(intent).not.toBeNull();
-        expect(intent?.agent).toBe("note-agent");
-      }
-    });
-
-    it("should route clone requests to clone-agent", () => {
-      // Note: "내 노트에서 찾아서 답해줘" contains "찾아" which triggers search-agent
-      // Use queries that only match clone-agent patterns
-      const cloneQueries = [
-        "이 주제에 대해 내가 어떻게 생각해?",
-        "나라면 어떻게 할까?",
-        "what would I think about this?",
-        "클론 모드로 답변해줘",
-      ];
-
-      for (const query of cloneQueries) {
-        const intent = detectSubagentIntent(query);
-        expect(intent).not.toBeNull();
-        expect(intent?.agent).toBe("clone-agent");
-      }
-    });
-
-    it("should handle general conversation without routing", () => {
-      const generalQueries = [
-        "안녕하세요",
-        "오늘 날씨 어때?",
-        "JavaScript가 뭐야?",
-        "감사합니다",
-      ];
-
-      for (const query of generalQueries) {
-        const intent = detectSubagentIntent(query);
-        expect(intent).toBeNull();
-      }
     });
   });
 

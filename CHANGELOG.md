@@ -5,6 +5,117 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.3] - 2025-12-24
+
+### Added
+
+#### AI-Based Subagent Intent Detection
+- **Full AI-Powered Intent Recognition**: Migrated all subagent intent detection to AI model (Claude)
+  - Replaces hardcoded pattern matching with intelligent natural language understanding
+  - Improved support for diverse user intents and command variations
+  - More accurate intent classification for complex user requests
+- **sync-agent Implementation**: New specialized agent for Git synchronization
+  - Supports Git status checking (`git status`)
+  - Supports pulling remote changes (`git pull`)
+  - Supports pushing local changes (`git push`)
+  - Intelligent conflict detection with guidance for manual resolution
+  - Error handling for non-git repositories and missing remote configurations
+  - Proper error messages for various failure scenarios
+
+#### Delegation Tool Enhancement
+- **import-agent in DELEGATE_TOOL**: Enabled AI model to delegate import tasks
+  - Allows Claude to autonomously trigger import operations
+  - Improves workflow automation for content import scenarios
+
+### Changed
+
+#### Subagent Intent Detection System
+- **Migration to AI-Only Architecture**: Removed hardcoded intent detection logic
+  - Deleted `detectSubagentIntent()` function (~130 lines of pattern matching)
+  - Removed fallback logic in `detectSubagentIntentWithAI()`
+  - Simplified intent detection to single AI-based approach
+  - Enhanced detection prompt for better accuracy and context awareness
+  - All intent classification now handled by Claude model
+
+#### Agent Definitions
+- **Updated SYSTEM_PROMPT**: Refined agent system prompt for improved intent classification
+- **sync-agent Addition**: New agent definition with comprehensive Git operation support
+
+#### Command System
+- **sync Command Activation**: Enabled `/sync` command for user-initiated Git synchronization
+  - Provides alternative to AI-based sync delegation
+  - Better user control and transparency for Git operations
+
+### Fixed
+
+- **Removed Unused Imports**: Cleaned up unused imports from subagent module
+- **Code Cleanup**: Removed ~320 lines of hardcoded pattern matching tests
+  - Eliminated obsolete pattern matching test suite
+  - Reduced technical debt in test infrastructure
+
+### Technical Details
+
+#### Modified Files
+- `src/agent/client.ts`: Updated DELEGATE_TOOL array, removed unused imports
+- `src/agent/subagent.ts`: Removed hardcoded intent detection, simplified to AI-only approach
+- `src/agent/agentDefinitions.ts`: Added sync-agent definition, updated SYSTEM_PROMPT
+- `src/app.tsx`: Enabled sync command in command handling
+
+#### Architecture Improvements
+- **Simplified Intent Detection Flow**: Single AI-based detection path eliminates branching logic
+- **Improved Maintainability**: Reduced codebase complexity by removing pattern matching rules
+- **Better Extensibility**: AI-based approach easier to extend for new agent types
+
+---
+
+## [0.2.2] - 2025-12-24
+
+### Added
+
+#### Real-Time StatusLine Component
+- **New StatusLine Component** (`src/components/StatusLine.tsx`): Real-time status display below prompt input
+  - Shows note count, connection count, missing links, and orphan note count
+  - 300ms refresh interval with smart caching to minimize performance impact
+  - Minimal styling with no borders for clean terminal appearance
+  - Conditional visibility for zero-value stats (missing links and orphan notes hidden when count is 0)
+  - Seamless integration with existing Chat interface
+
+### Changed
+
+#### Chat Component Enhancement
+- **Chat.tsx**: Added `notesDir` prop to enable StatusLine statistics calculation
+  - Integrated StatusLine component below input area
+  - Proper prop threading from app.tsx through Chat component
+
+#### App Component Update
+- **app.tsx**: Added `notesDir` prop passing to Chat component
+  - Enables StatusLine to access necessary directory information for statistics
+
+### Technical Details
+
+#### New Files
+```
+src/components/StatusLine.tsx    # Real-time status display component
+```
+
+#### Modified Files
+- `src/components/Chat.tsx`: Added StatusLine integration with notesDir prop
+- `src/app.tsx`: Added notesDir prop forwarding to Chat component
+
+#### StatusLine Component Props
+```typescript
+interface StatusLineProps {
+  notesDir: string;             // Path to notes directory for analysis
+}
+```
+
+#### Performance Optimization
+- Uses existing graph analysis cache system
+- 300ms debounce interval prevents excessive calculations
+- Caching layer ensures statistics don't require full directory scans on each update
+
+---
+
 ## [0.2.1] - 2025-12-24
 
 ### Fixed
