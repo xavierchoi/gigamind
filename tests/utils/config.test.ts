@@ -3,9 +3,11 @@
  *
  * IMPORTANT: Tests that modify config use the GIGAMIND_TEST_CONFIG_DIR
  * environment variable to prevent overwriting the user's real ~/.gigamind/ directory.
+ *
+ * API Key tests mock the keytar module to prevent accessing the real system keychain.
  */
 
-import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from "@jest/globals";
+import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll, jest } from "@jest/globals";
 import path from "node:path";
 import os from "node:os";
 import fs from "node:fs/promises";
@@ -21,10 +23,32 @@ import {
   saveApiKey,
   loadApiKey,
   hasApiKey,
+  deleteApiKey,
   getNoteStats,
   type GigaMindConfig,
 } from "../../src/utils/config.js";
 import { clearCache } from "../../src/utils/graph/cache.js";
+
+// Mock keytar to prevent accessing real system keychain during tests
+jest.unstable_mockModule("keytar", () => {
+  const store = new Map<string, string>();
+  return {
+    default: {
+      getPassword: jest.fn(async (service: string, account: string) => {
+        return store.get(`${service}:${account}`) ?? null;
+      }),
+      setPassword: jest.fn(async (service: string, account: string, password: string) => {
+        store.set(`${service}:${account}`, password);
+      }),
+      deletePassword: jest.fn(async (service: string, account: string) => {
+        return store.delete(`${service}:${account}`);
+      }),
+    },
+    // Expose store for test manipulation
+    __testStore: store,
+    __clearStore: () => store.clear(),
+  };
+});
 
 describe("Config paths (default)", () => {
   // Save and clear test env var to test default behavior
@@ -142,6 +166,7 @@ describe("Config operations", () => {
         },
         model: "claude-3-opus",
         noteDetail: "balanced",
+        language: "ko",
       };
 
       await saveConfig(testConfig);
@@ -164,6 +189,7 @@ describe("Config operations", () => {
         },
         model: "test-model",
         noteDetail: "concise",
+        language: "en",
       };
 
       await saveConfig(testConfig);
@@ -197,6 +223,7 @@ describe("Config operations", () => {
         },
         model: "claude-sonnet-4-20250514",
         noteDetail: "balanced",
+        language: "ko",
       };
 
       await saveConfig(initialConfig);
@@ -240,14 +267,21 @@ describe("API Key operations", () => {
   // Use a unique temp directory for test isolation
   const testConfigDir = path.join(os.tmpdir(), `gigamind-test-apikey-${process.pid}-${Date.now()}`);
   const testCredentialsPath = path.join(testConfigDir, "credentials");
+  const testEncryptedCredentialsPath = path.join(testConfigDir, "credentials.enc");
   const testSessionsDir = path.join(testConfigDir, "sessions");
 
   // Store original env var
   let originalTestDir: string | undefined;
+  let originalApiKey: string | undefined;
+  let keytarMock: { __clearStore: () => void };
 
   beforeAll(async () => {
-    // Save original env var
+    // Get the mocked keytar module
+    keytarMock = await import("keytar") as unknown as { __clearStore: () => void };
+
+    // Save original env vars
     originalTestDir = process.env.GIGAMIND_TEST_CONFIG_DIR;
+    originalApiKey = process.env.ANTHROPIC_API_KEY;
 
     // Set test config directory
     process.env.GIGAMIND_TEST_CONFIG_DIR = testConfigDir;
@@ -258,11 +292,17 @@ describe("API Key operations", () => {
   });
 
   afterAll(async () => {
-    // Restore original env var
+    // Restore original env vars
     if (originalTestDir) {
       process.env.GIGAMIND_TEST_CONFIG_DIR = originalTestDir;
     } else {
       delete process.env.GIGAMIND_TEST_CONFIG_DIR;
+    }
+
+    if (originalApiKey) {
+      process.env.ANTHROPIC_API_KEY = originalApiKey;
+    } else {
+      delete process.env.ANTHROPIC_API_KEY;
     }
 
     // Clean up temp directory
@@ -274,9 +314,20 @@ describe("API Key operations", () => {
   });
 
   beforeEach(async () => {
-    // Clean credentials file before each test
+    // Clear the mocked keytar store before each test
+    keytarMock.__clearStore();
+
+    // Clear environment variable
+    delete process.env.ANTHROPIC_API_KEY;
+
+    // Clean credentials files before each test
     try {
       await fs.unlink(testCredentialsPath);
+    } catch {
+      // File may not exist
+    }
+    try {
+      await fs.unlink(testEncryptedCredentialsPath);
     } catch {
       // File may not exist
     }
@@ -284,52 +335,57 @@ describe("API Key operations", () => {
 
   describe("loadApiKey", () => {
     it("should prefer environment variable", async () => {
-      const originalEnv = process.env.ANTHROPIC_API_KEY;
       process.env.ANTHROPIC_API_KEY = "sk-ant-env-key";
 
       const apiKey = await loadApiKey();
       expect(apiKey).toBe("sk-ant-env-key");
-
-      if (originalEnv) {
-        process.env.ANTHROPIC_API_KEY = originalEnv;
-      } else {
-        delete process.env.ANTHROPIC_API_KEY;
-      }
     });
 
-    it("should load from credentials file when env var not set", async () => {
-      const originalEnv = process.env.ANTHROPIC_API_KEY;
-      delete process.env.ANTHROPIC_API_KEY;
-
-      // Write a test API key to the credentials file
-      await fs.writeFile(testCredentialsPath, "sk-ant-file-key");
+    it("should load from secure storage when env var not set", async () => {
+      // Save a key first (will go to mocked keytar)
+      await saveApiKey("sk-ant-secure-key");
 
       const apiKey = await loadApiKey();
-      expect(apiKey).toBe("sk-ant-file-key");
+      expect(apiKey).toBe("sk-ant-secure-key");
+    });
 
-      if (originalEnv) {
-        process.env.ANTHROPIC_API_KEY = originalEnv;
-      }
+    it("should migrate plaintext credentials on first access", async () => {
+      // Write a plaintext API key (legacy format)
+      await fs.writeFile(testCredentialsPath, "sk-ant-legacy-key");
+
+      const apiKey = await loadApiKey();
+      expect(apiKey).toBe("sk-ant-legacy-key");
+
+      // Verify plaintext file was deleted after migration
+      await expect(fs.access(testCredentialsPath)).rejects.toThrow();
     });
   });
 
   describe("saveApiKey", () => {
-    it("should save API key to credentials file", async () => {
+    it("should save API key to secure storage", async () => {
       await saveApiKey("sk-ant-saved-key");
 
-      const content = await fs.readFile(testCredentialsPath, "utf-8");
-      expect(content).toBe("sk-ant-saved-key");
+      // Verify the key can be loaded back
+      const loaded = await loadApiKey();
+      expect(loaded).toBe("sk-ant-saved-key");
     });
 
-    it("should save to temp directory, not real credentials", async () => {
+    it("should not save to plaintext credentials file", async () => {
       await saveApiKey("sk-ant-test-key-12345");
+
+      // Verify NO plaintext credentials file was created
+      await expect(fs.access(testCredentialsPath)).rejects.toThrow();
+    });
+
+    it("should not touch real credentials location", async () => {
+      await saveApiKey("sk-ant-test-key-unique");
 
       // Verify the real credentials file was NOT touched
       const realCredentialsPath = path.join(os.homedir(), ".gigamind", "credentials");
       try {
         const realContent = await fs.readFile(realCredentialsPath, "utf-8");
         // Real credentials should NOT contain our test key
-        expect(realContent).not.toContain("sk-ant-test-key-12345");
+        expect(realContent).not.toContain("sk-ant-test-key-unique");
       } catch {
         // Real credentials might not exist, which is also fine
       }
@@ -338,51 +394,46 @@ describe("API Key operations", () => {
 
   describe("hasApiKey", () => {
     it("should return true when API key exists in env", async () => {
-      const originalEnv = process.env.ANTHROPIC_API_KEY;
       process.env.ANTHROPIC_API_KEY = "sk-ant-test-key";
 
       const has = await hasApiKey();
       expect(has).toBe(true);
-
-      if (originalEnv) {
-        process.env.ANTHROPIC_API_KEY = originalEnv;
-      } else {
-        delete process.env.ANTHROPIC_API_KEY;
-      }
     });
 
-    it("should return true when API key exists in file", async () => {
-      const originalEnv = process.env.ANTHROPIC_API_KEY;
-      delete process.env.ANTHROPIC_API_KEY;
-
-      // Write a test API key to the credentials file
-      await fs.writeFile(testCredentialsPath, "sk-ant-file-key");
+    it("should return true when API key exists in secure storage", async () => {
+      // Save a key to secure storage
+      await saveApiKey("sk-ant-secure-key");
 
       const has = await hasApiKey();
       expect(has).toBe(true);
-
-      if (originalEnv) {
-        process.env.ANTHROPIC_API_KEY = originalEnv;
-      }
     });
 
-    it("should return false when no API key", async () => {
-      const originalEnv = process.env.ANTHROPIC_API_KEY;
+    it("should return false when no API key exists", async () => {
+      // Ensure no API key in environment
       delete process.env.ANTHROPIC_API_KEY;
 
-      // Ensure credentials file doesn't exist
-      try {
-        await fs.unlink(testCredentialsPath);
-      } catch {
-        // Already doesn't exist
-      }
+      // Ensure no credentials files exist (already done in beforeEach)
+      // Ensure mocked keytar is empty (already done in beforeEach)
 
       const has = await hasApiKey();
       expect(has).toBe(false);
+    });
+  });
 
-      if (originalEnv) {
-        process.env.ANTHROPIC_API_KEY = originalEnv;
-      }
+  describe("deleteApiKey", () => {
+    it("should delete API key from all storage locations", async () => {
+      // Save a key first
+      await saveApiKey("sk-ant-to-delete");
+
+      // Verify it exists
+      expect(await hasApiKey()).toBe(true);
+
+      // Delete the key
+      await deleteApiKey();
+
+      // Verify it's gone
+      expect(await hasApiKey()).toBe(false);
+      expect(await loadApiKey()).toBeNull();
     });
   });
 });

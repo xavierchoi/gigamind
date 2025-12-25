@@ -63,12 +63,18 @@
     "auto_shutdown": "서버는 30분 동안 비활성 시 자동 종료됩니다."
   },
   "session": {
-    "description": "세션 관리 (list, export)",
+    "description": "세션 관리 (list, export, load, search, delete)",
     "list_description": "최근 세션 목록 보기",
     "export_description": "현재 세션 마크다운으로 저장",
+    "load_description": "세션 불러오기 및 재개",
+    "search_description": "세션 메시지 검색",
+    "delete_description": "세션 삭제",
     "usage_title": "/session 명령어 사용법:",
     "usage_list": "/session list - 최근 세션 목록 보기",
-    "usage_export": "/session export - 현재 세션을 마크다운으로 저장"
+    "usage_export": "/session export - 현재 세션을 마크다운으로 저장",
+    "usage_load": "/session load <ID> - 세션 불러오기 및 재개",
+    "usage_search": "/session search <검색어> - 세션 메시지 검색",
+    "usage_delete": "/session delete <ID> - 세션 삭제"
   },
   "config": {
     "description": "설정 보기"

@@ -5,7 +5,11 @@ import {
   SubagentInvoker,
   type SubagentCallbacks,
   type SubagentResult,
+  type IntentInfo,
 } from "./subagent.js";
+
+// Re-export IntentInfo for UI consumption
+export type { IntentInfo } from "./subagent.js";
 import { getLogger } from "../utils/logger.js";
 import {
   ApiError,
@@ -119,6 +123,10 @@ export interface StreamCallbacks {
   onFormattedError?: (formattedMessage: string, isRecoverable: boolean) => void;
   /** Called when request is aborted by user */
   onAbort?: () => void;
+  /** Called when AI detects user intent and determines which agent to use */
+  onIntentDetected?: (intent: IntentInfo) => void;
+  /** Called with progress info during search operations */
+  onProgress?: (info: { filesFound?: number; filesMatched?: number; currentTool?: string }) => void;
 }
 
 /**
@@ -284,6 +292,9 @@ export class GigaMindClient {
       onText: (text) => {
         callbacks?.onText?.(text);
       },
+      onProgress: (info) => {
+        callbacks?.onProgress?.(info);
+      },
     };
 
     // Pass recent conversation history to subagent for context continuity
@@ -366,6 +377,13 @@ export class GigaMindClient {
         // Claude decided to delegate to a subagent
         const input = toolUseBlock.input as DelegateToolInput;
         logger.debug(`Claude delegating to subagent: ${input.agent}`, { task: input.task });
+
+        // Notify UI about detected intent before execution
+        callbacks?.onIntentDetected?.({
+          agent: input.agent,
+          task: input.task,
+          confidence: 0.9, // High confidence when Claude explicitly chooses to delegate
+        });
 
         try {
           const subagentResponse = await this.handleWithSubagent(

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useMemo } from "react";
 import { Box, Text, Newline, useInput } from "ink";
 import TextInput from "ink-text-input";
 import SelectInput from "ink-select-input";
@@ -8,6 +8,8 @@ import {
   openFolderDialog,
   isFolderDialogSupported,
 } from "../utils/folderDialog/index.js";
+import { t } from "../i18n/index.js";
+import { validatePathSync, type PathValidationResult } from "../utils/config.js";
 
 type OnboardingStep =
   | "welcome"
@@ -41,29 +43,38 @@ export interface OnboardingResult {
   importConfig?: ImportConfig;
 }
 
-const USE_CASE_OPTIONS = [
-  { label: "개인 생각/아이디어 정리", value: "ideas" },
-  { label: "프로젝트 문서화", value: "projects" },
-  { label: "독서 노트", value: "reading" },
-  { label: "업무 회의록", value: "meetings" },
-  { label: "학습 자료 정리", value: "learning" },
-];
+// Dynamic option generators using i18n
+function getUseCaseOptions() {
+  return [
+    { label: t("onboarding:use_cases.options.ideas"), value: "ideas" },
+    { label: t("onboarding:use_cases.options.projects"), value: "projects" },
+    { label: t("onboarding:use_cases.options.reading"), value: "reading" },
+    { label: t("onboarding:use_cases.options.meetings"), value: "meetings" },
+    { label: t("onboarding:use_cases.options.learning"), value: "learning" },
+  ];
+}
 
-const NOTES_DIR_OPTIONS = [
-  { label: "~/gigamind-notes (홈 폴더) [기본값]", value: "~/gigamind-notes" },
-  { label: "~/Documents/gigamind", value: "~/Documents/gigamind" },
-  { label: "직접 입력...", value: "__custom__" },
-];
+function getNotesDirOptions() {
+  return [
+    { label: t("onboarding:notes_dir.options.home_default"), value: "~/gigamind-notes" },
+    { label: t("onboarding:notes_dir.options.documents"), value: "~/Documents/gigamind" },
+    { label: t("onboarding:notes_dir.options.custom"), value: "__custom__" },
+  ];
+}
 
-const EXISTING_NOTES_OPTIONS = [
-  { label: "네, 가져오고 싶어요", value: "yes" },
-  { label: "아니요, 새로 시작할게요", value: "no" },
-];
+function getExistingNotesOptions() {
+  return [
+    { label: t("onboarding:existing_notes.options.yes"), value: "yes" },
+    { label: t("onboarding:existing_notes.options.no"), value: "no" },
+  ];
+}
 
-const IMPORT_SOURCE_OPTIONS = [
-  { label: "Obsidian Vault", value: "obsidian" },
-  { label: "일반 마크다운 폴더", value: "markdown" },
-];
+function getImportSourceOptions() {
+  return [
+    { label: t("onboarding:import_source.options.obsidian"), value: "obsidian" },
+    { label: t("onboarding:import_source.options.markdown"), value: "markdown" },
+  ];
+}
 
 // Step progress mapping
 const STEP_PROGRESS: Record<OnboardingStep, { current: number; total: number }> = {
@@ -146,18 +157,19 @@ export function Onboarding({ onComplete }: OnboardingProps) {
 
     // useCases step keyboard navigation
     if (step === "useCases") {
+      const useCaseOptions = getUseCaseOptions();
       // Up/Down for navigation
       if (key.upArrow) {
         setUseCaseIndex((prev) => Math.max(0, prev - 1));
         return;
       }
       if (key.downArrow) {
-        setUseCaseIndex((prev) => Math.min(USE_CASE_OPTIONS.length - 1, prev + 1));
+        setUseCaseIndex((prev) => Math.min(useCaseOptions.length - 1, prev + 1));
         return;
       }
       // Space to toggle selection
       if (input === " ") {
-        const currentValue = USE_CASE_OPTIONS[useCaseIndex].value;
+        const currentValue = useCaseOptions[useCaseIndex].value;
         setSelectedUseCases((prev) => {
           if (prev.includes(currentValue)) {
             return prev.filter((v) => v !== currentValue);
@@ -194,7 +206,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
     setStep("notesDirDialog");
 
     try {
-      const selectedPath = await openFolderDialog("노트 저장 폴더 선택");
+      const selectedPath = await openFolderDialog(t("onboarding:notes_dir.dialog_title"));
 
       if (selectedPath) {
         setCustomNotesDir(selectedPath);
@@ -215,8 +227,10 @@ export function Onboarding({ onComplete }: OnboardingProps) {
     setStep("importPathDialog");
 
     try {
-      const sourceLabel = importSource === "obsidian" ? "Obsidian Vault" : "마크다운 폴더";
-      const selectedPath = await openFolderDialog(`${sourceLabel} 선택`);
+      const sourceLabel = importSource === "obsidian"
+        ? t("onboarding:import_source.options.obsidian")
+        : t("onboarding:import_source.options.markdown");
+      const selectedPath = await openFolderDialog(t("onboarding:import_path.dialog_title", { source: sourceLabel }));
 
       if (selectedPath) {
         setImportPath(selectedPath);
@@ -243,11 +257,11 @@ export function Onboarding({ onComplete }: OnboardingProps) {
 
     // Basic format validation
     if (!trimmed) {
-      setApiKeyError("API 키를 입력해주세요");
+      setApiKeyError(t("onboarding:api_key.error_empty"));
       return;
     }
     if (!trimmed.startsWith("sk-ant-")) {
-      setApiKeyError("올바른 Anthropic API 키 형식이 아닙니다 (sk-ant-로 시작)");
+      setApiKeyError(t("onboarding:api_key.error_invalid_format"));
       return;
     }
 
@@ -264,12 +278,12 @@ export function Onboarding({ onComplete }: OnboardingProps) {
         setApiKeyError("");
         setStep("notesDir");
       } else {
-        setApiKeyError(result.error || "API 키 검증에 실패했습니다");
+        setApiKeyError(result.error || t("onboarding:api_key.error_validation_failed"));
         setStep("apiKey");
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : "알 수 없는 오류";
-      setApiKeyError(`API 키 검증 중 오류 발생: ${message}`);
+      const message = error instanceof Error ? error.message : t("onboarding:api_key.error_unknown");
+      setApiKeyError(t("onboarding:api_key.error_validation_error", { message }));
       setStep("apiKey");
     } finally {
       setIsValidating(false);
@@ -292,11 +306,43 @@ export function Onboarding({ onComplete }: OnboardingProps) {
     }
   };
 
+  // Path validation state for custom notes directory
+  const customNotesDirValidation = useMemo((): PathValidationResult | null => {
+    if (!showCustomInput || !customNotesDir.trim()) {
+      return null;
+    }
+    return validatePathSync(customNotesDir);
+  }, [showCustomInput, customNotesDir]);
+
+  // Get validation message for path
+  const getPathValidationMessage = useCallback((validation: PathValidationResult): { text: string; color: string } => {
+    if (validation.valid) {
+      if (validation.willCreate) {
+        return {
+          text: t("common:path_validation.valid_will_create", { path: validation.expandedPath }),
+          color: "green"
+        };
+      }
+      return {
+        text: t("common:path_validation.valid_exists"),
+        color: "green"
+      };
+    }
+
+    const errorKey = validation.errorCode || "empty";
+    return {
+      text: t(`common:path_validation.${errorKey}`),
+      color: "red"
+    };
+  }, []);
+
   const handleCustomNotesDir = (value: string) => {
-    if (value.trim()) {
+    const validation = validatePathSync(value);
+    if (validation.valid) {
       setNotesDir(value.trim());
       setStep("userName");
     }
+    // If invalid, don't proceed - let user see the error
   };
 
   const handleUserName = (value: string) => {
@@ -365,17 +411,17 @@ export function Onboarding({ onComplete }: OnboardingProps) {
           flexDirection="column"
         >
           <Text color="magenta" bold>
-            GigaMind에 오신 것을 환영합니다! ✨
+            {t("onboarding:welcome.title")} ✨
           </Text>
           <Newline />
-          <Text>🧠 당신의 생각과 지식을 관리하는 AI 파트너입니다.</Text>
-          <Text>📝 몇 가지 설정을 도와드릴게요.</Text>
+          <Text>🧠 {t("onboarding:welcome.description_partner")}</Text>
+          <Text>📝 {t("onboarding:welcome.description_setup")}</Text>
           <Newline />
-          <Text color="gray">약 2분이면 완료됩니다.</Text>
-          <Text color="gray">(언제든 Enter를 눌러 기본값을 사용할 수 있어요)</Text>
+          <Text color="gray">{t("onboarding:welcome.time_estimate")}</Text>
+          <Text color="gray">{t("onboarding:welcome.default_hint")}</Text>
         </Box>
         <Box marginTop={1}>
-          <Text color="cyan">Enter를 눌러 시작하세요...</Text>
+          <Text color="cyan">{t("onboarding:welcome.press_enter")}</Text>
           <TextInput value="" onChange={() => {}} onSubmit={handleWelcome} />
         </Box>
       </Box>
@@ -387,21 +433,21 @@ export function Onboarding({ onComplete }: OnboardingProps) {
       <Box flexDirection="column" padding={2}>
         <StepIndicator step={step} />
         <Text color="yellow" bold>
-          ? Anthropic API 키를 입력해주세요
+          ? {t("onboarding:api_key.prompt")}
         </Text>
         <Box marginTop={1}>
           <Text color="gray">
-            API 키는 https://console.anthropic.com 에서 발급받을 수 있어요.
+            {t("onboarding:api_key.console_hint")}
           </Text>
         </Box>
         <Box marginTop={2}>
           <Text color="cyan">
             <Spinner type="dots" />
           </Text>
-          <Text color="gray"> API 키를 검증하는 중...</Text>
+          <Text color="gray"> {t("onboarding:api_key.validating")}</Text>
         </Box>
         <Box marginTop={1}>
-          <Text color="gray">입력된 키: {maskApiKey(apiKey || "")}</Text>
+          <Text color="gray">{t("onboarding:api_key.input_entered")} {maskApiKey(apiKey || "")}</Text>
         </Box>
       </Box>
     );
@@ -412,18 +458,18 @@ export function Onboarding({ onComplete }: OnboardingProps) {
       <Box flexDirection="column" padding={2}>
         <StepIndicator step={step} />
         <Text color="yellow" bold>
-          ? Anthropic API 키를 입력해주세요
+          ? {t("onboarding:api_key.prompt")}
         </Text>
         <Box marginTop={1} flexDirection="column">
           <Text color="gray">
-            API 키는 AI 기능을 사용하기 위해 필요한 인증 키입니다.
+            {t("onboarding:api_key.description")}
           </Text>
           <Newline />
-          <Text color="gray" bold>발급 방법:</Text>
-          <Text color="gray">  1. https://console.anthropic.com 접속</Text>
-          <Text color="gray">  2. 로그인 후 "API Keys" 메뉴 클릭</Text>
-          <Text color="gray">  3. "Create Key" 버튼으로 새 키 생성</Text>
-          <Text color="gray">  4. 생성된 키(sk-ant-...)를 복사하여 붙여넣기</Text>
+          <Text color="gray" bold>{t("onboarding:api_key.how_to_get_title")}</Text>
+          <Text color="gray">  {t("onboarding:api_key.step_1")}</Text>
+          <Text color="gray">  {t("onboarding:api_key.step_2")}</Text>
+          <Text color="gray">  {t("onboarding:api_key.step_3")}</Text>
+          <Text color="gray">  {t("onboarding:api_key.step_4")}</Text>
         </Box>
         <Box marginTop={1}>
           <Text color="cyan">{"> "}</Text>
@@ -431,12 +477,12 @@ export function Onboarding({ onComplete }: OnboardingProps) {
             value={apiKey}
             onChange={setApiKey}
             onSubmit={handleApiKey}
-            placeholder="sk-ant-..."
+            placeholder={t("onboarding:api_key.placeholder")}
           />
         </Box>
         {apiKey.length > 0 && !isValidating && (
           <Box marginTop={1}>
-            <Text color="gray">입력 중: {maskApiKey(apiKey)}</Text>
+            <Text color="gray">{t("onboarding:api_key.input_label")} {maskApiKey(apiKey)}</Text>
           </Box>
         )}
         {apiKeyError && (
@@ -444,20 +490,20 @@ export function Onboarding({ onComplete }: OnboardingProps) {
             <Text color="red">{apiKeyError}</Text>
             {apiKeyError.includes("Invalid") && (
               <Text color="gray" dimColor>
-                API 키가 올바른지 확인해주세요. 키는 'sk-ant-'로 시작해야 합니다.
+                {t("onboarding:api_key.invalid_hint")}
               </Text>
             )}
             {apiKeyError.includes("quota") && (
               <Text color="gray" dimColor>
-                API 사용량이 초과되었습니다. https://console.anthropic.com 에서 확인해주세요.
+                {t("onboarding:api_key.quota_hint")}
               </Text>
             )}
             <Newline />
-            <Text color="gray" dimColor>다시 시도하려면 Enter, 이전으로 돌아가려면 ESC</Text>
+            <Text color="gray" dimColor>{t("onboarding:api_key.retry_hint")}</Text>
           </Box>
         )}
         <Box marginTop={1}>
-          <Text color="gray" dimColor>ESC: 이전 단계</Text>
+          <Text color="gray" dimColor>{t("onboarding:navigation.esc_previous")}</Text>
         </Box>
       </Box>
     );
@@ -468,45 +514,62 @@ export function Onboarding({ onComplete }: OnboardingProps) {
       <Box flexDirection="column" padding={2}>
         <StepIndicator step={step} />
         <Box marginBottom={1}>
-          <Text color="green">API 키가 확인되었습니다!</Text>
+          <Text color="green">{t("onboarding:api_key.validated")}</Text>
         </Box>
         <Text color="yellow" bold>
-          ? 노트를 어디에 저장할까요?
+          ? {t("onboarding:notes_dir.prompt")}
         </Text>
         {showCustomInput ? (
           <Box marginTop={1} flexDirection="column">
             {/* Folder dialog option */}
             {dialogSupported && (
               <Box marginBottom={1}>
-                <Text color="green">[B] 폴더 선택 다이얼로그 열기</Text>
+                <Text color="green">{t("onboarding:notes_dir.open_folder_dialog")}</Text>
               </Box>
             )}
 
             {/* Dialog error message */}
             {dialogError && (
               <Box marginBottom={1}>
-                <Text color="red">다이얼로그 오류: {dialogError}</Text>
+                <Text color="red">{t("onboarding:notes_dir.dialog_error", { error: dialogError })}</Text>
               </Box>
             )}
 
-            <Text color="gray">경로 직접 입력:</Text>
+            <Text color="gray">{t("onboarding:notes_dir.manual_input")}</Text>
             <Box marginTop={1}>
               <Text color="cyan">{"> "}</Text>
               <TextInput
                 value={customNotesDir}
                 onChange={setCustomNotesDir}
                 onSubmit={handleCustomNotesDir}
-                placeholder="경로를 입력하세요..."
+                placeholder={t("onboarding:notes_dir.placeholder")}
               />
             </Box>
+            {/* Path validation feedback */}
+            {customNotesDirValidation && (
+              <Box marginTop={1}>
+                <Text color={getPathValidationMessage(customNotesDirValidation).color as "red" | "green"}>
+                  {getPathValidationMessage(customNotesDirValidation).text}
+                </Text>
+              </Box>
+            )}
+            {/* Show expanded path if different from input */}
+            {customNotesDirValidation && customNotesDirValidation.expandedPath &&
+             customNotesDir.trim() !== customNotesDirValidation.expandedPath && (
+              <Box marginTop={0}>
+                <Text color="gray" dimColor>
+                  {t("common:path_validation.expanded_path", { path: customNotesDirValidation.expandedPath })}
+                </Text>
+              </Box>
+            )}
           </Box>
         ) : (
           <Box marginTop={1}>
-            <SelectInput items={NOTES_DIR_OPTIONS} onSelect={handleNotesDirSelect} />
+            <SelectInput items={getNotesDirOptions()} onSelect={handleNotesDirSelect} />
           </Box>
         )}
         <Box marginTop={1}>
-          <Text color="gray" dimColor>ESC: 이전 단계</Text>
+          <Text color="gray" dimColor>{t("onboarding:navigation.esc_previous")}</Text>
         </Box>
       </Box>
     );
@@ -517,16 +580,16 @@ export function Onboarding({ onComplete }: OnboardingProps) {
       <Box flexDirection="column" padding={2}>
         <StepIndicator step={step} />
         <Box marginBottom={1}>
-          <Text color="green">API 키가 확인되었습니다!</Text>
+          <Text color="green">{t("onboarding:api_key.validated")}</Text>
         </Box>
         <Box>
           <Text color="cyan">
             <Spinner type="dots" />
           </Text>
-          <Text> 폴더 선택 다이얼로그가 열렸습니다...</Text>
+          <Text> {t("onboarding:notes_dir.folder_dialog_opened")}</Text>
         </Box>
         <Box marginTop={1}>
-          <Text color="gray">시스템 폴더 선택 다이얼로그에서 폴더를 선택해주세요.</Text>
+          <Text color="gray">{t("onboarding:notes_dir.folder_dialog_hint")}</Text>
         </Box>
       </Box>
     );
@@ -537,7 +600,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
       <Box flexDirection="column" padding={2}>
         <StepIndicator step={step} />
         <Text color="yellow" bold>
-          ? 이름이나 별명을 알려주세요 (선택, Enter로 건너뛰기)
+          ? {t("onboarding:user_name.prompt")}
         </Text>
         <Box marginTop={1}>
           <Text color="cyan">{"> "}</Text>
@@ -545,25 +608,26 @@ export function Onboarding({ onComplete }: OnboardingProps) {
             value={userName}
             onChange={setUserName}
             onSubmit={handleUserName}
-            placeholder="이름 또는 별명..."
+            placeholder={t("onboarding:user_name.placeholder")}
           />
         </Box>
         <Box marginTop={1}>
-          <Text color="gray" dimColor>ESC: 이전 단계</Text>
+          <Text color="gray" dimColor>{t("onboarding:navigation.esc_previous")}</Text>
         </Box>
       </Box>
     );
   }
 
   if (step === "useCases") {
+    const useCaseOptions = getUseCaseOptions();
     return (
       <Box flexDirection="column" padding={2}>
         <StepIndicator step={step} />
         <Text color="yellow" bold>
-          ? 주로 어떤 용도로 사용하실 건가요? (복수 선택 가능)
+          ? {t("onboarding:use_cases.prompt")}
         </Text>
         <Box marginTop={1} flexDirection="column">
-          {USE_CASE_OPTIONS.map((option, idx) => {
+          {useCaseOptions.map((option, idx) => {
             const isSelected = selectedUseCases.includes(option.value);
             const isFocused = idx === useCaseIndex;
             return (
@@ -582,10 +646,10 @@ export function Onboarding({ onComplete }: OnboardingProps) {
           })}
         </Box>
         <Box marginTop={1} flexDirection="column">
-          <Text color="gray" dimColor>Space: 선택/해제 | Enter: 완료 | ESC: 이전 단계</Text>
+          <Text color="gray" dimColor>{t("onboarding:use_cases.controls")}</Text>
           {selectedUseCases.length > 0 && (
             <Text color="green" dimColor>
-              선택됨: {selectedUseCases.length}개
+              {t("onboarding:use_cases.selected_count", { count: selectedUseCases.length })}
             </Text>
           )}
         </Box>
@@ -598,13 +662,13 @@ export function Onboarding({ onComplete }: OnboardingProps) {
       <Box flexDirection="column" padding={2}>
         <StepIndicator step={step} />
         <Text color="yellow" bold>
-          ? 기존 마크다운 노트가 있나요? (Obsidian, 일반 마크다운 등)
+          ? {t("onboarding:existing_notes.prompt")}
         </Text>
         <Box marginTop={1}>
-          <SelectInput items={EXISTING_NOTES_OPTIONS} onSelect={handleExistingNotesSelect} />
+          <SelectInput items={getExistingNotesOptions()} onSelect={handleExistingNotesSelect} />
         </Box>
         <Box marginTop={1}>
-          <Text color="gray" dimColor>ESC: 이전 단계</Text>
+          <Text color="gray" dimColor>{t("onboarding:navigation.esc_previous")}</Text>
         </Box>
       </Box>
     );
@@ -615,16 +679,16 @@ export function Onboarding({ onComplete }: OnboardingProps) {
       <Box flexDirection="column" padding={2}>
         <StepIndicator step={step} />
         <Box marginBottom={1}>
-          <Text color="cyan">📥 노트 가져오기</Text>
+          <Text color="cyan">📥 {t("onboarding:import_source.title")}</Text>
         </Box>
         <Text color="yellow" bold>
-          ? 어디서 가져올까요?
+          ? {t("onboarding:import_source.prompt")}
         </Text>
         <Box marginTop={1}>
-          <SelectInput items={IMPORT_SOURCE_OPTIONS} onSelect={handleImportSourceSelect} />
+          <SelectInput items={getImportSourceOptions()} onSelect={handleImportSourceSelect} />
         </Box>
         <Box marginTop={1}>
-          <Text color="gray" dimColor>ESC: 이전 단계</Text>
+          <Text color="gray" dimColor>{t("onboarding:navigation.esc_previous")}</Text>
         </Box>
       </Box>
     );
@@ -634,9 +698,11 @@ export function Onboarding({ onComplete }: OnboardingProps) {
     // Platform-specific placeholder paths
     const isWindows = process.platform === "win32";
     const placeholder = importSource === "obsidian"
-      ? (isWindows ? "%USERPROFILE%\\Documents\\ObsidianVault" : "~/Documents/ObsidianVault")
-      : (isWindows ? "%USERPROFILE%\\Documents\\notes" : "~/Documents/notes");
-    const sourceLabel = importSource === "obsidian" ? "Obsidian Vault" : "마크다운 폴더";
+      ? (isWindows ? t("onboarding:import_path.placeholder_obsidian_windows") : t("onboarding:import_path.placeholder_obsidian_mac"))
+      : (isWindows ? t("onboarding:import_path.placeholder_markdown_windows") : t("onboarding:import_path.placeholder_markdown_mac"));
+    const sourceLabel = importSource === "obsidian"
+      ? t("onboarding:import_source.options.obsidian")
+      : t("onboarding:import_source.options.markdown");
 
     return (
       <Box flexDirection="column" padding={2}>
@@ -645,21 +711,20 @@ export function Onboarding({ onComplete }: OnboardingProps) {
         {/* Folder dialog option */}
         {dialogSupported && (
           <Box marginBottom={1}>
-            <Text color="green">[B] 폴더 선택 다이얼로그 열기</Text>
+            <Text color="green">{t("onboarding:notes_dir.open_folder_dialog")}</Text>
           </Box>
         )}
 
         {/* Dialog error message */}
         {dialogError && (
           <Box marginBottom={1}>
-            <Text color="red">다이얼로그 오류: {dialogError}</Text>
+            <Text color="red">{t("onboarding:notes_dir.dialog_error", { error: dialogError })}</Text>
           </Box>
         )}
 
-        <Text color="gray">경로 직접 입력:</Text>
+        <Text color="gray">{t("onboarding:import_path.manual_input")}</Text>
         <Text color="yellow" bold>
-          ? {sourceLabel} 경로를 입력하세요
-        </Text>
+          ? {t("onboarding:import_path.prompt", { source: sourceLabel })}</Text>
         <Box marginTop={1}>
           <Text color="cyan">{"> "}</Text>
           <TextInput
@@ -672,33 +737,35 @@ export function Onboarding({ onComplete }: OnboardingProps) {
         <Box marginTop={1}>
           <Text color="gray">
             {process.platform === "win32"
-              ? "%USERPROFILE%은 홈 디렉토리를 의미합니다"
-              : "~ 는 홈 디렉토리를 의미합니다"}
+              ? t("onboarding:import_path.home_hint_windows")
+              : t("onboarding:import_path.home_hint_mac")}
           </Text>
         </Box>
         <Box marginTop={1}>
-          <Text color="gray" dimColor>ESC: 이전 단계</Text>
+          <Text color="gray" dimColor>{t("onboarding:navigation.esc_previous")}</Text>
         </Box>
       </Box>
     );
   }
 
   if (step === "importPathDialog") {
-    const sourceLabel = importSource === "obsidian" ? "Obsidian Vault" : "마크다운 폴더";
+    const sourceLabel = importSource === "obsidian"
+      ? t("onboarding:import_source.options.obsidian")
+      : t("onboarding:import_source.options.markdown");
     return (
       <Box flexDirection="column" padding={2}>
         <StepIndicator step={step} />
         <Box marginBottom={1}>
-          <Text color="cyan">📥 노트 가져오기</Text>
+          <Text color="cyan">📥 {t("onboarding:import_source.title")}</Text>
         </Box>
         <Box>
           <Text color="cyan">
             <Spinner type="dots" />
           </Text>
-          <Text> 폴더 선택 다이얼로그가 열렸습니다...</Text>
+          <Text> {t("onboarding:notes_dir.folder_dialog_opened")}</Text>
         </Box>
         <Box marginTop={1}>
-          <Text color="gray">시스템 폴더 선택 다이얼로그에서 {sourceLabel}을 선택해주세요.</Text>
+          <Text color="gray">{t("onboarding:import_path.folder_dialog_hint", { source: sourceLabel })}</Text>
         </Box>
       </Box>
     );
@@ -712,12 +779,12 @@ export function Onboarding({ onComplete }: OnboardingProps) {
           <Text color="cyan">
             <Spinner type="dots" />
           </Text>
-          <Text> 노트를 분석하는 중...</Text>
+          <Text> {t("onboarding:importing.analyzing")}</Text>
         </Box>
         {importStats && (
           <Box marginTop={1} flexDirection="column">
-            <Text color="gray">├─ 마크다운 파일: {importStats.files}개</Text>
-            <Text color="gray">└─ 폴더: {importStats.folders}개</Text>
+            <Text color="gray">├─ {t("onboarding:importing.markdown_files", { count: importStats.files })}</Text>
+            <Text color="gray">└─ {t("onboarding:importing.folders", { count: importStats.folders })}</Text>
           </Box>
         )}
       </Box>
@@ -735,29 +802,29 @@ export function Onboarding({ onComplete }: OnboardingProps) {
           flexDirection="column"
         >
           <Text color="green" bold>
-            설정이 완료되었습니다!
+            {t("onboarding:complete.title")}
           </Text>
           <Newline />
-          <Text>GigaMind가 준비되었어요.</Text>
-          {userName && <Text>환영합니다, {userName}님!</Text>}
+          <Text>{t("onboarding:complete.ready")}</Text>
+          {userName && <Text>{t("onboarding:complete.welcome_with_name", { name: userName })}</Text>}
           {importPath && (
             <>
               <Newline />
               <Text color="cyan">
-                📥 노트 가져오기가 예약되었어요.
+                📥 {t("onboarding:complete.import_scheduled")}
               </Text>
               <Text color="gray">
-                채팅에서 "/import" 명령어로 진행 상황을 확인할 수 있어요.
+                {t("onboarding:complete.import_hint")}
               </Text>
             </>
           )}
           <Newline />
-          <Text color="yellow" bold>핵심 기능 3가지:</Text>
-          <Text color="gray">  1. /search - 내 노트에서 정보 검색</Text>
-          <Text color="gray">  2. /clone - 내 노트 기반으로 나처럼 답변</Text>
-          <Text color="gray">  3. 자연어로 "메모해줘"라고 말하면 노트 작성</Text>
+          <Text color="yellow" bold>{t("onboarding:complete.features_title")}</Text>
+          <Text color="gray">  {t("onboarding:complete.feature_search")}</Text>
+          <Text color="gray">  {t("onboarding:complete.feature_clone")}</Text>
+          <Text color="gray">  {t("onboarding:complete.feature_natural")}</Text>
           <Newline />
-          <Text color="gray">잠시 후 채팅 화면으로 이동합니다...</Text>
+          <Text color="gray">{t("onboarding:complete.transition_hint")}</Text>
         </Box>
       </Box>
     );

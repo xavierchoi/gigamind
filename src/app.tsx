@@ -6,7 +6,7 @@ import { SplashScreen } from "./components/SplashScreen.js";
 import { Onboarding, type OnboardingResult } from "./components/Onboarding.js";
 import { ConfigMenu } from "./components/ConfigMenu.js";
 import { Import, type ImportResult } from "./components/Import.js";
-import { GigaMindClient, AbortError } from "./agent/client.js";
+import { GigaMindClient, AbortError, type IntentInfo } from "./agent/client.js";
 import { SessionManager, type SessionSummary } from "./agent/session.js";
 import {
   loadConfig,
@@ -155,6 +155,8 @@ export function App() {
   const [pendingRestoreSession, setPendingRestoreSession] = useState<SessionSummary | null>(null);
   const [currentTool, setCurrentTool] = useState<string | null>(null);
   const [currentToolStartTime, setCurrentToolStartTime] = useState<number | null>(null);
+  const [searchProgress, setSearchProgress] = useState<{ filesFound?: number; filesMatched?: number } | null>(null);
+  const [detectedIntent, setDetectedIntent] = useState<IntentInfo | null>(null);
 
   // AbortController ref for cancelling ongoing API requests
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -554,6 +556,14 @@ export function App() {
               setCurrentTool(null);
               setCurrentToolStartTime(null);
             },
+            onProgress: (info) => {
+              if (requestGenerationRef.current !== currentGeneration) return;
+              setSearchProgress(info);
+            },
+            onIntentDetected: (intent) => {
+              if (requestGenerationRef.current !== currentGeneration) return;
+              setDetectedIntent(intent);
+            },
             onComplete: (fullText) => {
               // Ignore if this is from an old request
               if (requestGenerationRef.current !== currentGeneration) return;
@@ -564,6 +574,8 @@ export function App() {
               setLoadingStartTime(undefined);
               setCurrentTool(null);
               setCurrentToolStartTime(null);
+              setSearchProgress(null);
+              setDetectedIntent(null);
               currentToolRef.current = null;
               currentToolStartTimeRef.current = null;
 
@@ -594,6 +606,8 @@ export function App() {
               setLoadingStartTime(undefined);
               setCurrentTool(null);
               setCurrentToolStartTime(null);
+              setSearchProgress(null);
+              setDetectedIntent(null);
               currentToolRef.current = null;
               currentToolStartTimeRef.current = null;
             },
@@ -610,6 +624,8 @@ export function App() {
         setLoadingStartTime(undefined);
         setCurrentTool(null);
         setCurrentToolStartTime(null);
+        setSearchProgress(null);
+        setDetectedIntent(null);
         currentToolRef.current = null;
         currentToolStartTimeRef.current = null;
 
@@ -649,6 +665,8 @@ export function App() {
       setStreamingText("");
       setCurrentTool(null);
       setCurrentToolStartTime(null);
+      setSearchProgress(null);
+      setDetectedIntent(null);
       currentToolRef.current = null;
       currentToolStartTimeRef.current = null;
 
@@ -865,11 +883,11 @@ export function App() {
     return (
       <Box flexDirection="column" padding={2}>
         <Text color="red" bold>
-          {t('errors:initialization.title')}
+          [ERROR] {t('errors:initialization.title')}
         </Text>
         <Text color="red">{error}</Text>
         <Box marginTop={1} flexDirection="column">
-          <Text color="yellow">{t('errors:initialization.solution_header')}</Text>
+          <Text color="yellow">[!] {t('errors:initialization.solution_header')}</Text>
           <Text color="gray">- {t('errors:initialization.retry_hint')}</Text>
           <Text color="gray">- {t('errors:initialization.reset_config_hint')}</Text>
           <Text color="gray">- {t('errors:initialization.exit_hint')}</Text>
@@ -969,6 +987,8 @@ export function App() {
         isFirstSession={isFirstSession}
         currentTool={currentTool}
         currentToolStartTime={currentToolStartTime}
+        searchProgress={searchProgress}
+        detectedIntent={detectedIntent}
         notesDir={config?.notesDir}
       />
     </Box>

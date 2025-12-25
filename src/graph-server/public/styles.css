@@ -753,6 +753,19 @@ body {
   transition: all 50ms linear;
 }
 
+#minimap-canvas {
+  cursor: pointer;
+}
+
+#minimap-canvas:hover {
+  background: rgba(124, 156, 188, 0.05);
+}
+
+.minimap:hover .minimap__viewport {
+  border-color: var(--accent-secondary);
+  background: rgba(124, 156, 188, 0.15);
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    Sidebar
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -1293,4 +1306,160 @@ body {
   .focus-bar:not([hidden]) {
     transform: translateY(0);
   }
+
+  .load-more-bar {
+    left: var(--sp-3);
+    right: var(--sp-3);
+    transform: translateY(0);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Load More Bar (Progressive Loading)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.load-more-bar {
+  position: fixed;
+  bottom: calc(var(--sp-6) + 60px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--surface-elevated);
+  backdrop-filter: blur(20px) saturate(1.4);
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  box-shadow: var(--shadow-md);
+  animation: slideUp var(--duration) var(--ease);
+}
+
+.load-more-bar[hidden] {
+  display: none;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+.load-more-bar__progress {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.load-more-bar__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.load-more-bar__btn {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease);
+}
+
+.load-more-bar__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.load-more-bar__btn--secondary {
+  color: var(--text-secondary);
+  background: var(--surface-3);
+}
+
+.load-more-bar__btn--secondary:hover:not(:disabled) {
+  background: var(--surface-2);
+  border-color: var(--border-hover);
+}
+
+.load-more-bar__btn--primary {
+  color: var(--void);
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+
+.load-more-bar__btn--primary:hover:not(:disabled) {
+  background: #e0b588;
+  border-color: #e0b588;
+}
+
+.load-more-bar__btn svg {
+  flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Progressive Loading Indicator
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.progressive-loading {
+  position: fixed;
+  top: 56px;
+  right: var(--sp-5);
+  z-index: 150;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-4);
+  background: var(--surface-elevated);
+  backdrop-filter: blur(16px) saturate(1.4);
+  border: 1px solid var(--accent-subtle);
+  border-radius: 8px;
+  box-shadow: var(--shadow-sm);
+  animation: fadeIn var(--duration-fast) var(--ease);
+}
+
+.progressive-loading[hidden] {
+  display: none;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.progressive-loading__spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border-subtle);
+  border-top-color: var(--accent-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.progressive-loading__text {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Header Stats Total (for progressive loading)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.header__stat-total {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-muted);
+  font-feature-settings: 'tnum';
 }

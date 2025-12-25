@@ -113,7 +113,16 @@
     "enter_send": "Enter: Send",
     "arrows_history": "Up/Down arrows: Input history",
     "esc_cancel": "Esc: Cancel",
-    "shortcuts_footer": "Ctrl+C: Exit | Enter: Send | Up/Down: History"
+    "shortcuts_footer": "Ctrl+C: Exit | Enter: Send | Up/Down: History | ?: Shortcuts",
+    "overlay_title": "Keyboard Shortcuts",
+    "overlay_close_hint": "Press ? or Esc to close",
+    "shortcut_exit": "Exit app",
+    "shortcut_show_shortcuts": "Show shortcuts",
+    "shortcut_send_message": "Send message",
+    "shortcut_input_history": "Input history",
+    "shortcut_autocomplete": "Command autocomplete",
+    "shortcut_example_prompts": "Select example prompt",
+    "shortcut_cancel": "Cancel current action"
   },
   "session": {
     "previous_session_found": "Previous session found",
@@ -129,7 +138,21 @@
     "recent_sessions_list": "Recent sessions",
     "session_exported": "Session exported as markdown.\n\nSaved to: {{path}}",
     "session_export_failed": "Session export failed: {{error}}",
-    "no_messages": "(No messages)"
+    "no_messages": "(No messages)",
+    "load_no_id": "Please provide a session ID.\nUsage: /session load <session_id>",
+    "session_not_found": "Session not found: {{id}}",
+    "session_loaded": "Session loaded successfully! ({{count}} messages)\nSession ID: {{id}}",
+    "search_no_query": "Please provide a search query.\nUsage: /session search <query>",
+    "search_no_results": "No messages found matching \"{{query}}\".",
+    "search_results": "Search results for \"{{query}}\" ({{count}} matches)",
+    "role_user": "User",
+    "role_assistant": "Assistant",
+    "load_hint": "Use `/session load <session_id>` to load a session.",
+    "delete_no_id": "Please provide a session ID.\nUsage: /session delete <session_id>",
+    "delete_confirm": "Are you sure you want to delete this session?\n\n- **Session ID**: {{id}}\n- **Created**: {{date}}\n- **Messages**: {{count}}\n- **Preview**: {{preview}}\n\nTo confirm, run: `/session delete {{id}} confirm`",
+    "delete_current_session_error": "Cannot delete the current active session.",
+    "session_deleted": "Session deleted successfully: {{id}}",
+    "delete_failed": "Failed to delete session: {{id}}"
   },
   "example_prompts": {
     "title": "Try these to get started:",
@@ -163,8 +186,23 @@
     "analyzing": "Analyzing",
     "delegating": "Delegating"
   },
+  "search_progress": {
+    "files_scanned": "{{count}} files scanned",
+    "files_matched": "{{count}} matches",
+    "files_scanned_matched": "{{scanned}} files scanned, {{matched}} matches"
+  },
   "splash": {
     "waking_up": "Waking up the brain..."
+  },
+  "intent": {
+    "search_agent": "Searching notes...",
+    "note_agent": "Writing note...",
+    "clone_agent": "Answering as your clone...",
+    "research_agent": "Researching the web...",
+    "import_agent": "Importing notes...",
+    "sync_agent": "Syncing...",
+    "uncertain_prefix": "I think ",
+    "uncertain_suffix": ""
   },
   "config_menu": {
     "title": "Settings",
@@ -207,6 +245,24 @@
     "lang_korean": "Korean",
     "lang_english": "English",
     "lang_korean_desc": "Display interface in Korean",
-    "lang_english_desc": "Display interface in English"
+    "lang_english_desc": "Display interface in English",
+    "reset_defaults": "Reset to Defaults",
+    "reset_confirm_title": "Reset Settings",
+    "reset_confirm_message": "Are you sure you want to reset all settings to defaults?",
+    "reset_confirm_note": "User name and notes directory will be preserved.",
+    "reset_confirm_prompt": "Y: Confirm | N/Esc: Cancel",
+    "reset_success": "Settings have been reset to defaults",
+    "reset_cancelled": "Reset cancelled"
+  },
+  "path_validation": {
+    "empty": "Please enter a path",
+    "is_file": "Path points to a file, not a directory",
+    "not_writable": "Directory is not writable",
+    "parent_not_exists": "Parent directory does not exist",
+    "parent_not_writable": "Cannot create directory (parent not writable)",
+    "valid_exists": "Directory exists",
+    "valid_will_create": "Will create: {{path}}",
+    "expanded_path": "Path: {{path}}",
+    "validating": "Validating path..."
   }
 }

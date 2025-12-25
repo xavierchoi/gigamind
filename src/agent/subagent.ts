@@ -42,6 +42,15 @@ export interface IntentDetectionResult {
 }
 
 /**
+ * Intent information for UI display
+ */
+export interface IntentInfo {
+  agent: string;
+  task: string;
+  confidence?: number;
+}
+
+/**
  * 의도 감지 프롬프트 생성
  */
 function createIntentDetectionPrompt(): string {

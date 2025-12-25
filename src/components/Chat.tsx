@@ -5,7 +5,9 @@ import Spinner from "ink-spinner";
 import { MarkdownText } from "../utils/markdown.js";
 import { ToolUsageIndicator } from "./ToolUsageIndicator.js";
 import { StatusLine } from "./StatusLine.js";
+import { KeyboardShortcutOverlay } from "./KeyboardShortcutOverlay.js";
 import { t } from "../i18n/index.js";
+import type { IntentInfo } from "../agent/client.js";
 
 // Available slash commands - descriptions are loaded dynamically via t() in getSlashCommands()
 function getSlashCommands() {
@@ -56,6 +58,8 @@ interface ChatProps {
   isFirstSession?: boolean;
   currentTool?: string | null;
   currentToolStartTime?: number | null;
+  searchProgress?: { filesFound?: number; filesMatched?: number } | null;
+  detectedIntent?: IntentInfo | null;
   notesDir?: string;
 }
 
@@ -161,13 +165,67 @@ function ExamplePrompts({ onSelect }: { onSelect: (text: string) => void }) {
 
 function CharacterCounter({ count }: { count: number }) {
   let color: string = "gray";
-  if (count > 500) color = "yellow";
-  if (count > 1000) color = "red";
+  let prefix = "";
+  if (count > 500) {
+    color = "yellow";
+    prefix = "! ";
+  }
+  if (count > 1000) {
+    color = "red";
+    prefix = "!! ";
+  }
 
   return (
     <Text color={color} dimColor>
-      {t("common:input.characters", { count })}
+      {prefix}{t("common:input.characters", { count })}
     </Text>
+  );
+}
+
+/**
+ * Intent indicator showing detected AI intent with emoji
+ */
+function IntentIndicator({ intent }: { intent: IntentInfo }) {
+  // Map agent names to emojis and i18n keys
+  const agentConfig: Record<string, { emoji: string; key: string }> = {
+    "search-agent": { emoji: "magnifier", key: "search_agent" },
+    "note-agent": { emoji: "memo", key: "note_agent" },
+    "clone-agent": { emoji: "brain", key: "clone_agent" },
+    "research-agent": { emoji: "globe", key: "research_agent" },
+    "import-agent": { emoji: "inbox_tray", key: "import_agent" },
+    "sync-agent": { emoji: "arrows_counterclockwise", key: "sync_agent" },
+  };
+
+  const config = agentConfig[intent.agent];
+  if (!config) return null;
+
+  // Get localized message
+  const message = t(`common:intent.${config.key}`);
+
+  // Check if confidence is low (below 0.7) - show uncertain prefix
+  const isUncertain = intent.confidence !== undefined && intent.confidence < 0.7;
+
+  // Map emoji names to actual emoji characters (avoiding emoji in code per guidelines)
+  const emojiMap: Record<string, string> = {
+    magnifier: "\uD83D\uDD0D", // magnifying glass
+    memo: "\uD83D\uDCDD", // memo
+    brain: "\uD83E\uDDE0", // brain
+    globe: "\uD83C\uDF10", // globe
+    inbox_tray: "\uD83D\uDCE5", // inbox tray
+    arrows_counterclockwise: "\uD83D\uDD04", // counterclockwise arrows
+  };
+
+  const emoji = emojiMap[config.emoji] || "";
+
+  return (
+    <Box marginLeft={2} marginBottom={1}>
+      <Text color="cyan">
+        {emoji}{" "}
+        {isUncertain && <Text color="yellow">{t("common:intent.uncertain_prefix")}</Text>}
+        {message}
+        {isUncertain && <Text color="yellow">{t("common:intent.uncertain_suffix")}</Text>}
+      </Text>
+    </Box>
   );
 }
 
@@ -182,6 +240,8 @@ export function Chat({
   isFirstSession = false,
   currentTool,
   currentToolStartTime,
+  searchProgress,
+  detectedIntent,
   notesDir,
 }: ChatProps) {
   const [input, setInput] = useState("");
@@ -190,6 +250,7 @@ export function Chat({
   const [tempInput, setTempInput] = useState("");
   const [tabIndex, setTabIndex] = useState(0);
   const [showEmptyWarning, setShowEmptyWarning] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
 
   // Get matching commands for current input
   const slashCommands = getSlashCommands();
@@ -204,10 +265,22 @@ export function Chat({
       return;
     }
 
-    // Esc: Cancel loading
-    if (key.escape && isLoading) {
-      onCancel?.();
+    // ? key: Toggle keyboard shortcuts overlay (only when input is empty)
+    if (inputChar === "?" && input === "") {
+      setShowShortcuts(!showShortcuts);
       return;
+    }
+
+    // Esc: Close shortcuts overlay or cancel loading
+    if (key.escape) {
+      if (showShortcuts) {
+        setShowShortcuts(false);
+        return;
+      }
+      if (isLoading) {
+        onCancel?.();
+        return;
+      }
     }
 
     // Tab: Autocomplete command
@@ -327,12 +400,16 @@ export function Chat({
         {/* Streaming response */}
         {streamingText && <StreamingMessage text={streamingText} />}
 
+        {/* Intent indicator - show detected intent before agent execution */}
+        {detectedIntent && <IntentIndicator intent={detectedIntent} />}
+
         {/* Loading indicator with elapsed time - always shown when loading */}
         {isLoading && (
           <ToolUsageIndicator
             startTime={loadingStartTime}
             currentTool={currentTool}
             currentToolStartTime={currentToolStartTime}
+            searchProgress={searchProgress}
           />
         )}
       </Box>
@@ -384,6 +461,17 @@ export function Chat({
       {notesDir && (
         <Box marginTop={1}>
           <StatusLine notesDir={notesDir} />
+        </Box>
+      )}
+
+      {/* Keyboard shortcuts overlay */}
+      {showShortcuts && (
+        <Box marginTop={1}>
+          <KeyboardShortcutOverlay
+            isVisible={showShortcuts}
+            currentContext={isLoading ? "loading" : "chat"}
+            onClose={() => setShowShortcuts(false)}
+          />
         </Box>
       )}
     </Box>

@@ -1,7 +1,8 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import { Box, Text, useInput } from "ink";
 import TextInput from "ink-text-input";
-import type { GigaMindConfig, NoteDetailLevel } from "../utils/config.js";
+import type { GigaMindConfig, NoteDetailLevel, PathValidationResult } from "../utils/config.js";
+import { DEFAULT_CONFIG, validatePathSync } from "../utils/config.js";
 import type { SupportedLanguage } from "../i18n/index.js";
 import { t } from "../i18n/index.js";
 
@@ -35,7 +36,7 @@ function getLanguageOptions(): Array<{ label: string; value: SupportedLanguage; 
   ];
 }
 
-type MenuItemType = "userName" | "notesDir" | "model" | "feedbackLevel" | "noteDetail" | "language" | "save" | "cancel";
+type MenuItemType = "userName" | "notesDir" | "model" | "feedbackLevel" | "noteDetail" | "language" | "resetDefaults" | "save" | "cancel";
 
 interface MenuItem {
   key: MenuItemType;
@@ -98,6 +99,12 @@ function getMenuItems(): MenuItem[] {
       editable: true,
     },
     {
+      key: "resetDefaults",
+      label: t("common:config_menu.reset_defaults"),
+      getValue: () => "",
+      editable: false,
+    },
+    {
       key: "save",
       label: t("common:config_menu.save_and_exit"),
       getValue: () => "",
@@ -118,7 +125,7 @@ interface ConfigMenuProps {
   onCancel: () => void;
 }
 
-type EditMode = null | "userName" | "notesDir" | "model" | "feedbackLevel" | "noteDetail" | "language";
+type EditMode = null | "userName" | "notesDir" | "model" | "feedbackLevel" | "noteDetail" | "language" | "resetConfirm";
 
 export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -250,6 +257,28 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
       return;
     }
 
+    // Reset confirmation mode
+    if (editMode === "resetConfirm") {
+      if (key.escape || input.toLowerCase() === "n") {
+        setEditMode(null);
+        setMessage({ text: t("common:config_menu.reset_cancelled"), type: "info" });
+        return;
+      }
+      if (input.toLowerCase() === "y") {
+        // Reset to defaults but preserve userName (keep it for personalization)
+        // and notesDir (don't change user's notes location)
+        setTempConfig((prev) => ({
+          ...DEFAULT_CONFIG,
+          userName: prev.userName, // Keep user name
+          notesDir: prev.notesDir, // Keep notes directory
+        }));
+        setEditMode(null);
+        setMessage({ text: t("common:config_menu.reset_success"), type: "success" });
+        return;
+      }
+      return;
+    }
+
     // Normal menu navigation
     const menuItems = getMenuItems();
     if (key.upArrow) {
@@ -305,6 +334,9 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
           languageOptions.findIndex((l) => l.value === tempConfig.language) || 0
         );
         break;
+      case "resetDefaults":
+        setEditMode("resetConfirm");
+        break;
       case "save":
         onSave(tempConfig);
         break;
@@ -314,18 +346,52 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
     }
   }, [tempConfig, onSave, onCancel]);
 
+  // Path validation state for notesDir editing
+  const pathValidation = useMemo((): PathValidationResult | null => {
+    if (editMode !== "notesDir" || !editValue.trim()) {
+      return null;
+    }
+    return validatePathSync(editValue);
+  }, [editMode, editValue]);
+
+  // Get validation error message from i18n
+  const getPathValidationMessage = useCallback((validation: PathValidationResult): { text: string; color: string } => {
+    if (validation.valid) {
+      if (validation.willCreate) {
+        return {
+          text: t("common:path_validation.valid_will_create", { path: validation.expandedPath }),
+          color: "green"
+        };
+      }
+      return {
+        text: t("common:path_validation.valid_exists"),
+        color: "green"
+      };
+    }
+
+    const errorKey = validation.errorCode || "empty";
+    return {
+      text: t(`common:path_validation.${errorKey}`),
+      color: "red"
+    };
+  }, []);
+
   const handleTextSubmit = useCallback((value: string) => {
     if (editMode === "userName") {
       setTempConfig((prev) => ({ ...prev, userName: value.trim() || undefined }));
       setMessage({ text: t("common:config_menu.user_name_changed"), type: "success" });
+      setEditMode(null);
+      setEditValue("");
     } else if (editMode === "notesDir") {
-      if (value.trim()) {
+      const validation = validatePathSync(value);
+      if (validation.valid) {
         setTempConfig((prev) => ({ ...prev, notesDir: value.trim() }));
         setMessage({ text: t("common:config_menu.notes_dir_changed"), type: "success" });
+        setEditMode(null);
+        setEditValue("");
       }
+      // If invalid, don't close edit mode - let user see the error
     }
-    setEditMode(null);
-    setEditValue("");
   }, [editMode]);
 
   // Render model selection
@@ -498,10 +564,76 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
     );
   }
 
-  // Render text input
-  if (editMode === "userName" || editMode === "notesDir") {
-    const label = editMode === "userName" ? t("common:config_menu.user_name") : t("common:config_menu.notes_dir");
-    const placeholder = editMode === "userName" ? t("common:config_menu.name_placeholder") : t("common:config_menu.path_placeholder");
+  // Render reset confirmation
+  if (editMode === "resetConfirm") {
+    return (
+      <Box flexDirection="column" padding={1}>
+        <Box
+          borderStyle="round"
+          borderColor="yellow"
+          paddingX={2}
+          paddingY={1}
+          flexDirection="column"
+        >
+          <Text color="yellow" bold>
+            {t("common:config_menu.reset_confirm_title")}
+          </Text>
+          <Box marginTop={1}>
+            <Text color="white">
+              {t("common:config_menu.reset_confirm_message")}
+            </Text>
+          </Box>
+          <Box marginTop={1}>
+            <Text color="gray" dimColor>
+              {t("common:config_menu.reset_confirm_note")}
+            </Text>
+          </Box>
+        </Box>
+        <Box marginTop={1}>
+          <Text color="gray">
+            {t("common:config_menu.reset_confirm_prompt")}
+          </Text>
+        </Box>
+      </Box>
+    );
+  }
+
+  // Render text input for userName
+  if (editMode === "userName") {
+    return (
+      <Box flexDirection="column" padding={1}>
+        <Box
+          borderStyle="round"
+          borderColor="cyan"
+          paddingX={2}
+          paddingY={1}
+          flexDirection="column"
+        >
+          <Text color="cyan" bold>
+            {t("common:config_menu.user_name")} {t("common:config_menu.edit")}
+          </Text>
+          <Box marginTop={1}>
+            <Text color="cyan">{"> "}</Text>
+            <TextInput
+              value={editValue}
+              onChange={setEditValue}
+              onSubmit={handleTextSubmit}
+              placeholder={t("common:config_menu.name_placeholder")}
+            />
+          </Box>
+        </Box>
+        <Box marginTop={1}>
+          <Text color="gray">
+            {t("common:config_menu.nav_save_cancel")}
+          </Text>
+        </Box>
+      </Box>
+    );
+  }
+
+  // Render text input for notesDir with path validation
+  if (editMode === "notesDir") {
+    const validationMsg = pathValidation ? getPathValidationMessage(pathValidation) : null;
 
     return (
       <Box flexDirection="column" padding={1}>
@@ -513,7 +645,7 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
           flexDirection="column"
         >
           <Text color="cyan" bold>
-            {label} {t("common:config_menu.edit")}
+            {t("common:config_menu.notes_dir")} {t("common:config_menu.edit")}
           </Text>
           <Box marginTop={1}>
             <Text color="cyan">{"> "}</Text>
@@ -521,9 +653,25 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
               value={editValue}
               onChange={setEditValue}
               onSubmit={handleTextSubmit}
-              placeholder={placeholder}
+              placeholder={t("common:config_menu.path_placeholder")}
             />
           </Box>
+          {/* Path validation feedback */}
+          {validationMsg && (
+            <Box marginTop={1}>
+              <Text color={validationMsg.color as "red" | "green"}>
+                {validationMsg.text}
+              </Text>
+            </Box>
+          )}
+          {/* Show expanded path if different from input */}
+          {pathValidation && pathValidation.expandedPath && editValue.trim() !== pathValidation.expandedPath && (
+            <Box marginTop={pathValidation ? 0 : 1}>
+              <Text color="gray" dimColor>
+                {t("common:path_validation.expanded_path", { path: pathValidation.expandedPath })}
+              </Text>
+            </Box>
+          )}
         </Box>
         <Box marginTop={1}>
           <Text color="gray">
@@ -551,7 +699,7 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
         <Box marginTop={1} flexDirection="column">
           {menuItems.map((item, idx) => {
             const isSelected = idx === selectedIndex;
-            const isSeparator = item.key === "save";
+            const isSeparator = item.key === "resetDefaults";
             const value = item.getValue(tempConfig);
 
             return (

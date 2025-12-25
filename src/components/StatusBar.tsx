@@ -64,30 +64,30 @@ export function StatusBar({
         </Text>
         <Box gap={2}>
           <Text>
-            <Text color="blue">{t("common:status.notes")}</Text>{" "}
+            <Text color="blue">◆ {t("common:status.notes")}</Text>{" "}
             <Text color="white">{noteCount}</Text>
           </Text>
           <Text>
-            <Text color="green">{t("common:status.connections")}</Text>{" "}
+            <Text color="green">◇ {t("common:status.connections")}</Text>{" "}
             <Text color="white">{connectionCount}</Text>
           </Text>
           {/* 확장 통계: Dangling Links */}
           {showExtendedStats && danglingCount !== undefined && danglingCount > 0 && (
             <Text>
-              <Text color="yellow">{t("common:status.dangling")}</Text>{" "}
+              <Text color="yellow">⚠ {t("common:status.dangling")}</Text>{" "}
               <Text color="yellow">{danglingCount}</Text>
             </Text>
           )}
           {/* 확장 통계: Orphan Notes */}
           {showExtendedStats && orphanCount !== undefined && orphanCount > 0 && (
             <Text>
-              <Text color="gray">{t("common:status.orphan")}</Text>{" "}
+              <Text color="gray">○ {t("common:status.orphan")}</Text>{" "}
               <Text color="gray">{orphanCount}</Text>
             </Text>
           )}
           {lastSync && (
             <Text>
-              <Text color="yellow">{t("common:status.sync")}</Text>{" "}
+              <Text color="yellow">↻ {t("common:status.sync")}</Text>{" "}
               <Text color="gray">{formatRelativeTime(lastSync)}</Text>
             </Text>
           )}

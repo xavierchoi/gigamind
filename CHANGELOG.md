@@ -5,6 +5,119 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2025-12-25
+
+### Added
+
+#### UX Audit & 10 Major UX Improvements
+
+1. **ConfigMenu Reset to Defaults**
+   - Added "Reset to Defaults" option in ConfigMenu with confirmation dialog
+   - Restores all settings to their initial values
+   - User-friendly confirmation flow to prevent accidental resets
+
+2. **Progressive Graph Loading**
+   - Graph visualization now loads 100 hub nodes initially for better performance
+   - Added "Load More" option to load additional nodes
+   - Added "Load Full Graph" option to load all nodes at once
+   - Significant performance improvement for large vaults with 1000+ nodes
+
+3. **Session Management Commands**
+   - New `/session load <id>` command: Load a specific session by ID
+   - New `/session search <query>` command: Search sessions by content or date
+   - New `/session delete <id>` command: Delete a specific session with confirmation
+   - Complete session lifecycle management in command line
+
+4. **Intent Detection Display**
+   - AI now shows detected intent before execution with emoji indicators:
+     - 🔍 Searching (search intent detected)
+     - 📝 Writing note (note creation intent)
+     - 🧠 Clone mode (clone/digital twin intent)
+     - 💭 Analyzing (analysis intent)
+     - 🔗 Linking (connection/linking intent)
+   - Improves transparency of AI decision-making process
+   - Better user understanding of what the system is about to do
+
+5. **Keyboard Shortcut Overlay**
+   - Press `?` key to display all available keyboard shortcuts
+   - Shows shortcut reference guide organized by function
+   - Includes: arrow keys, enter, escape, tab, slash command entry, and more
+   - Helps both new and experienced users discover keyboard efficiency features
+
+6. **Search Progress Display**
+   - Real-time progress indicator during search operations
+   - Shows: "15 files scanned, 3 matches found" format
+   - Updates every 100ms for responsive feedback
+   - Users can see search is progressing even with large vaults
+
+7. **Minimap Click Navigation**
+   - Graph minimap now supports clicking to navigate
+   - Click any location on the minimap to jump to that area in the main graph
+   - Faster navigation for large knowledge bases
+   - Intuitive interaction pattern for graph exploration
+
+#### Onboarding i18n Migration
+
+- **70+ Hardcoded Korean Strings Migrated**: All hardcoded Korean text in onboarding flow converted to i18n system
+  - Strings moved from hardcoded text to `src/i18n/locales/ko/onboarding.json`
+  - Corresponding English translations added to `src/i18n/locales/en/onboarding.json`
+  - Enables complete English support for the onboarding experience
+  - Users can now complete setup in either English or Korean
+
+#### Path Validation
+
+- **Real-time Notes Directory Validation** (`src/components/ConfigMenu.tsx`):
+  - Validates notes directory path existence and accessibility
+  - Shows helpful error messages:
+    - "Directory does not exist" with suggestion to create it
+    - "Not a directory" if path points to a file
+    - "Permission denied" for inaccessible directories
+  - Green checkmark indicator when path is valid
+  - Prevents invalid configuration from being saved
+
+#### Accessibility Enhancements
+
+- **Non-color Status Indicators**: Added colorblind-friendly status indicators using symbols:
+  - ◆ (filled diamond) for active/connected states
+  - ◇ (empty diamond) for inactive states
+  - ⚠ (warning triangle) for error/warning states
+  - ○ (circle) for neutral states
+  - Status information now conveyed through both color AND symbol
+  - Meets WCAG accessibility standards for colorblind users
+
+### Fixed
+
+- **API Key Test Failures**: Fixed mocking of keytar module in unit tests
+  - Properly mocked keytar when testing API key functionality
+  - All credential storage tests now pass
+  - Resolved "Cannot find module 'keytar'" errors in test suite
+
+- **Test Config Fixture Issue**: Fixed test fixtures missing `language` property
+  - Added `language: 'ko'` to all GigaMindConfig test fixtures
+  - All 242 tests now passing without config-related failures
+  - Consistent test data structure across all test suites
+
+### Technical
+
+- **Full Test Suite Passing**: All 242 tests passing with zero failures
+- **TypeScript Strict Checking**: Complete type checking passes without errors
+- **Build Verification**: Full build process verifies and completes successfully
+- **Accessibility Compliance**: WCAG AA standards met for colorblind accessibility
+
+### Changed
+
+- **Onboarding Experience**: Now fully internationalized with Korean and English support
+- **Search Feedback**: Enhanced with real-time progress information
+- **Graph Performance**: Optimized loading strategy with progressive rendering
+
+### Enhanced
+
+- **User Experience**: 10 major improvements addressing usability pain points
+- **Accessibility**: Symbol-based indicators complement color-based information
+- **Performance**: Graph loading optimized for large vaults and knowledge bases
+
+---
+
 ## [0.2.7] - 2025-12-24
 
 ### Fixed

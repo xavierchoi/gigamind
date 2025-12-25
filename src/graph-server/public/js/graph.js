@@ -26,6 +26,17 @@ const state = {
     orphan: true,
     dangling: true,
   },
+  minimapBounds: null, // Stores minimap coordinate mapping info
+  // Progressive loading state
+  loading: {
+    isLoading: false,
+    loadedNodeIds: new Set(),
+    currentOffset: 0,
+    pageSize: 100,
+    totalNodes: 0,
+    hasMore: true,
+    isFullGraphLoaded: false,
+  },
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -67,20 +78,44 @@ const CONFIG = {
 
 async function initGraph() {
   try {
-    const response = await fetch('/api/graph');
+    // Fetch initial page with most connected nodes (hubs) first
+    const response = await fetch(`/api/graph?limit=${state.loading.pageSize}&sort=connections`);
     if (!response.ok) throw new Error('Failed to fetch graph data');
 
     const data = await response.json();
-    state.fullGraphData = data;
+
+    // Initialize fullGraphData with first page
+    state.fullGraphData = {
+      nodes: [...data.nodes],
+      links: [...data.links],
+      stats: data.stats,
+    };
     state.nodes = [...data.nodes];
     state.links = [...data.links];
     state.stats = data.stats;
 
+    // Update loading state from pagination info
+    if (data.pagination) {
+      state.loading.currentOffset = data.pagination.offset + data.pagination.limit;
+      state.loading.totalNodes = data.pagination.total;
+      state.loading.hasMore = data.pagination.hasMore;
+
+      // Track loaded node IDs
+      data.nodes.forEach(n => state.loading.loadedNodeIds.add(n.id));
+    } else {
+      // No pagination = full graph returned
+      state.loading.hasMore = false;
+      state.loading.isFullGraphLoaded = true;
+      state.loading.totalNodes = data.nodes.length;
+    }
+
     updateStats(data.stats);
+    updateLoadingProgress();
     initSVG();
     initSimulation();
     renderGraph();
     initMinimap();
+    initLoadMoreUI();
 
     // Staggered reveal
     setTimeout(() => {
@@ -89,6 +124,220 @@ async function initGraph() {
   } catch (error) {
     console.error('Failed to initialize graph:', error);
     document.querySelector('.loading__text').textContent = 'Failed to load graph data';
+  }
+}
+
+/**
+ * Load more nodes progressively
+ */
+async function loadMoreNodes() {
+  if (state.loading.isLoading || !state.loading.hasMore || state.loading.isFullGraphLoaded) {
+    return;
+  }
+
+  state.loading.isLoading = true;
+  showLoadingIndicator(true);
+
+  try {
+    const response = await fetch(
+      `/api/graph?limit=${state.loading.pageSize}&offset=${state.loading.currentOffset}&sort=connections`
+    );
+    if (!response.ok) throw new Error('Failed to fetch more nodes');
+
+    const data = await response.json();
+
+    // Filter out already loaded nodes
+    const newNodes = data.nodes.filter(n => !state.loading.loadedNodeIds.has(n.id));
+
+    // Add new nodes to tracking
+    newNodes.forEach(n => state.loading.loadedNodeIds.add(n.id));
+
+    // Merge new nodes into fullGraphData
+    state.fullGraphData.nodes.push(...newNodes);
+
+    // Add links where both source and target are now loaded
+    const allLoadedIds = state.loading.loadedNodeIds;
+    const newLinks = data.links.filter(l => {
+      const sourceId = l.source.id || l.source;
+      const targetId = l.target.id || l.target;
+      return allLoadedIds.has(sourceId) && allLoadedIds.has(targetId);
+    });
+
+    // Filter out duplicate links
+    const existingLinkKeys = new Set(
+      state.fullGraphData.links.map(l => `${l.source.id || l.source}-${l.target.id || l.target}`)
+    );
+    const uniqueNewLinks = newLinks.filter(l => {
+      const key = `${l.source.id || l.source}-${l.target.id || l.target}`;
+      return !existingLinkKeys.has(key);
+    });
+
+    state.fullGraphData.links.push(...uniqueNewLinks);
+
+    // Update pagination state
+    if (data.pagination) {
+      state.loading.currentOffset = data.pagination.offset + data.pagination.limit;
+      state.loading.hasMore = data.pagination.hasMore;
+    } else {
+      state.loading.hasMore = false;
+    }
+
+    // Apply filters and update display
+    applyFilters();
+
+    // Re-bind simulation data
+    state.simulation.nodes(state.nodes);
+    state.simulation.force('link').links(state.links);
+    state.simulation.alpha(0.2).restart();
+
+    renderGraph();
+    updateLoadingProgress();
+    updateMinimap();
+
+  } catch (error) {
+    console.error('Failed to load more nodes:', error);
+  } finally {
+    state.loading.isLoading = false;
+    showLoadingIndicator(false);
+  }
+}
+
+/**
+ * Load the complete graph at once
+ */
+async function loadFullGraph() {
+  if (state.loading.isLoading || state.loading.isFullGraphLoaded) {
+    return;
+  }
+
+  state.loading.isLoading = true;
+  showLoadingIndicator(true, 'Loading full graph...');
+
+  try {
+    const response = await fetch('/api/graph?all=true');
+    if (!response.ok) throw new Error('Failed to fetch full graph');
+
+    const data = await response.json();
+
+    // Replace fullGraphData with complete data
+    state.fullGraphData = {
+      nodes: [...data.nodes],
+      links: [...data.links],
+      stats: data.stats,
+    };
+
+    // Update loading state
+    state.loading.isFullGraphLoaded = true;
+    state.loading.hasMore = false;
+    state.loading.totalNodes = data.nodes.length;
+    state.loading.loadedNodeIds = new Set(data.nodes.map(n => n.id));
+
+    // Apply filters and update display
+    applyFilters();
+
+    // Re-bind simulation data
+    state.simulation.nodes(state.nodes);
+    state.simulation.force('link').links(state.links);
+    state.simulation.alpha(0.3).restart();
+
+    renderGraph();
+    updateLoadingProgress();
+    updateMinimap();
+    updateLoadMoreUI();
+
+  } catch (error) {
+    console.error('Failed to load full graph:', error);
+  } finally {
+    state.loading.isLoading = false;
+    showLoadingIndicator(false);
+  }
+}
+
+/**
+ * Show/hide the loading indicator
+ */
+function showLoadingIndicator(show, message = 'Loading more nodes...') {
+  let indicator = document.getElementById('progressive-loading-indicator');
+
+  if (show) {
+    if (!indicator) {
+      indicator = document.createElement('div');
+      indicator.id = 'progressive-loading-indicator';
+      indicator.className = 'progressive-loading';
+      indicator.innerHTML = `
+        <div class="progressive-loading__spinner"></div>
+        <span class="progressive-loading__text">${message}</span>
+      `;
+      document.body.appendChild(indicator);
+    } else {
+      indicator.querySelector('.progressive-loading__text').textContent = message;
+    }
+    indicator.hidden = false;
+  } else if (indicator) {
+    indicator.hidden = true;
+  }
+}
+
+/**
+ * Update the loading progress display in header stats
+ */
+function updateLoadingProgress() {
+  const loadedCount = state.loading.loadedNodeIds.size;
+  const totalCount = state.loading.totalNodes;
+
+  // Update the nodes stat to show "X of Y" format
+  const statNotesEl = document.getElementById('stat-notes');
+  if (statNotesEl && totalCount > 0 && !state.loading.isFullGraphLoaded) {
+    statNotesEl.textContent = loadedCount;
+
+    // Add or update the "of total" indicator
+    let ofTotalEl = document.getElementById('stat-notes-total');
+    if (!ofTotalEl) {
+      ofTotalEl = document.createElement('span');
+      ofTotalEl.id = 'stat-notes-total';
+      ofTotalEl.className = 'header__stat-total';
+      statNotesEl.parentNode.appendChild(ofTotalEl);
+    }
+    ofTotalEl.textContent = ` / ${totalCount}`;
+    ofTotalEl.hidden = false;
+  } else if (state.loading.isFullGraphLoaded) {
+    // Hide the "of total" when full graph is loaded
+    const ofTotalEl = document.getElementById('stat-notes-total');
+    if (ofTotalEl) {
+      ofTotalEl.hidden = true;
+    }
+  }
+}
+
+/**
+ * Initialize the Load More UI
+ */
+function initLoadMoreUI() {
+  updateLoadMoreUI();
+}
+
+/**
+ * Update the Load More button state
+ */
+function updateLoadMoreUI() {
+  const loadMoreBar = document.getElementById('load-more-bar');
+  if (!loadMoreBar) return;
+
+  const loadMoreBtn = document.getElementById('load-more-btn');
+  const loadAllBtn = document.getElementById('load-all-btn');
+  const progressText = document.getElementById('load-progress-text');
+
+  if (state.loading.isFullGraphLoaded || !state.loading.hasMore) {
+    loadMoreBar.hidden = true;
+  } else {
+    loadMoreBar.hidden = false;
+
+    const loaded = state.loading.loadedNodeIds.size;
+    const total = state.loading.totalNodes;
+    progressText.textContent = `Showing ${loaded} of ${total} nodes`;
+
+    loadMoreBtn.disabled = state.loading.isLoading;
+    loadAllBtn.disabled = state.loading.isLoading;
   }
 }
 
@@ -147,7 +396,8 @@ function initSVG() {
   state.g.append('g').attr('class', 'links-group');
   state.g.append('g').attr('class', 'nodes-group');
 
-  // Zoom behavior
+  // Zoom behavior with auto-load on zoom out
+  let lastZoomLevel = 1;
   state.zoom = d3.zoom()
     .scaleExtent([CONFIG.zoom.min, CONFIG.zoom.max])
     .on('zoom', (event) => {
@@ -158,6 +408,14 @@ function initSVG() {
       svg.classed('zoom-high', event.transform.k > CONFIG.zoom.highThreshold);
       updateZoomDisplay();
       updateMinimap();
+
+      // Auto-load more nodes when zooming out significantly
+      if (event.transform.k < lastZoomLevel * 0.6 && event.transform.k < 0.5) {
+        if (state.loading.hasMore && !state.loading.isLoading && !state.loading.isFullGraphLoaded) {
+          loadMoreNodes();
+        }
+      }
+      lastZoomLevel = event.transform.k;
     });
 
   svg.call(state.zoom);
@@ -343,6 +601,19 @@ function updateMinimap() {
   const offsetX = (width - graphWidth * scale) / 2 - minX * scale;
   const offsetY = (height - graphHeight * scale) / 2 - minY * scale;
 
+  // Store bounds for click navigation
+  state.minimapBounds = {
+    scale,
+    offsetX,
+    offsetY,
+    minX,
+    minY,
+    graphWidth,
+    graphHeight,
+    canvasWidth: width,
+    canvasHeight: height,
+  };
+
   // Draw links
   ctx.strokeStyle = 'rgba(124, 156, 188, 0.15)';
   ctx.lineWidth = 0.5;
@@ -405,6 +676,38 @@ function updateMinimapViewport(scale, offsetX, offsetY, minX, minY, graphWidth, 
   viewport.style.top = `${Math.max(28, vpTop + 28)}px`; // Account for header
   viewport.style.width = `${Math.min(width, vpWidth)}px`;
   viewport.style.height = `${Math.min(height, vpHeight)}px`;
+}
+
+/**
+ * Pan the graph view to center on the clicked minimap position
+ * @param {number} minimapX - X coordinate relative to minimap canvas
+ * @param {number} minimapY - Y coordinate relative to minimap canvas
+ */
+function panToMinimapPosition(minimapX, minimapY) {
+  if (!state.minimapBounds || !state.svg || !state.zoom) return;
+
+  const bounds = state.minimapBounds;
+
+  // Convert minimap coordinates to graph coordinates
+  // minimapX = graphX * scale + offsetX  =>  graphX = (minimapX - offsetX) / scale
+  const graphX = (minimapX - bounds.offsetX) / bounds.scale;
+  const graphY = (minimapY - bounds.offsetY) / bounds.scale;
+
+  // Get current zoom level to maintain it
+  const currentScale = state.currentZoomLevel || 0.8;
+
+  // Calculate the transform to center the clicked point
+  const windowWidth = window.innerWidth;
+  const windowHeight = window.innerHeight;
+
+  const newTransform = d3.zoomIdentity
+    .translate(windowWidth / 2 - graphX * currentScale, windowHeight / 2 - graphY * currentScale)
+    .scale(currentScale);
+
+  // Animate the pan
+  state.svg.transition()
+    .duration(CONFIG.animation.duration)
+    .call(state.zoom.transform, newTransform);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -825,8 +1128,18 @@ window.graphAPI = {
   hideNodeDetails,
   toggleLabels,
   toggleFilter,
+  panToMinimapPosition,
+  loadMoreNodes,
+  loadFullGraph,
   getFilters: () => state.filters,
   getNodes: () => state.fullGraphData?.nodes || [],
+  getLoadingState: () => ({
+    isLoading: state.loading.isLoading,
+    loadedCount: state.loading.loadedNodeIds.size,
+    totalCount: state.loading.totalNodes,
+    hasMore: state.loading.hasMore,
+    isFullGraphLoaded: state.loading.isFullGraphLoaded,
+  }),
 };
 
 // Initialize on load

@@ -219,6 +219,27 @@
     </button>
   </div>
 
+  <!-- Load More bar for progressive loading -->
+  <div class="load-more-bar" id="load-more-bar" hidden>
+    <span class="load-more-bar__progress" id="load-progress-text">Showing 0 of 0 nodes</span>
+    <div class="load-more-bar__actions">
+      <button class="load-more-bar__btn load-more-bar__btn--secondary" id="load-more-btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+        Load More
+      </button>
+      <button class="load-more-bar__btn load-more-bar__btn--primary" id="load-all-btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" y1="8" x2="12" y2="16"/>
+          <line x1="8" y1="12" x2="16" y2="12"/>
+        </svg>
+        Load Full Graph
+      </button>
+    </div>
+  </div>
+
   <!-- Enhanced tooltip -->
   <div class="tooltip" id="tooltip" role="tooltip" hidden>
     <div class="tooltip__title" id="tooltip-title"></div>

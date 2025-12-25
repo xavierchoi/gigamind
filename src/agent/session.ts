@@ -802,6 +802,79 @@ export class SessionManager {
     return this.index;
   }
 
+  // ==================== Search ====================
+
+  /**
+   * Search through session messages for a given query
+   * Returns matches with session ID, message preview, and timestamp
+   */
+  async searchSessions(query: string, limit: number = 20): Promise<Array<{
+    sessionId: string;
+    messagePreview: string;
+    messageRole: 'user' | 'assistant';
+    timestamp: string;
+    matchContext: string;
+  }>> {
+    if (!query || query.trim().length === 0) {
+      return [];
+    }
+
+    const searchTerms = query.toLowerCase().split(/\s+/).filter(t => t.length > 0);
+    const results: Array<{
+      sessionId: string;
+      messagePreview: string;
+      messageRole: 'user' | 'assistant';
+      timestamp: string;
+      matchContext: string;
+    }> = [];
+
+    // Get all session IDs from index, sorted by most recent
+    if (!this.index) {
+      await this.loadIndex();
+    }
+
+    const sessionIds = Object.keys(this.index!.sessions).sort().reverse();
+
+    for (const sessionId of sessionIds) {
+      if (results.length >= limit) break;
+
+      try {
+        const session = await this.loadSession(sessionId);
+        if (!session) continue;
+
+        for (const message of session.messages) {
+          if (results.length >= limit) break;
+
+          const contentLower = message.content.toLowerCase();
+          const matchesAllTerms = searchTerms.every(term => contentLower.includes(term));
+
+          if (matchesAllTerms) {
+            // Find the context around the first match
+            const firstTermIndex = contentLower.indexOf(searchTerms[0]);
+            const contextStart = Math.max(0, firstTermIndex - 30);
+            const contextEnd = Math.min(message.content.length, firstTermIndex + searchTerms[0].length + 70);
+            let matchContext = message.content.substring(contextStart, contextEnd);
+
+            if (contextStart > 0) matchContext = '...' + matchContext;
+            if (contextEnd < message.content.length) matchContext = matchContext + '...';
+
+            results.push({
+              sessionId,
+              messagePreview: message.content.substring(0, 100) + (message.content.length > 100 ? '...' : ''),
+              messageRole: message.role as 'user' | 'assistant',
+              timestamp: session.updatedAt,
+              matchContext: matchContext.trim(),
+            });
+          }
+        }
+      } catch {
+        // Skip sessions that fail to load
+      }
+    }
+
+    return results;
+  }
+
   async getIndexStats(): Promise<{
     totalSessions: number;
     byMonth: Record<string, number>;

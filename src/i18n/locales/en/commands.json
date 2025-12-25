@@ -64,5 +64,19 @@
   },
   "ambiguous_command": {
     "message": "Multiple commands match /{{command}}: {{matches}}\nPlease be more specific."
+  },
+  "session": {
+    "description": "Session management (list, export, load, search, delete)",
+    "list_description": "View recent sessions",
+    "export_description": "Export current session to markdown",
+    "load_description": "Load and resume a session",
+    "search_description": "Search through session messages",
+    "delete_description": "Delete a session",
+    "usage_title": "/session command usage:",
+    "usage_list": "/session list - View recent sessions",
+    "usage_export": "/session export - Export current session to markdown",
+    "usage_load": "/session load <id> - Load and resume a session",
+    "usage_search": "/session search <query> - Search through session messages",
+    "usage_delete": "/session delete <id> - Delete a session"
   }
 }

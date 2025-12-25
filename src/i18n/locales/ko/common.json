@@ -58,7 +58,16 @@
     "enter_send": "Enter: 전송",
     "arrows_history": "방향키 위/아래: 입력 히스토리",
     "esc_cancel": "Esc: 취소",
-    "shortcuts_footer": "Ctrl+C: 종료 | Enter: 전송 | ↑↓: 히스토리"
+    "shortcuts_footer": "Ctrl+C: 종료 | Enter: 전송 | ↑↓: 히스토리 | ?: 단축키",
+    "overlay_title": "키보드 단축키",
+    "overlay_close_hint": "? 또는 Esc를 눌러 닫기",
+    "shortcut_exit": "앱 종료",
+    "shortcut_show_shortcuts": "단축키 보기",
+    "shortcut_send_message": "메시지 전송",
+    "shortcut_input_history": "입력 히스토리",
+    "shortcut_autocomplete": "명령어 자동완성",
+    "shortcut_example_prompts": "예시 프롬프트 선택",
+    "shortcut_cancel": "현재 작업 취소"
   },
   "session": {
     "previous_session_found": "이전 세션이 발견되었습니다",
@@ -74,7 +83,21 @@
     "recent_sessions_list": "최근 세션 목록",
     "session_exported": "세션이 마크다운으로 저장되었습니다.\n\n저장 위치: {{path}}",
     "session_export_failed": "세션 내보내기 실패: {{error}}",
-    "no_messages": "(메시지 없음)"
+    "no_messages": "(메시지 없음)",
+    "load_no_id": "세션 ID를 입력해주세요.\n사용법: /session load <세션_ID>",
+    "session_not_found": "세션을 찾을 수 없습니다: {{id}}",
+    "session_loaded": "세션을 불러왔습니다! ({{count}}개 메시지)\n세션 ID: {{id}}",
+    "search_no_query": "검색어를 입력해주세요.\n사용법: /session search <검색어>",
+    "search_no_results": "\"{{query}}\"에 대한 검색 결과가 없습니다.",
+    "search_results": "\"{{query}}\" 검색 결과 ({{count}}개 매치)",
+    "role_user": "사용자",
+    "role_assistant": "어시스턴트",
+    "load_hint": "`/session load <세션_ID>`로 세션을 불러올 수 있습니다.",
+    "delete_no_id": "세션 ID를 입력해주세요.\n사용법: /session delete <세션_ID>",
+    "delete_confirm": "정말로 이 세션을 삭제하시겠습니까?\n\n- **세션 ID**: {{id}}\n- **생성 일시**: {{date}}\n- **메시지 수**: {{count}}개\n- **미리보기**: {{preview}}\n\n삭제하려면 다음을 입력하세요: `/session delete {{id}} confirm`",
+    "delete_current_session_error": "현재 활성 세션은 삭제할 수 없습니다.",
+    "session_deleted": "세션이 삭제되었습니다: {{id}}",
+    "delete_failed": "세션 삭제 실패: {{id}}"
   },
   "example_prompts": {
     "title": "이렇게 시작해보세요:",
@@ -108,8 +131,23 @@
     "analyzing": "분석 중",
     "delegating": "위임 중"
   },
+  "search_progress": {
+    "files_scanned": "{{count}}개 파일 스캔",
+    "files_matched": "{{count}}개 매치",
+    "files_scanned_matched": "{{scanned}}개 파일 스캔, {{matched}}개 매치"
+  },
   "splash": {
     "waking_up": "두뇌를 깨우는 중..."
+  },
+  "intent": {
+    "search_agent": "노트 검색 중...",
+    "note_agent": "노트 작성 중...",
+    "clone_agent": "클론으로 답변 중...",
+    "research_agent": "웹 리서치 중...",
+    "import_agent": "노트 가져오기 중...",
+    "sync_agent": "동기화 중...",
+    "uncertain_prefix": "아마도 ",
+    "uncertain_suffix": " 같아요"
   },
   "config_menu": {
     "title": "설정",
@@ -152,6 +190,24 @@
     "lang_korean": "한국어 (Korean)",
     "lang_english": "English",
     "lang_korean_desc": "인터페이스를 한국어로 표시합니다",
-    "lang_english_desc": "Display interface in English"
+    "lang_english_desc": "Display interface in English",
+    "reset_defaults": "기본값으로 초기화",
+    "reset_confirm_title": "설정 초기화",
+    "reset_confirm_message": "모든 설정을 기본값으로 되돌리시겠습니까?",
+    "reset_confirm_note": "사용자 이름과 노트 디렉토리는 유지됩니다.",
+    "reset_confirm_prompt": "Y: 확인 | N/Esc: 취소",
+    "reset_success": "설정이 기본값으로 초기화되었습니다",
+    "reset_cancelled": "초기화가 취소되었습니다"
+  },
+  "path_validation": {
+    "empty": "경로를 입력해주세요",
+    "is_file": "파일 경로입니다. 디렉토리를 입력해주세요",
+    "not_writable": "디렉토리에 쓰기 권한이 없습니다",
+    "parent_not_exists": "상위 디렉토리가 존재하지 않습니다",
+    "parent_not_writable": "디렉토리를 생성할 수 없습니다 (상위 디렉토리 쓰기 권한 없음)",
+    "valid_exists": "디렉토리가 존재합니다",
+    "valid_will_create": "생성될 경로: {{path}}",
+    "expanded_path": "경로: {{path}}",
+    "validating": "경로 확인 중..."
   }
 }

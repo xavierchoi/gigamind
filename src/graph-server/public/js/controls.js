@@ -25,6 +25,8 @@ const elements = {
   minimap: document.getElementById('minimap'),
   minimapToggle: document.getElementById('minimap-toggle'),
   filterButtons: document.querySelectorAll('.filter-btn'),
+  loadMoreBtn: document.getElementById('load-more-btn'),
+  loadAllBtn: document.getElementById('load-all-btn'),
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -68,11 +70,35 @@ elements.closeSidebar.addEventListener('click', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Minimap Toggle
+// Progressive Loading Controls
+// ═══════════════════════════════════════════════════════════════════════════
+
+elements.loadMoreBtn?.addEventListener('click', () => {
+  window.graphAPI?.loadMoreNodes();
+});
+
+elements.loadAllBtn?.addEventListener('click', () => {
+  window.graphAPI?.loadFullGraph();
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Minimap Toggle & Navigation
 // ═══════════════════════════════════════════════════════════════════════════
 
 elements.minimapToggle?.addEventListener('click', () => {
   elements.minimap.classList.toggle('minimap--collapsed');
+});
+
+// Minimap click-to-navigate handler
+const minimapCanvas = document.getElementById('minimap-canvas');
+minimapCanvas?.addEventListener('click', (e) => {
+  const rect = minimapCanvas.getBoundingClientRect();
+  // Calculate click position relative to canvas
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+
+  // Pan the graph to the clicked position
+  window.graphAPI?.panToMinimapPosition(x, y);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

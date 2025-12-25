@@ -8,6 +8,7 @@ export interface ToolUsageIndicatorProps {
   currentTool?: string | null;  // currently running tool
   currentToolStartTime?: number | null;
   statusMessage?: string;       // streaming status message (e.g., "노트를 검색하는 중...")
+  searchProgress?: { filesFound?: number; filesMatched?: number } | null;  // search progress info
 }
 
 export function ToolUsageIndicator({
@@ -15,6 +16,7 @@ export function ToolUsageIndicator({
   currentTool,
   currentToolStartTime,
   statusMessage,
+  searchProgress,
 }: ToolUsageIndicatorProps) {
   const [elapsed, setElapsed] = useState(0);
   const [currentToolElapsed, setCurrentToolElapsed] = useState(0);
@@ -62,6 +64,28 @@ export function ToolUsageIndicator({
     return t("common:thinking.thinking");
   };
 
+  // Build search progress display text
+  const getProgressText = (): string | null => {
+    if (!searchProgress) return null;
+
+    const { filesFound, filesMatched } = searchProgress;
+
+    if (filesFound !== undefined && filesMatched !== undefined) {
+      return t("common:search_progress.files_scanned_matched", {
+        scanned: filesFound,
+        matched: filesMatched
+      });
+    } else if (filesFound !== undefined) {
+      return t("common:search_progress.files_scanned", { count: filesFound });
+    } else if (filesMatched !== undefined) {
+      return t("common:search_progress.files_matched", { count: filesMatched });
+    }
+
+    return null;
+  };
+
+  const progressText = getProgressText();
+
   return (
     <Box flexDirection="column" marginY={1}>
       {/* Tool indicator line - Claude Code style with filled circle */}
@@ -71,6 +95,10 @@ export function ToolUsageIndicator({
             <Text color="cyan" bold>{"● "}</Text>
             <Text color="white" bold>{currentTool}</Text>
             <Text color="gray">{` (${formatTime(currentToolElapsed)})`}</Text>
+            {/* Show progress info next to tool name */}
+            {progressText && (
+              <Text color="green">{` - ${progressText}`}</Text>
+            )}
           </Box>
         </Box>
       )}
@@ -82,6 +110,10 @@ export function ToolUsageIndicator({
         </Text>
         <Text color="gray">{` ${getStatusText()} `}</Text>
         <Text color="white">{`(${formatTime(elapsed)})`}</Text>
+        {/* Show progress info in status line when no tool is showing */}
+        {!currentTool && progressText && (
+          <Text color="green">{` - ${progressText}`}</Text>
+        )}
         <Text color="gray" dimColor>{` | ${t("common:cancel_hint.esc_to_cancel")}`}</Text>
       </Box>
     </Box>

@@ -256,14 +256,26 @@ function getFocusedGraph(
 
 /**
  * Apply pagination to graph nodes and filter links accordingly
+ * @param fullGraph The complete graph data
+ * @param offset Pagination offset
+ * @param limit Maximum nodes to return
+ * @param sort Sort order: 'connections' (most connected first) or 'default'
  */
 function paginateGraph(
   fullGraph: GraphAPIResponse,
   offset: number,
-  limit: number
+  limit: number,
+  sort: 'connections' | 'default' = 'default'
 ): GraphAPIResponse {
   const totalNodes = fullGraph.nodes.length;
-  const paginatedNodes = fullGraph.nodes.slice(offset, offset + limit);
+
+  // Sort nodes if requested
+  let sortedNodes = [...fullGraph.nodes];
+  if (sort === 'connections') {
+    sortedNodes.sort((a, b) => b.connectionCount - a.connectionCount);
+  }
+
+  const paginatedNodes = sortedNodes.slice(offset, offset + limit);
   const paginatedNodeIds = new Set(paginatedNodes.map((n) => n.id));
 
   // Only include links where both nodes are in the paginated set
@@ -316,11 +328,15 @@ export function createGraphRouter(notesDir: string): Router {
         center,      // Starting node for focused view
         limit,       // Max nodes to return
         offset,      // Pagination offset
+        sort,        // Sort order: 'connections' or 'default'
+        all,         // If 'true', return full graph without pagination
       } = req.query;
 
       const parsedDepth = depth ? parseInt(depth as string, 10) : 2;
       const parsedLimit = limit ? parseInt(limit as string, 10) : 100;
       const parsedOffset = offset ? parseInt(offset as string, 10) : 0;
+      const sortOrder = sort === 'connections' ? 'connections' : 'default';
+      const returnAll = all === 'true';
 
       const stats = await analyzeNoteGraph(notesDir, { includeContext: false });
       const fullGraph = transformGraphStats(stats, notesDir);
@@ -332,8 +348,13 @@ export function createGraphRouter(notesDir: string): Router {
         return res.json(subgraph);
       }
 
-      // Otherwise return full graph with pagination
-      const paginatedGraph = paginateGraph(fullGraph, parsedOffset, parsedLimit);
+      // If all=true, return full graph without pagination
+      if (returnAll) {
+        return res.json(fullGraph);
+      }
+
+      // Otherwise return graph with pagination
+      const paginatedGraph = paginateGraph(fullGraph, parsedOffset, parsedLimit, sortOrder);
       res.json(paginatedGraph);
     } catch (error) {
       console.error("Error fetching graph data:", error);

@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import fsSync from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import yaml from "yaml";
@@ -59,7 +60,7 @@ export interface GigaMindConfig {
   language: SupportedLanguage;
 }
 
-const DEFAULT_CONFIG: GigaMindConfig = {
+export const DEFAULT_CONFIG: GigaMindConfig = {
   notesDir: "~/gigamind-notes",
   userName: undefined,
   useCases: [],
@@ -320,5 +321,239 @@ export async function getExtendedNoteStats(
       err
     );
     return { noteCount: 0, connectionCount: 0, danglingCount: 0, orphanCount: 0 };
+  }
+}
+
+/**
+ * Result of path validation.
+ */
+export interface PathValidationResult {
+  /** Whether the path is valid */
+  valid: boolean;
+  /** The expanded absolute path */
+  expandedPath: string;
+  /** Error code for i18n lookup */
+  errorCode?: "empty" | "is_file" | "not_writable" | "parent_not_exists" | "parent_not_writable";
+  /** Whether the path exists */
+  exists: boolean;
+  /** Whether the path will be created */
+  willCreate: boolean;
+}
+
+/**
+ * Validate a notes directory path.
+ *
+ * Checks:
+ * 1. Path is not empty
+ * 2. If path exists, it must be a directory (not a file)
+ * 3. If path exists, it must be writable
+ * 4. If path doesn't exist, parent directory must exist and be writable
+ *
+ * @param inputPath - The path to validate (supports ~ and %USERPROFILE%)
+ * @returns Validation result with expanded path and error info
+ *
+ * @example
+ * const result = await validatePath("~/my-notes");
+ * if (result.valid) {
+ *   console.log(`Will use: ${result.expandedPath}`);
+ *   if (result.willCreate) {
+ *     console.log("Directory will be created");
+ *   }
+ * } else {
+ *   console.error(`Error: ${result.errorCode}`);
+ * }
+ */
+export async function validatePath(inputPath: string): Promise<PathValidationResult> {
+  // Check for empty path
+  if (!inputPath || !inputPath.trim()) {
+    return {
+      valid: false,
+      expandedPath: "",
+      errorCode: "empty",
+      exists: false,
+      willCreate: false,
+    };
+  }
+
+  const expanded = expandPath(inputPath.trim());
+
+  try {
+    // Check if path exists
+    const stats = await fs.stat(expanded);
+
+    // Path exists - check if it's a directory
+    if (!stats.isDirectory()) {
+      return {
+        valid: false,
+        expandedPath: expanded,
+        errorCode: "is_file",
+        exists: true,
+        willCreate: false,
+      };
+    }
+
+    // Check if directory is writable
+    try {
+      await fs.access(expanded, fsSync.constants.W_OK);
+      return {
+        valid: true,
+        expandedPath: expanded,
+        exists: true,
+        willCreate: false,
+      };
+    } catch {
+      return {
+        valid: false,
+        expandedPath: expanded,
+        errorCode: "not_writable",
+        exists: true,
+        willCreate: false,
+      };
+    }
+  } catch {
+    // Path doesn't exist - check if parent directory exists and is writable
+    const parentDir = path.dirname(expanded);
+
+    try {
+      const parentStats = await fs.stat(parentDir);
+
+      if (!parentStats.isDirectory()) {
+        return {
+          valid: false,
+          expandedPath: expanded,
+          errorCode: "parent_not_exists",
+          exists: false,
+          willCreate: false,
+        };
+      }
+
+      // Check if parent is writable
+      try {
+        await fs.access(parentDir, fsSync.constants.W_OK);
+        return {
+          valid: true,
+          expandedPath: expanded,
+          exists: false,
+          willCreate: true,
+        };
+      } catch {
+        return {
+          valid: false,
+          expandedPath: expanded,
+          errorCode: "parent_not_writable",
+          exists: false,
+          willCreate: false,
+        };
+      }
+    } catch {
+      return {
+        valid: false,
+        expandedPath: expanded,
+        errorCode: "parent_not_exists",
+        exists: false,
+        willCreate: false,
+      };
+    }
+  }
+}
+
+/**
+ * Synchronous version of validatePath for use in React components.
+ * Uses sync fs methods to avoid async state management issues.
+ *
+ * @param inputPath - The path to validate
+ * @returns Validation result
+ */
+export function validatePathSync(inputPath: string): PathValidationResult {
+  // Check for empty path
+  if (!inputPath || !inputPath.trim()) {
+    return {
+      valid: false,
+      expandedPath: "",
+      errorCode: "empty",
+      exists: false,
+      willCreate: false,
+    };
+  }
+
+  const expanded = expandPath(inputPath.trim());
+
+  try {
+    // Check if path exists
+    const stats = fsSync.statSync(expanded);
+
+    // Path exists - check if it's a directory
+    if (!stats.isDirectory()) {
+      return {
+        valid: false,
+        expandedPath: expanded,
+        errorCode: "is_file",
+        exists: true,
+        willCreate: false,
+      };
+    }
+
+    // Check if directory is writable
+    try {
+      fsSync.accessSync(expanded, fsSync.constants.W_OK);
+      return {
+        valid: true,
+        expandedPath: expanded,
+        exists: true,
+        willCreate: false,
+      };
+    } catch {
+      return {
+        valid: false,
+        expandedPath: expanded,
+        errorCode: "not_writable",
+        exists: true,
+        willCreate: false,
+      };
+    }
+  } catch {
+    // Path doesn't exist - check if parent directory exists and is writable
+    const parentDir = path.dirname(expanded);
+
+    try {
+      const parentStats = fsSync.statSync(parentDir);
+
+      if (!parentStats.isDirectory()) {
+        return {
+          valid: false,
+          expandedPath: expanded,
+          errorCode: "parent_not_exists",
+          exists: false,
+          willCreate: false,
+        };
+      }
+
+      // Check if parent is writable
+      try {
+        fsSync.accessSync(parentDir, fsSync.constants.W_OK);
+        return {
+          valid: true,
+          expandedPath: expanded,
+          exists: false,
+          willCreate: true,
+        };
+      } catch {
+        return {
+          valid: false,
+          expandedPath: expanded,
+          errorCode: "parent_not_writable",
+          exists: false,
+          willCreate: false,
+        };
+      }
+    } catch {
+      return {
+        valid: false,
+        expandedPath: expanded,
+        errorCode: "parent_not_exists",
+        exists: false,
+        willCreate: false,
+      };
+    }
   }
 }
