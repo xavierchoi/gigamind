@@ -253,6 +253,37 @@ export class GigaMindClient {
   }
 
   /**
+   * Update API key and reinitialize Anthropic client.
+   * Call this after the API key has been changed in settings.
+   */
+  setApiKey(apiKey: string): void {
+    this.apiKey = apiKey;
+    this.client = new Anthropic({
+      apiKey: this.apiKey,
+    });
+
+    // Reinitialize subagent invoker with new API key
+    if (this.enableSubagents && this.apiKey) {
+      this.subagentInvoker = new SubagentInvoker({
+        apiKey: this.apiKey,
+        model: this.model,
+        notesDir: this.notesDir,
+        errorLevel: this.errorLevel,
+        noteDetail: this.noteDetail,
+      });
+    } else {
+      this.subagentInvoker = null;
+    }
+  }
+
+  /**
+   * Check if the client has a valid API key configured.
+   */
+  hasApiKey(): boolean {
+    return this.apiKey.length > 0;
+  }
+
+  /**
    * Handle message with subagent
    */
   private async handleWithSubagent(

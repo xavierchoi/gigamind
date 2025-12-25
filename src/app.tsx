@@ -724,9 +724,11 @@ export function App() {
         await changeLanguage(newConfig.language);
       }
 
+      // Always reload API key after config save - user may have changed it in ConfigMenu
+      const apiKey = await loadApiKey();
+
       // Reinitialize client if model or noteDetail changed
       if (newConfig.model !== config?.model || newConfig.noteDetail !== config?.noteDetail) {
-        const apiKey = await loadApiKey();
         const newClient = new GigaMindClient({
           model: newConfig.model,
           apiKey: apiKey || undefined,
@@ -734,6 +736,10 @@ export function App() {
           noteDetail: newConfig.noteDetail,
         });
         setClient(newClient);
+      } else if (client && apiKey) {
+        // Model/noteDetail unchanged - update API key on existing client
+        // This handles the case where only API key was changed in ConfigMenu
+        client.setApiKey(apiKey);
       }
 
       // Update notes directory if changed
@@ -745,7 +751,7 @@ export function App() {
         setDanglingCount(stats.danglingCount);
         setOrphanCount(stats.orphanCount);
 
-        // Also update client's notesDir if client exists
+        // Also update client's notesDir if client exists and wasn't just recreated
         if (client && newConfig.model === config?.model && newConfig.noteDetail === config?.noteDetail) {
           client.setNotesDir(newConfig.notesDir);
         }
@@ -769,7 +775,7 @@ export function App() {
       ]);
       setAppState("chat");
     }
-  }, [config]);
+  }, [config, client]);
 
   const handleConfigCancel = useCallback(() => {
     setMessages((prev) => [
