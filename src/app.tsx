@@ -6,7 +6,8 @@ import { SplashScreen } from "./components/SplashScreen.js";
 import { Onboarding, type OnboardingResult } from "./components/Onboarding.js";
 import { ConfigMenu } from "./components/ConfigMenu.js";
 import { Import, type ImportResult } from "./components/Import.js";
-import { GigaMindClient, AbortError, type IntentInfo } from "./agent/client.js";
+import { GigaMindClient, AbortError, type IntentInfo, type AskUserQuestionItem, type QuestionProgress } from "./agent/client.js";
+import { getLogger } from "./utils/logger.js";
 import { SessionManager, type SessionSummary } from "./agent/session.js";
 import {
   loadConfig,
@@ -35,6 +36,8 @@ import {
   type CommandContext,
   type AppState,
 } from "./commands/index.js";
+
+const logger = getLogger();
 
 // Format error messages to be user-friendly
 function formatErrorMessage(err: unknown): string {
@@ -157,6 +160,9 @@ export function App() {
   const [currentToolStartTime, setCurrentToolStartTime] = useState<number | null>(null);
   const [searchProgress, setSearchProgress] = useState<{ filesFound?: number; filesMatched?: number } | null>(null);
   const [detectedIntent, setDetectedIntent] = useState<IntentInfo | null>(null);
+  const [currentQuestion, setCurrentQuestion] = useState<AskUserQuestionItem | null>(null);
+  const [questionProgress, setQuestionProgress] = useState<QuestionProgress | null>(null);
+  const questionResolverRef = useRef<((answer: string) => void) | null>(null);
 
   // AbortController ref for cancelling ongoing API requests
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -564,6 +570,17 @@ export function App() {
               if (requestGenerationRef.current !== currentGeneration) return;
               setDetectedIntent(intent);
             },
+            onAskUserQuestion: (question, progress, respond) => {
+              logger.debug(`[App] onAskUserQuestion received! Question: "${question.question}", Progress: ${progress.current}/${progress.total}`);
+              if (requestGenerationRef.current !== currentGeneration) {
+                logger.debug(`[App] Ignoring question callback - stale request (${requestGenerationRef.current} !== ${currentGeneration})`);
+                return;
+              }
+              logger.debug(`[App] Setting currentQuestion state and resolver`);
+              setCurrentQuestion(question);
+              setQuestionProgress(progress);
+              questionResolverRef.current = respond;
+            },
             onComplete: (fullText) => {
               // Ignore if this is from an old request
               if (requestGenerationRef.current !== currentGeneration) return;
@@ -576,6 +593,8 @@ export function App() {
               setCurrentToolStartTime(null);
               setSearchProgress(null);
               setDetectedIntent(null);
+              setCurrentQuestion(null);
+              setQuestionProgress(null);
               currentToolRef.current = null;
               currentToolStartTimeRef.current = null;
 
@@ -648,6 +667,26 @@ export function App() {
     [client, isLoading, config, sessionManager, commandRegistry, buildCommandContext]
   );
 
+  // Question answer handler
+  const handleQuestionAnswer = useCallback((answer: string) => {
+    if (questionResolverRef.current) {
+      questionResolverRef.current(answer);
+      questionResolverRef.current = null;
+    }
+    setCurrentQuestion(null);
+    setQuestionProgress(null);
+  }, []);
+
+  // Question skip handler
+  const handleQuestionSkip = useCallback(() => {
+    if (questionResolverRef.current) {
+      questionResolverRef.current(""); // Empty answer for skip
+      questionResolverRef.current = null;
+    }
+    setCurrentQuestion(null);
+    setQuestionProgress(null);
+  }, []);
+
   // Cancel handler - aborts ongoing API requests completely
   const handleCancel = useCallback(() => {
     if (isLoading) {
@@ -667,6 +706,9 @@ export function App() {
       setCurrentToolStartTime(null);
       setSearchProgress(null);
       setDetectedIntent(null);
+      setCurrentQuestion(null);
+      setQuestionProgress(null);
+      questionResolverRef.current = null;
       currentToolRef.current = null;
       currentToolStartTimeRef.current = null;
 
@@ -696,6 +738,15 @@ export function App() {
       });
     }
   }, [isLoading]);
+
+  // Question cancel handler - cancels question and the ongoing request
+  const handleQuestionCancel = useCallback(() => {
+    questionResolverRef.current = null;
+    setCurrentQuestion(null);
+    setQuestionProgress(null);
+    // Also cancel the ongoing request
+    handleCancel();
+  }, [handleCancel]);
 
   const handleExit = useCallback(() => {
     exit();
@@ -996,6 +1047,11 @@ export function App() {
         searchProgress={searchProgress}
         detectedIntent={detectedIntent}
         notesDir={config?.notesDir}
+        currentQuestion={currentQuestion}
+        questionProgress={questionProgress}
+        onQuestionAnswer={handleQuestionAnswer}
+        onQuestionSkip={handleQuestionSkip}
+        onQuestionCancel={handleQuestionCancel}
       />
     </Box>
   );

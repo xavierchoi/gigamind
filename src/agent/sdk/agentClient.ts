@@ -11,7 +11,7 @@
 
 import { query, type Options } from "@anthropic-ai/claude-agent-sdk";
 import type { NoteDetailLevel } from "../../utils/config.js";
-import type { StreamCallbacks } from "../client.js";
+import type { StreamCallbacks, AskUserQuestionItem, QuestionProgress } from "../client.js";
 import type { SubagentCallbacks, SubagentResult } from "../subagent.js";
 import type { AgentContext } from "../agentDefinitions.js";
 import { createAgentDefinitions } from "./agentDefinitions.js";
@@ -59,6 +59,7 @@ const ALLOWED_TOOLS = [
   "Task",
   "WebSearch",
   "WebFetch",
+  "AskUserQuestion",
 ] as const;
 
 /**
@@ -67,10 +68,23 @@ const ALLOWED_TOOLS = [
 interface AgentMessage {
   type: "init" | "assistant" | "tool_use" | "tool_result" | "result" | "error";
   session_id?: string;
-  content?: Array<{ type: string; text?: string; name?: string; input?: unknown }>;
+  content?: Array<{ type: string; text?: string; name?: string; input?: unknown; id?: string }>;
   text?: string;
   error?: string;
   result?: string;
+}
+
+/**
+ * Input structure for AskUserQuestion tool
+ */
+interface AskUserQuestionInput {
+  questions: Array<{
+    question: string;
+    header: string;
+    options: Array<{ label: string; description: string }>;
+    multiSelect: boolean;
+  }>;
+  answers?: Record<string, string>;
 }
 
 /**
@@ -180,7 +194,44 @@ export class AgentClient {
               for (const block of agentMessage.content) {
                 if (block.type === "tool_use" && block.name) {
                   logger.debug(`Tool use: ${block.name}`, { input: block.input });
-                  callbacks?.onToolUse?.(block.name, block.input);
+
+                  // Special handling for AskUserQuestion tool
+                  if (block.name === "AskUserQuestion" && callbacks?.onAskUserQuestion) {
+                    const input = block.input as AskUserQuestionInput;
+                    const questions = input.questions || [];
+                    const totalQuestions = questions.length;
+
+                    // Process questions sequentially
+                    for (let i = 0; i < questions.length; i++) {
+                      const q = questions[i];
+                      const questionItem: AskUserQuestionItem = {
+                        question: q.question,
+                        header: q.header,
+                        options: q.options,
+                        multiSelect: q.multiSelect,
+                      };
+                      const progress: QuestionProgress = {
+                        current: i + 1,
+                        total: totalQuestions,
+                      };
+
+                      // Wait for user response via callback
+                      await new Promise<void>((resolve) => {
+                        callbacks.onAskUserQuestion!(questionItem, progress, (answer: string) => {
+                          // Store answer for this question
+                          if (!input.answers) {
+                            input.answers = {};
+                          }
+                          input.answers[q.question] = answer;
+                          resolve();
+                        });
+                      });
+                    }
+
+                    logger.debug("AskUserQuestion completed", { answers: input.answers });
+                  } else {
+                    callbacks?.onToolUse?.(block.name, block.input);
+                  }
                 }
               }
             }

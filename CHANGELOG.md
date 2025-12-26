@@ -5,6 +5,157 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2025-12-26
+
+### Added
+
+#### Automatic Wikilink (Dangling Link) Generation System
+- **Agent Prompt Enhancement** (`src/agent/agentDefinitions.ts`):
+  - Switched note-agent to "aggressive generation" mode
+  - Automatically converts all proper nouns, key concepts, and repeated keywords to [[wikilink]] format
+  - Intentionally creates dangling links to enhance graph connectivity and note discoverability
+  - Auto-generates `related` field with wikilinks
+  - Links extracted concepts using new concept extraction utility
+
+#### Concept Extraction Utility (`src/utils/conceptExtractor.ts`)
+- **New utility module** for intelligent concept identification and linking:
+  - `extractConcepts()`: Identifies proper nouns (Korean surnames, English capitalized words), technical terms (AI, ML, RAG patterns), and repeated keywords
+  - `suggestWikilinks()`: Generates ranked suggestions for wikilinks based on concept frequency and importance
+  - `applyWikilinks()`: Intelligently applies wikilinks while avoiding duplicates and markdown syntax conflicts
+  - `extractAddedWikilinks()`: Extracts newly created wikilinks from note content for relationship mapping
+- Detects Korean surnames using linguistic patterns
+- Identifies technical terminology through regex patterns
+- Supports configurable maximum link limits and repeat keyword extraction
+
+#### Graph UI "Create Note" Feature
+- **Dangling Node Interaction** (`src/graph-server/public/index.html`):
+  - Added "Create Note for this concept" button for dangling nodes
+  - Toast notification system for user feedback
+  - Improved visual hierarchy for node actions
+
+- **Create Note Handler** (`src/graph-server/public/js/graph.js`):
+  - `handleCreateNote()` function with validation:
+    - Checks for empty strings and default "—" values
+    - Verifies Clipboard API availability before copying
+    - Copies prompt template to user's clipboard for quick note creation
+
+- **Event Integration** (`src/graph-server/public/js/controls.js`):
+  - Button event handler for triggering create note action
+  - Proper error handling and user feedback
+
+- **Styling** (`src/graph-server/public/styles.css`):
+  - New button styles matching graph UI design
+  - Toast notification styles with animation
+  - Responsive layout for different screen sizes
+
+#### Graph Server i18n Support
+- **Translation System Integration** (`src/graph-server/index.ts`, `src/graph-server/server.ts`):
+  - New `/api/i18n` endpoint to serve translations
+  - Locale parameter support passed from command
+  - Environment variable propagation for internationalization
+
+- **Translation Files** (`src/i18n/locales/ko/common.json`, `src/i18n/locales/en/common.json`):
+  - New `graph` section with UI strings:
+    - "Create Note for this concept" (한 노트 생성)
+    - Toast messages and notifications
+    - Button labels and instructions
+
+- **Frontend i18n Integration** (`src/graph-server/public/index.html`, `src/graph-server/public/js/graph.js`):
+  - `data-i18n` attributes for element localization
+  - `t()` translation function for dynamic string replacement
+  - Locale detection and loading from `/api/i18n` endpoint
+
+- **Command Integration** (`src/commands/GraphCommand.ts`):
+  - Passes current locale to graph server
+  - Ensures UI displays in user's preferred language
+
+### Fixed
+
+#### CSS Variable Updates
+- Updated CSS variable names to match project design system:
+  - `--bg-primary` → `--void`
+  - `--font-sans` → `--font-body`
+  - `--bg-secondary` → `--surface-elevated`
+  - Ensures consistent theming across graph UI
+
+#### Validation Improvements
+- **handleCreateNote Validation**:
+  - Added checks for empty strings and default "—" node names
+  - Clipboard API availability verification before attempting copy
+  - Prevents errors when creating notes from invalid dangling nodes
+
+#### Concept Extraction Bug Fix
+- **linkRepeats Behavior** (`src/utils/conceptExtractor.ts`):
+  - Fixed: maxLinks limit now properly applied even when `linkRepeats: true`
+  - Previously: maxLinks was ignored for repeat keyword extraction
+  - Now: Respects link count constraints across all extraction modes
+
+### Technical
+
+- **Modular Architecture**: Concept extraction separated into reusable utility module
+- **Type Safety**: Full TypeScript support for concept extraction functions
+- **Error Handling**: Robust validation in graph UI handlers with graceful fallbacks
+- **Accessibility**: Toast notifications for user feedback and action confirmation
+- **Internationalization**: Complete i18n support for graph visualization UI
+
+### Changed
+
+- **Note Creation Workflow**: Now generates wikilinks more aggressively for better knowledge graph connectivity
+- **Graph Interaction**: Enhanced with single-click note creation from dangling concepts
+- **UI Localization**: Graph server now fully supports Korean and English interfaces
+
+## [0.3.3] - 2025-12-25
+
+### Added
+
+#### AskUserQuestion Tool Integration
+- **AskUserQuestion Tool Schema**: Added complete AskUserQuestion tool definition to TOOL_DEFINITIONS
+  - Supports single-select and multi-select question modes
+  - Includes "Other" option for custom text input
+  - Full type support via AskUserQuestionToolInput interface
+
+#### QuestionCollector UI Component
+- **Question Display Component** (`src/components/QuestionCollector.tsx`):
+  - Sequential question presentation interface
+  - Single-select mode: Click options or use arrow keys + Enter
+  - Multi-select mode: Press number keys (1-4) to toggle options
+  - TextInput fallback for "Other" option selection
+  - Visual confirmation of selections with checkmarks
+
+#### Callback Chain Implementation
+- **Subagent Callback Handling** (`src/client/subagent.ts`):
+  - Added `onAskUserQuestion` callback handler for processing user question events
+  - Promise-based pause/resume pattern for user input synchronization
+- **Client Integration** (`src/client/client.ts`):
+  - Enhanced `handleWithSubagent()` to map onAskUserQuestion callback to subagent
+- **App Integration** (`src/app.tsx`):
+  - Added question state management for tracking active questions
+  - Implemented callback chain from App → GigaMindClient → SubagentInvoker → Claude API
+
+#### Prompt Enhancement
+- **Agent System Prompt** (`src/agents/agentDefinitions.ts`):
+  - Added directive requiring AskUserQuestion tool usage for information gathering
+  - Instructions to avoid asking questions as plain text
+  - Guidance for when and how to structure questions for users
+
+#### i18n Support
+- **Question Collector Translations** (`src/i18n/locales/ko/question_collector.json` and `en/question_collector.json`):
+  - Korean and English UI text for question component
+  - Button labels: "Confirm" (확인), "Enter custom response" (직접 입력)
+  - Support for multi-select mode instructions
+
+### Fixed
+
+- **UI Input Conflict**: Fixed keyboard input conflict when QuestionCollector is active
+  - Chat input field now properly hidden when question collection is in progress
+  - Prevents accidental text input during question selection phase
+
+### Technical
+
+- **Callback Architecture**: Implemented Promise-based callback system for asynchronous user interactions
+- **Type Safety**: Full TypeScript support for AskUserQuestion with proper schema validation
+- **i18n Structure**: Extended translation system to support question collector component
+
 ## [0.3.2] - 2025-12-25
 
 ### Fixed

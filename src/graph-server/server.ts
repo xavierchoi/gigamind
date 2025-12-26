@@ -14,8 +14,29 @@ const __dirname = path.dirname(__filename);
 export interface GraphServerOptions {
   notesDir: string;
   port?: number;
+  locale?: string;
   autoShutdownMinutes?: number;
 }
+
+// Graph-specific translations
+const graphTranslations: Record<string, Record<string, string>> = {
+  ko: {
+    create_note_btn: "이 개념으로 노트 생성",
+    create_note_hint: "클릭하면 GigaMind 명령어가 클립보드에 복사됩니다",
+    toast_invalid_node: "유효하지 않은 노드입니다",
+    toast_clipboard_unavailable: "클립보드 API를 사용할 수 없습니다. 명령어: ",
+    toast_copied: "명령어가 클립보드에 복사되었습니다",
+    toast_copy_failed: "복사 실패. 수동으로 입력해주세요: ",
+  },
+  en: {
+    create_note_btn: "Create note from this concept",
+    create_note_hint: "Click to copy GigaMind command to clipboard",
+    toast_invalid_node: "Invalid node",
+    toast_clipboard_unavailable: "Clipboard API unavailable. Command: ",
+    toast_copied: "Command copied to clipboard",
+    toast_copy_failed: "Copy failed. Please enter manually: ",
+  },
+};
 
 export interface GraphServer {
   app: Express;
@@ -28,7 +49,7 @@ export interface GraphServer {
  * Create and configure the Express server
  */
 export function createGraphServer(options: GraphServerOptions): GraphServer {
-  const { notesDir, port = 3847, autoShutdownMinutes = 30 } = options;
+  const { notesDir, port = 3847, locale = "ko", autoShutdownMinutes = 30 } = options;
 
   const app = express();
 
@@ -70,6 +91,12 @@ export function createGraphServer(options: GraphServerOptions): GraphServer {
 
   // API routes
   app.use("/api", createGraphRouter(notesDir));
+
+  // i18n endpoint - returns translations for the graph UI
+  app.get("/api/i18n", (_req: Request, res: Response) => {
+    const translations = graphTranslations[locale] || graphTranslations.ko;
+    res.json({ locale, translations });
+  });
 
   // Serve static files
   const publicPath = path.join(__dirname, "public");

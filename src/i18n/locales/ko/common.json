@@ -224,5 +224,27 @@
     "valid_will_create": "생성될 경로: {{path}}",
     "expanded_path": "경로: {{path}}",
     "validating": "경로 확인 중..."
+  },
+  "question_collector": {
+    "progress": "{{current}}/{{total}}",
+    "select_option": "선택해주세요",
+    "other_input": "직접 입력",
+    "other_placeholder": "내용을 입력하세요...",
+    "skip": "건너뛰기",
+    "cancel": "취소",
+    "submit": "확인",
+    "selected": "개 선택됨",
+    "multi_select_hint": "여러 개 선택 가능",
+    "toggle_selection": "선택 전환",
+    "keyboard_hints": "Enter: 선택 | Tab: 건너뛰기 | Esc: 취소",
+    "question_cancelled": "질문이 취소되었습니다. 원하실 때 다시 시도해주세요."
+  },
+  "graph": {
+    "create_note_btn": "이 개념으로 노트 생성",
+    "create_note_hint": "클릭하면 GigaMind 명령어가 클립보드에 복사됩니다",
+    "toast_invalid_node": "유효하지 않은 노드입니다",
+    "toast_clipboard_unavailable": "클립보드 API를 사용할 수 없습니다. 명령어: {{command}}",
+    "toast_copied": "명령어가 클립보드에 복사되었습니다",
+    "toast_copy_failed": "복사 실패. 수동으로 입력해주세요: {{command}}"
   }
 }

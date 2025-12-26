@@ -44,6 +44,15 @@ export interface WebFetchToolInput {
   prompt?: string;
 }
 
+export interface AskUserQuestionToolInput {
+  questions: Array<{
+    question: string;
+    header: string;
+    options: Array<{ label: string; description: string }>;
+    multiSelect: boolean;
+  }>;
+}
+
 // Legacy alias for backward compatibility
 export type BashToolInput = ShellToolInput;
 
@@ -55,7 +64,8 @@ export type ToolInput =
   | EditToolInput
   | ShellToolInput
   | WebSearchToolInput
-  | WebFetchToolInput;
+  | WebFetchToolInput
+  | AskUserQuestionToolInput;
 
 // Tool definitions for Claude API
 export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
@@ -204,6 +214,58 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
         },
       },
       required: ["url"],
+    },
+  },
+  {
+    name: "AskUserQuestion",
+    description:
+      "Ask the user clarifying questions to gather structured information. Use this when you need specific details from the user, such as preferences, choices, or additional context. Questions are displayed one at a time for a smooth user experience.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        questions: {
+          type: "array",
+          description: "Questions to ask the user (1-4 questions)",
+          items: {
+            type: "object",
+            properties: {
+              question: {
+                type: "string",
+                description: "The complete question to ask the user",
+              },
+              header: {
+                type: "string",
+                description:
+                  "Very short label displayed as a chip/tag (max 12 chars)",
+              },
+              options: {
+                type: "array",
+                description: "The available choices (2-4 options)",
+                items: {
+                  type: "object",
+                  properties: {
+                    label: {
+                      type: "string",
+                      description: "Display text (1-5 words)",
+                    },
+                    description: {
+                      type: "string",
+                      description: "Explanation of this option",
+                    },
+                  },
+                  required: ["label", "description"],
+                },
+              },
+              multiSelect: {
+                type: "boolean",
+                description: "Set to true to allow multiple selections",
+              },
+            },
+            required: ["question", "header", "options", "multiSelect"],
+          },
+        },
+      },
+      required: ["questions"],
     },
   },
 ];

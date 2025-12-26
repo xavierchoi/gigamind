@@ -6,8 +6,9 @@ import { MarkdownText } from "../utils/markdown.js";
 import { ToolUsageIndicator } from "./ToolUsageIndicator.js";
 import { StatusLine } from "./StatusLine.js";
 import { KeyboardShortcutOverlay } from "./KeyboardShortcutOverlay.js";
+import { QuestionCollector } from "./QuestionCollector.js";
 import { t } from "../i18n/index.js";
-import type { IntentInfo } from "../agent/client.js";
+import type { IntentInfo, AskUserQuestionItem, QuestionProgress } from "../agent/client.js";
 
 // Available slash commands - descriptions are loaded dynamically via t() in getSlashCommands()
 function getSlashCommands() {
@@ -61,6 +62,16 @@ interface ChatProps {
   searchProgress?: { filesFound?: number; filesMatched?: number } | null;
   detectedIntent?: IntentInfo | null;
   notesDir?: string;
+  /** Current question from AskUserQuestion tool */
+  currentQuestion?: AskUserQuestionItem | null;
+  /** Progress for current question (current/total) */
+  questionProgress?: QuestionProgress | null;
+  /** Callback when user answers a question */
+  onQuestionAnswer?: (answer: string) => void;
+  /** Callback when user skips a question */
+  onQuestionSkip?: () => void;
+  /** Callback when user cancels the question flow */
+  onQuestionCancel?: () => void;
 }
 
 function MessageBubble({ message }: { message: Message }) {
@@ -243,6 +254,11 @@ export function Chat({
   searchProgress,
   detectedIntent,
   notesDir,
+  currentQuestion,
+  questionProgress,
+  onQuestionAnswer,
+  onQuestionSkip,
+  onQuestionCancel,
 }: ChatProps) {
   const [input, setInput] = useState("");
   const [inputHistory, setInputHistory] = useState<string[]>([]);
@@ -404,12 +420,23 @@ export function Chat({
         {detectedIntent && <IntentIndicator intent={detectedIntent} />}
 
         {/* Loading indicator with elapsed time - always shown when loading */}
-        {isLoading && (
+        {isLoading && !currentQuestion && (
           <ToolUsageIndicator
             startTime={loadingStartTime}
             currentTool={currentTool}
             currentToolStartTime={currentToolStartTime}
             searchProgress={searchProgress}
+          />
+        )}
+
+        {/* AskUserQuestion UI - sequential question display */}
+        {currentQuestion && questionProgress && (
+          <QuestionCollector
+            question={currentQuestion}
+            progress={questionProgress}
+            onAnswer={(answer) => onQuestionAnswer?.(answer)}
+            onSkip={() => onQuestionSkip?.()}
+            onCancel={() => onQuestionCancel?.()}
           />
         )}
       </Box>
@@ -422,40 +449,44 @@ export function Chat({
         }} />
       )}
 
-      {/* Command hints */}
-      <CommandHints input={input} selectedIndex={tabIndex} />
+      {/* Command hints - hide when question UI is active */}
+      {!currentQuestion && <CommandHints input={input} selectedIndex={tabIndex} />}
 
-      {/* Input area */}
-      <Box borderStyle="round" borderColor={showEmptyWarning ? "red" : "gray"} paddingX={1}>
-        <Text color="cyan" bold>
-          {">"}{" "}
-        </Text>
-        <Box flexGrow={1}>
-          <TextInput
-            value={input}
-            onChange={handleInputChange}
-            onSubmit={handleSubmit}
-            placeholder={isLoading ? t("common:input.waiting_for_response") : t("common:input.placeholder")}
-          />
+      {/* Input area - hide when question UI is active */}
+      {!currentQuestion && (
+        <Box borderStyle="round" borderColor={showEmptyWarning ? "red" : "gray"} paddingX={1}>
+          <Text color="cyan" bold>
+            {">"}{" "}
+          </Text>
+          <Box flexGrow={1}>
+            <TextInput
+              value={input}
+              onChange={handleInputChange}
+              onSubmit={handleSubmit}
+              placeholder={isLoading ? t("common:input.waiting_for_response") : t("common:input.placeholder")}
+            />
+          </Box>
+          <Box marginLeft={1}>
+            <CharacterCounter count={input.length} />
+          </Box>
         </Box>
-        <Box marginLeft={1}>
-          <CharacterCounter count={input.length} />
-        </Box>
-      </Box>
+      )}
 
       {/* Empty input warning */}
-      {showEmptyWarning && (
+      {showEmptyWarning && !currentQuestion && (
         <Box marginTop={1}>
           <Text color="red">{t("common:input.enter_message")}</Text>
         </Box>
       )}
 
-      {/* Help text */}
-      <Box marginTop={1}>
-        <Text color="gray" dimColor>
-          {t("common:keyboard_shortcuts.shortcuts_footer")}{isLoading ? ` | ${t("common:keyboard_shortcuts.esc_cancel")}` : ""}
-        </Text>
-      </Box>
+      {/* Help text - hide when question UI is active */}
+      {!currentQuestion && (
+        <Box marginTop={1}>
+          <Text color="gray" dimColor>
+            {t("common:keyboard_shortcuts.shortcuts_footer")}{isLoading ? ` | ${t("common:keyboard_shortcuts.esc_cancel")}` : ""}
+          </Text>
+        </Box>
+      )}
 
       {/* StatusLine - 실시간 상태 표시 */}
       {notesDir && (

@@ -112,6 +112,24 @@ export interface ChatMessage {
   content: string;
 }
 
+/**
+ * Single question from AskUserQuestion tool
+ */
+export interface AskUserQuestionItem {
+  question: string;
+  header: string;
+  options: Array<{ label: string; description: string }>;
+  multiSelect: boolean;
+}
+
+/**
+ * Progress info for sequential question collection
+ */
+export interface QuestionProgress {
+  current: number;
+  total: number;
+}
+
 export interface StreamCallbacks {
   onText?: (text: string) => void;
   onComplete?: (fullText: string) => void;
@@ -127,6 +145,12 @@ export interface StreamCallbacks {
   onIntentDetected?: (intent: IntentInfo) => void;
   /** Called with progress info during search operations */
   onProgress?: (info: { filesFound?: number; filesMatched?: number; currentTool?: string }) => void;
+  /** Called when agent needs user input via AskUserQuestion tool */
+  onAskUserQuestion?: (
+    question: AskUserQuestionItem,
+    progress: QuestionProgress,
+    respond: (answer: string) => void
+  ) => void;
 }
 
 /**
@@ -326,6 +350,7 @@ export class GigaMindClient {
       onProgress: (info) => {
         callbacks?.onProgress?.(info);
       },
+      onAskUserQuestion: callbacks?.onAskUserQuestion,
     };
 
     // Pass recent conversation history to subagent for context continuity

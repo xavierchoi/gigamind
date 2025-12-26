@@ -279,5 +279,27 @@
     "valid_will_create": "Will create: {{path}}",
     "expanded_path": "Path: {{path}}",
     "validating": "Validating path..."
+  },
+  "question_collector": {
+    "progress": "{{current}}/{{total}}",
+    "select_option": "Please select",
+    "other_input": "Custom input",
+    "other_placeholder": "Enter your response...",
+    "skip": "Skip",
+    "cancel": "Cancel",
+    "submit": "Submit",
+    "selected": "selected",
+    "multi_select_hint": "Select multiple",
+    "toggle_selection": "Toggle",
+    "keyboard_hints": "Enter: Select | Tab: Skip | Esc: Cancel",
+    "question_cancelled": "Question cancelled. Feel free to try again anytime."
+  },
+  "graph": {
+    "create_note_btn": "Create note from this concept",
+    "create_note_hint": "Click to copy GigaMind command to clipboard",
+    "toast_invalid_node": "Invalid node",
+    "toast_clipboard_unavailable": "Clipboard API unavailable. Command: {{command}}",
+    "toast_copied": "Command copied to clipboard",
+    "toast_copy_failed": "Copy failed. Please enter manually: {{command}}"
   }
 }

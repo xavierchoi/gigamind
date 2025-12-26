@@ -87,7 +87,7 @@ function openBrowser(url: string): void {
 /**
  * Start the graph server
  */
-export async function startGraphServer(notesDir: string): Promise<StartServerResult> {
+export async function startGraphServer(notesDir: string, locale: string = "ko"): Promise<StartServerResult> {
   const basePort = 3847;
   const port = await findAvailablePort(basePort);
   const url = `http://localhost:${port}`;
@@ -119,6 +119,7 @@ export async function startGraphServer(notesDir: string): Promise<StartServerRes
         ...process.env,
         GRAPH_SERVER_NOTES_DIR: notesDir,
         GRAPH_SERVER_PORT: String(port),
+        GRAPH_SERVER_LOCALE: locale,
       },
     }
   );

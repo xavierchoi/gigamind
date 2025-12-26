@@ -37,6 +37,11 @@ const state = {
     hasMore: true,
     isFullGraphLoaded: false,
   },
+  // i18n translations
+  i18n: {
+    locale: 'en',
+    translations: {},
+  },
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -73,11 +78,56 @@ const CONFIG = {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
+// Internationalization (i18n)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Load translations from the server
+ */
+async function loadI18n() {
+  try {
+    const response = await fetch('/api/i18n');
+    if (response.ok) {
+      const data = await response.json();
+      state.i18n.locale = data.locale;
+      state.i18n.translations = data.translations;
+      applyI18nToDOM();
+    }
+  } catch (error) {
+    console.warn('Failed to load i18n:', error);
+    // Continue with default English text
+  }
+}
+
+/**
+ * Get translated string
+ */
+function t(key) {
+  return state.i18n.translations[key] || key;
+}
+
+/**
+ * Apply translations to DOM elements with data-i18n attribute
+ */
+function applyI18nToDOM() {
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    const translation = state.i18n.translations[key];
+    if (translation) {
+      el.textContent = translation;
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Initialization
 // ═══════════════════════════════════════════════════════════════════════════
 
 async function initGraph() {
   try {
+    // Load i18n translations first
+    await loadI18n();
+
     // Fetch initial page with most connected nodes (hubs) first
     const response = await fetch(`/api/graph?limit=${state.loading.pageSize}&sort=connections`);
     if (!response.ok) throw new Error('Failed to fetch graph data');
@@ -926,6 +976,16 @@ function showNodeDetails(node) {
     ? forwardlinks.map(n => `<li class="sidebar__list-item" data-node-id="${n.id}">${n.title}</li>`).join('')
     : '<li class="sidebar__list-empty">No forward links</li>';
 
+  // Show/hide create note button for dangling nodes
+  const createNoteSection = document.getElementById('sidebar-create-note');
+  if (createNoteSection) {
+    if (node.type === 'dangling') {
+      createNoteSection.hidden = false;
+    } else {
+      createNoteSection.hidden = true;
+    }
+  }
+
   sidebar.querySelectorAll('.sidebar__list-item[data-node-id]').forEach(item => {
     item.addEventListener('click', () => {
       const targetId = item.getAttribute('data-node-id');
@@ -1068,6 +1128,57 @@ function truncateTitle(title, maxLength = 24) {
   return title.slice(0, maxLength - 1) + '…';
 }
 
+/**
+ * Handle creating a note from a dangling link
+ * Copies the GigaMind command to clipboard
+ */
+function handleCreateNote(nodeTitle) {
+  // Validate title
+  if (!nodeTitle || nodeTitle === '—' || nodeTitle.trim() === '') {
+    showToast(t('toast_invalid_node'));
+    return;
+  }
+
+  // Use locale-appropriate command format
+  const command = state.i18n.locale === 'ko'
+    ? `/note ${nodeTitle}에 대해 노트를 작성해줘`
+    : `/note Write a note about ${nodeTitle}`;
+
+  // Check clipboard API availability
+  if (!navigator.clipboard || !navigator.clipboard.writeText) {
+    showToast(t('toast_clipboard_unavailable') + command);
+    return;
+  }
+
+  navigator.clipboard.writeText(command).then(() => {
+    showToast(t('toast_copied'));
+  }).catch((err) => {
+    console.error('Clipboard write failed:', err);
+    showToast(t('toast_copy_failed') + command);
+  });
+}
+
+/**
+ * Show a toast notification
+ */
+function showToast(message, duration = 3000) {
+  const toast = document.getElementById('toast');
+  const toastMessage = document.getElementById('toast-message');
+
+  if (!toast || !toastMessage) return;
+
+  toastMessage.textContent = message;
+  toast.hidden = false;
+  toast.classList.add('toast--visible');
+
+  setTimeout(() => {
+    toast.classList.remove('toast--visible');
+    setTimeout(() => {
+      toast.hidden = true;
+    }, 300);
+  }, duration);
+}
+
 function updateStats(stats) {
   const animateNumber = (el, target) => {
     const current = parseInt(el.textContent) || 0;
@@ -1131,6 +1242,7 @@ window.graphAPI = {
   panToMinimapPosition,
   loadMoreNodes,
   loadFullGraph,
+  handleCreateNote,
   getFilters: () => state.filters,
   getNodes: () => state.fullGraphData?.nodes || [],
   getLoadingState: () => ({

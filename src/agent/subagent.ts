@@ -15,6 +15,7 @@ import type {
 import { getToolsForSubagent } from "./tools.js";
 import { executeTool, type ToolResult } from "./executor.js";
 import { getSubagentPrompt, getSubagentTools, subagents, getTimeContext, type SubagentContext } from "./agentDefinitions.js";
+import type { AskUserQuestionItem, QuestionProgress } from "./client.js";
 import { getLogger } from "../utils/logger.js";
 import {
   SubagentError,
@@ -255,6 +256,11 @@ export interface SubagentCallbacks {
   onComplete?: (result: SubagentResult) => void;
   onError?: (error: Error) => void;
   onProgress?: (info: SubagentProgressInfo) => void;
+  onAskUserQuestion?: (
+    question: AskUserQuestionItem,
+    progress: QuestionProgress,
+    respond: (answer: string) => void
+  ) => void;
 }
 
 export interface SubagentResult {
@@ -425,9 +431,14 @@ export class SubagentInvoker {
           { signal: options?.signal }
         );
 
+        // Extract tool names if there are tool_use blocks
+        const toolUseBlocks = response.content.filter((c): c is ToolUseBlockParam => c.type === "tool_use");
+        const toolNames = toolUseBlocks.map((t) => t.name);
+
         logger.debug(`Subagent iteration ${iterations}`, {
           stopReason: response.stop_reason,
           contentTypes: response.content.map((c) => c.type),
+          toolNames: toolNames.length > 0 ? toolNames : undefined,
         });
 
         // Process response content
@@ -438,6 +449,75 @@ export class SubagentInvoker {
             finalResponse += block.text;
             callbacks?.onText?.(block.text);
           } else if (block.type === "tool_use") {
+            // Handle AskUserQuestion tool specially
+            if (block.name === "AskUserQuestion") {
+              logger.debug(`[AskUserQuestion] Tool detected! ID: ${block.id}`);
+
+              const input = block.input as {
+                questions: Array<{
+                  question: string;
+                  header: string;
+                  options: Array<{ label: string; description: string }>;
+                  multiSelect: boolean;
+                }>;
+              };
+
+              logger.debug(`[AskUserQuestion] Questions count: ${input.questions?.length || 0}`, {
+                questions: input.questions?.map(q => q.question),
+              });
+
+              callbacks?.onToolUse?.(block.name, block.input);
+
+              logger.debug(`[AskUserQuestion] Callback exists: ${!!callbacks?.onAskUserQuestion}`);
+
+              if (callbacks?.onAskUserQuestion) {
+                const answers: Record<string, string> = {};
+                const totalQuestions = input.questions.length;
+
+                // Process questions sequentially
+                for (let i = 0; i < input.questions.length; i++) {
+                  const q = input.questions[i];
+                  const questionItem: AskUserQuestionItem = {
+                    question: q.question,
+                    header: q.header,
+                    options: q.options,
+                    multiSelect: q.multiSelect,
+                  };
+                  const progress: QuestionProgress = {
+                    current: i + 1,
+                    total: totalQuestions,
+                  };
+
+                  // Wait for user response
+                  logger.debug(`[AskUserQuestion] Invoking callback for question ${i + 1}: "${q.question}"`);
+                  await new Promise<void>((resolve) => {
+                    callbacks.onAskUserQuestion!(questionItem, progress, (answer: string) => {
+                      logger.debug(`[AskUserQuestion] Received answer for question ${i + 1}: "${answer}"`);
+                      answers[q.question] = answer;
+                      resolve();
+                    });
+                  });
+                }
+
+                // Return the answers as tool result
+                logger.debug(`[AskUserQuestion] All answers collected, returning tool result`);
+                contentBlocks.push({
+                  type: "tool_result" as const,
+                  tool_use_id: block.id,
+                  content: JSON.stringify({ questions: input.questions, answers }),
+                } as ToolResultBlockParam);
+              } else {
+                // No callback - skip with empty answers
+                logger.warn(`[AskUserQuestion] No callback provided! Returning empty answers.`);
+                contentBlocks.push({
+                  type: "tool_result" as const,
+                  tool_use_id: block.id,
+                  content: JSON.stringify({ questions: input.questions, answers: {} }),
+                } as ToolResultBlockParam);
+              }
+              continue; // Skip normal tool execution
+            }
+
             // Execute tool
             callbacks?.onToolUse?.(block.name, block.input);
 
@@ -516,6 +596,7 @@ export class SubagentInvoker {
 
         // Check if we're done
         if (response.stop_reason === "end_turn") {
+          logger.debug(`[Subagent] Ending loop: stop_reason=end_turn, contentBlocks=${contentBlocks.length}, finalResponse length=${finalResponse.length}`);
           break;
         }
       }

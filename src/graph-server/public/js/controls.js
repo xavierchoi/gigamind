@@ -22,6 +22,8 @@ const elements = {
   closeSidebar: document.getElementById('close-sidebar'),
   focusIndicator: document.getElementById('focus-indicator'),
   sidebar: document.getElementById('node-sidebar'),
+  sidebarTitle: document.getElementById('sidebar-title'),
+  createNoteBtn: document.getElementById('create-note-btn'),
   minimap: document.getElementById('minimap'),
   minimapToggle: document.getElementById('minimap-toggle'),
   filterButtons: document.querySelectorAll('.filter-btn'),
@@ -67,6 +69,14 @@ elements.exitFocus.addEventListener('click', () => {
 
 elements.closeSidebar.addEventListener('click', () => {
   window.graphAPI?.hideNodeDetails();
+});
+
+// Create Note button (for dangling links)
+elements.createNoteBtn?.addEventListener('click', () => {
+  const nodeTitle = elements.sidebarTitle?.textContent;
+  if (nodeTitle && nodeTitle !== '—') {
+    window.graphAPI?.handleCreateNote(nodeTitle);
+  }
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

@@ -200,6 +200,17 @@
       </h3>
       <ul class="sidebar__list" id="forwardlinks-list"></ul>
     </div>
+
+    <!-- Dangling node action - Create Note button -->
+    <div class="sidebar__action" id="sidebar-create-note" hidden>
+      <button class="sidebar__create-btn" id="create-note-btn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 5v14M5 12h14"/>
+        </svg>
+        <span data-i18n="create_note_btn">Create note from this concept</span>
+      </button>
+      <p class="sidebar__create-hint" data-i18n="create_note_hint">Click to copy GigaMind command to clipboard</p>
+    </div>
   </aside>
 
   <!-- Focus mode indicator -->
@@ -265,6 +276,11 @@
     <kbd>0</kbd> reset
     <kbd>ESC</kbd> exit
     <kbd>F</kbd> fullscreen
+  </div>
+
+  <!-- Toast notification -->
+  <div class="toast" id="toast" hidden>
+    <span class="toast__message" id="toast-message"></span>
   </div>
 
   <script src="https://d3js.org/d3.v7.min.js"></script>

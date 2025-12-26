@@ -7,6 +7,7 @@ import { BaseCommand } from "./BaseCommand.js";
 import type { CommandContext, CommandResult } from "./types.js";
 import type { Message } from "../components/Chat.js";
 import { t } from "../i18n/index.js";
+import i18next from "i18next";
 
 export class GraphCommand extends BaseCommand {
   readonly name = "graph";
@@ -31,8 +32,9 @@ export class GraphCommand extends BaseCommand {
       // Dynamically import the graph server to avoid loading it when not needed
       const { startGraphServer } = await import("../graph-server/index.js");
 
-      // Start the graph server with the notes directory
-      const result = await startGraphServer(config?.notesDir || "./notes");
+      // Start the graph server with the notes directory and current locale
+      const locale = i18next.language || "ko";
+      const result = await startGraphServer(config?.notesDir || "./notes", locale);
 
       // Update message with success info
       setMessages((prev: Message[]) => [
