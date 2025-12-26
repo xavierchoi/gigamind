@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { t } from "../../i18n/index.js";
 
 /**
  * Windows Native Folder Selection Dialog
@@ -14,7 +15,7 @@ export async function openWindowsFolderDialog(
   title?: string
 ): Promise<string | null> {
   return new Promise((resolve, reject) => {
-    const description = title ?? "폴더를 선택하세요";
+    const description = title ?? t("folder_dialog.title");
 
     // PowerShell script to show folder browser dialog
     // Using escaped quotes for the description to handle special characters

@@ -8,18 +8,22 @@ import { GigaMindClient } from "../agent/client.js";
 import type { SupportedLanguage } from "../i18n/index.js";
 import { t } from "../i18n/index.js";
 
-// Available models
-const AVAILABLE_MODELS = [
-  { label: "Claude Sonnet 4", value: "claude-sonnet-4-20250514" },
-  { label: "Claude Opus 4", value: "claude-opus-4-20250514" },
-];
+// Available models - dynamically loaded
+function getAvailableModels(): Array<{ label: string; value: string }> {
+  return [
+    { label: t("common:config_menu.model.sonnet"), value: "claude-sonnet-4-20250514" },
+    { label: t("common:config_menu.model.opus"), value: "claude-opus-4-20250514" },
+  ];
+}
 
-// Feedback levels
-const FEEDBACK_LEVELS: Array<{ label: string; value: "minimal" | "medium" | "detailed" }> = [
-  { label: "Minimal", value: "minimal" },
-  { label: "Medium", value: "medium" },
-  { label: "Detailed", value: "detailed" },
-];
+// Feedback levels - dynamically loaded
+function getFeedbackLevels(): Array<{ label: string; value: "minimal" | "medium" | "detailed" }> {
+  return [
+    { label: t("common:config_menu.feedback.minimal"), value: "minimal" },
+    { label: t("common:config_menu.feedback.medium"), value: "medium" },
+    { label: t("common:config_menu.feedback.detailed"), value: "detailed" },
+  ];
+}
 
 // Note detail levels - dynamically loaded
 function getNoteDetailLevels(): Array<{ label: string; value: NoteDetailLevel; description: string }> {
@@ -74,7 +78,8 @@ function getMenuItems(apiKeyStatus: string): MenuItem[] {
       key: "model",
       label: t("common:config_menu.model"),
       getValue: (c) => {
-        const model = AVAILABLE_MODELS.find((m) => m.value === c.model);
+        const models = getAvailableModels();
+        const model = models.find((m) => m.value === c.model);
         return model?.label || c.model;
       },
       editable: true,
@@ -83,7 +88,8 @@ function getMenuItems(apiKeyStatus: string): MenuItem[] {
       key: "feedbackLevel",
       label: t("common:config_menu.feedback_level"),
       getValue: (c) => {
-        const level = FEEDBACK_LEVELS.find((l) => l.value === c.feedback.level);
+        const feedbackLevels = getFeedbackLevels();
+        const level = feedbackLevels.find((l) => l.value === c.feedback.level);
         return level?.label || c.feedback.level;
       },
       editable: true,
@@ -182,16 +188,17 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
         setEditMode(null);
         return;
       }
+      const models = getAvailableModels();
       if (key.upArrow) {
         setSelectIndex((prev) => Math.max(0, prev - 1));
         return;
       }
       if (key.downArrow) {
-        setSelectIndex((prev) => Math.min(AVAILABLE_MODELS.length - 1, prev + 1));
+        setSelectIndex((prev) => Math.min(models.length - 1, prev + 1));
         return;
       }
       if (key.return) {
-        const selected = AVAILABLE_MODELS[selectIndex];
+        const selected = models[selectIndex];
         setTempConfig((prev) => ({ ...prev, model: selected.value }));
         setEditMode(null);
         setMessage({ text: t("common:config_menu.model_changed"), type: "success" });
@@ -201,6 +208,7 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
     }
 
     if (editMode === "feedbackLevel") {
+      const feedbackLevels = getFeedbackLevels();
       if (key.escape) {
         setEditMode(null);
         return;
@@ -210,11 +218,11 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
         return;
       }
       if (key.downArrow) {
-        setSelectIndex((prev) => Math.min(FEEDBACK_LEVELS.length - 1, prev + 1));
+        setSelectIndex((prev) => Math.min(feedbackLevels.length - 1, prev + 1));
         return;
       }
       if (key.return) {
-        const selected = FEEDBACK_LEVELS[selectIndex];
+        const selected = feedbackLevels[selectIndex];
         setTempConfig((prev) => ({
           ...prev,
           feedback: { ...prev.feedback, level: selected.value },
@@ -342,12 +350,12 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
         break;
       case "model":
         setEditMode("model");
-        setSelectIndex(AVAILABLE_MODELS.findIndex((m) => m.value === tempConfig.model) || 0);
+        setSelectIndex(getAvailableModels().findIndex((m) => m.value === tempConfig.model) || 0);
         break;
       case "feedbackLevel":
         setEditMode("feedbackLevel");
         setSelectIndex(
-          FEEDBACK_LEVELS.findIndex((l) => l.value === tempConfig.feedback.level) || 0
+          getFeedbackLevels().findIndex((l) => l.value === tempConfig.feedback.level) || 0
         );
         break;
       case "noteDetail":
@@ -472,6 +480,7 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
 
   // Render model selection
   if (editMode === "model") {
+    const models = getAvailableModels();
     return (
       <Box flexDirection="column" padding={1}>
         <Box
@@ -485,7 +494,7 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
             {t("common:config_menu.select_model")}
           </Text>
           <Box marginTop={1} flexDirection="column">
-            {AVAILABLE_MODELS.map((model, idx) => (
+            {models.map((model, idx) => (
               <Box key={model.value}>
                 <Text color={idx === selectIndex ? "yellow" : "white"}>
                   {idx === selectIndex ? "> " : "  "}
@@ -509,6 +518,7 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
 
   // Render feedback level selection
   if (editMode === "feedbackLevel") {
+    const feedbackLevels = getFeedbackLevels();
     return (
       <Box flexDirection="column" padding={1}>
         <Box
@@ -522,7 +532,7 @@ export function ConfigMenu({ config, onSave, onCancel }: ConfigMenuProps) {
             {t("common:config_menu.select_feedback_level")}
           </Text>
           <Box marginTop={1} flexDirection="column">
-            {FEEDBACK_LEVELS.map((level, idx) => (
+            {feedbackLevels.map((level, idx) => (
               <Box key={level.value}>
                 <Text color={idx === selectIndex ? "yellow" : "white"}>
                   {idx === selectIndex ? "> " : "  "}

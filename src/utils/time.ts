@@ -3,6 +3,8 @@
  * Provides timezone-aware time formatting and relative time calculations
  */
 
+import { t } from "../i18n/index.js";
+
 /**
  * Current time information object
  */
@@ -124,38 +126,38 @@ export function formatRelativeTime(date: Date | string): string {
   const diffYears = Math.floor(diffDays / 365);
 
   if (diffSeconds < 10) {
-    return "방금 전";
+    return t("time.just_now");
   }
 
   if (diffSeconds < 60) {
-    return `${diffSeconds}초 전`;
+    return t("time.seconds_ago", { count: diffSeconds });
   }
 
   if (diffMinutes < 60) {
-    return `${diffMinutes}분 전`;
+    return t("time.minutes_ago", { count: diffMinutes });
   }
 
   if (diffHours < 24) {
-    return `${diffHours}시간 전`;
+    return t("time.hours_ago", { count: diffHours });
   }
 
   if (diffDays === 1) {
-    return "어제";
+    return t("time.yesterday");
   }
 
   if (diffDays < 7) {
-    return `${diffDays}일 전`;
+    return t("time.days_ago", { count: diffDays });
   }
 
   if (diffWeeks < 4) {
-    return `${diffWeeks}주 전`;
+    return t("time.weeks_ago", { count: diffWeeks });
   }
 
   if (diffMonths < 12) {
-    return `${diffMonths}개월 전`;
+    return t("time.months_ago", { count: diffMonths });
   }
 
-  return `${diffYears}년 전`;
+  return t("time.years_ago", { count: diffYears });
 }
 
 /**
@@ -173,38 +175,38 @@ function formatFutureRelativeTime(diffMs: number): string {
   const diffYears = Math.floor(diffDays / 365);
 
   if (diffSeconds < 10) {
-    return "곧";
+    return t("time.soon");
   }
 
   if (diffSeconds < 60) {
-    return `${diffSeconds}초 후`;
+    return t("time.seconds_later", { count: diffSeconds });
   }
 
   if (diffMinutes < 60) {
-    return `${diffMinutes}분 후`;
+    return t("time.minutes_later", { count: diffMinutes });
   }
 
   if (diffHours < 24) {
-    return `${diffHours}시간 후`;
+    return t("time.hours_later", { count: diffHours });
   }
 
   if (diffDays === 1) {
-    return "내일";
+    return t("time.tomorrow");
   }
 
   if (diffDays < 7) {
-    return `${diffDays}일 후`;
+    return t("time.days_later", { count: diffDays });
   }
 
   if (diffWeeks < 4) {
-    return `${diffWeeks}주 후`;
+    return t("time.weeks_later", { count: diffWeeks });
   }
 
   if (diffMonths < 12) {
-    return `${diffMonths}개월 후`;
+    return t("time.months_later", { count: diffMonths });
   }
 
-  return `${diffYears}년 후`;
+  return t("time.years_later", { count: diffYears });
 }
 
 /**

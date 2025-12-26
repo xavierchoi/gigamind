@@ -45,6 +45,10 @@ export async function initI18n(language: string = 'ko') {
 
 export const t = i18next.t.bind(i18next);
 
+export function getCurrentLanguage(): SupportedLanguage {
+  return (i18next.language as SupportedLanguage) || 'ko';
+}
+
 export async function changeLanguage(language: SupportedLanguage): Promise<void> {
   await i18next.changeLanguage(language);
 }

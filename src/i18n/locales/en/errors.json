@@ -1,86 +1,299 @@
 {
-  "api_key_invalid": "Invalid API key.\n\nSolution:\n- Check your settings with /config\n- Verify your API key at https://console.anthropic.com",
-  "api_key_invalid_format": "Invalid Anthropic API key format (must start with sk-ant-)",
-  "api_key_required": "Please enter an API key",
-  "api_authentication_failed": "Authentication failed.\n\nSolution:\n- Verify your API key is correct\n- Check if your API key has expired",
-  "api_rate_limit": "Too many requests.\n\nSolution:\n- Please wait a moment and try again (about 1 minute)",
-  "api_quota_exceeded": "API usage quota exceeded.\n\nSolution:\n- Check your usage at https://console.anthropic.com\n- Consider upgrading your plan if needed",
-  "network_error": "Network connection problem.\n\nSolution:\n- Check your internet connection\n- Verify VPN or proxy settings",
-  "timeout_error": "Request timed out.\n\nSolution:\n- Check your network connection\n- Please try again in a moment",
-  "server_error": "Server is experiencing temporary issues.\n\nSolution:\n- Please try again in a moment\n- If the problem persists, check https://status.anthropic.com",
-  "unknown_error": "An unknown error occurred",
-  "internal_error": "An internal error occurred",
-  "unknown_error_occurred": "An error occurred.",
-  "error_occurred": "Error occurred: {{message}}\n\nIf the problem persists, check your settings or restart the app.",
-  "api_validation_error": "Error during API key validation: {{message}}",
-  "api_validation_failed": "API key validation failed",
-  "file_not_found": "File not found",
-  "file_not_found_detail": "The specified file does not exist. Please check the file path.",
-  "permission_denied": "Permission denied",
-  "permission_denied_detail": "You don't have permission to access this file or directory. Check file permissions or run with administrator privileges.",
-  "disk_space": "Disk space insufficient",
-  "disk_space_detail": "No space left on disk. Please free up some space by deleting unnecessary files.",
-  "path_too_long": "Path too long",
-  "path_too_long_detail": "The file path exceeds system limits. Please use a shorter path.",
-  "directory_not_found": "Folder not found",
-  "directory_not_found_detail": "The specified directory does not exist. Please check the directory path.",
-  "file_exists": "File already exists",
-  "file_exists_detail": "A file with the same name already exists. Use a different name or delete the existing file.",
-  "read_error": "Read failed",
-  "read_error_detail": "An error occurred while reading the file. The file may be corrupted or in use by another program.",
-  "write_error": "Save failed",
-  "write_error_detail": "An error occurred while saving the file. Please check disk space and write permissions.",
-  "access_denied": "Access denied",
-  "access_denied_detail": "Access outside the notes directory is not allowed for security reasons.",
-  "config_not_found": "Settings not found",
-  "config_not_found_detail": "GigaMind settings file not found. Please run 'gigamind config' to set up initial configuration.",
-  "config_parse_error": "Settings error",
-  "config_parse_error_detail": "The settings file (config.yaml) format is invalid. Please check the YAML syntax.",
-  "config_invalid_value": "Invalid setting value",
-  "config_invalid_value_detail": "The settings file contains invalid values. Please check and correct your settings.",
-  "config_missing_api_key": "API key required",
-  "config_missing_api_key_detail": "Anthropic API key is required. Please run 'gigamind config' or set the ANTHROPIC_API_KEY environment variable.",
-  "config_notes_dir_not_found": "Notes folder not found",
-  "config_notes_dir_not_found_detail": "The configured notes directory does not exist. Please run 'gigamind config' to set the correct path.",
-  "subagent_unknown": "Agent not found",
-  "subagent_unknown_detail": "Unknown subagent. Available agents: search-agent, note-agent, clone-agent",
-  "subagent_execution_failed": "Agent failed",
-  "subagent_execution_failed_detail": "An error occurred during subagent execution. Please check the logs or try again.",
-  "subagent_timeout": "Agent timed out",
-  "subagent_timeout_detail": "The subagent task exceeded the time limit. Try breaking the request into smaller parts.",
-  "subagent_tool_failed": "Tool failed",
-  "subagent_tool_failed_detail": "An error occurred with a tool used by the subagent.",
-  "subagent_max_iterations": "Iteration limit exceeded",
-  "subagent_max_iterations_detail": "The subagent reached the maximum iteration count. Please make your request more specific.",
-  "subagent_not_initialized": "Agent not initialized",
-  "subagent_not_initialized_detail": "The subagent has not been initialized. Please verify that the API key is configured.",
-  "hint_prefix": "Hint: {{hint}}",
-  "error_code": "Error code: {{code}}",
-  "caused_by": "Cause: {{message}}",
-  "file_path": "Path: {{path}}",
-  "status_code": "Status code: {{code}}",
-  "recovery_api_key": "Run gigamind config to reconfigure your API key.",
-  "recovery_rate_limit": "Wait about 1 minute and try again.",
-  "recovery_quota": "Upgrade your plan in the Anthropic console.",
-  "recovery_network": "Check your internet connection.",
-  "recovery_timeout": "Try breaking your request into smaller parts.",
-  "recovery_context_length": "Start a new session or reduce the conversation length.",
-  "recovery_disk_space": "Free up disk space.",
-  "recovery_permission": "Check file permissions or run with administrator privileges.",
-  "recovery_notes_dir": "Run gigamind config to reconfigure your notes folder.",
-  "recovery_max_iterations": "Try making your request more specific.",
-  "notInitialized": "GigaMind is not initialized. Run 'gigamind init' first.",
-  "configNotFound": "Configuration file not found",
-  "invalidConfig": "Invalid configuration file",
-  "fileNotFound": "File not found: {{path}}",
-  "permissionDenied": "Permission denied",
-  "networkError": "Network error occurred",
-  "unknownError": "Unknown error occurred",
-  "apiKeyMissing": "API key is not set",
-  "apiKeyInvalid": "Invalid API key",
-  "rateLimitExceeded": "API rate limit exceeded. Please try again later.",
-  "model_unavailable": "The requested AI model is not available.",
-  "model_unavailable_detail": "The specified AI model cannot be used. Please select a different model in settings or try again later.",
-  "context_too_long": "Input too long",
-  "context_too_long_detail": "The conversation context exceeds the model's maximum token limit. Please start a new session or reduce the input."
+  "codes": {
+    "unknown": {
+      "minimal": "Unknown error",
+      "medium": "An unknown error occurred.",
+      "detailed": "An unexpected error occurred. Check the logs if the problem persists."
+    },
+    "internal": {
+      "minimal": "Internal error",
+      "medium": "An internal error occurred.",
+      "detailed": "An internal error occurred in GigaMind. Please submit a bug report."
+    },
+    "api_invalid_key": {
+      "minimal": "API key error",
+      "medium": "The API key is invalid. Please check your settings.",
+      "detailed": "The Anthropic API key is invalid. Use 'gigamind config' to reset your API key or check the ANTHROPIC_API_KEY environment variable."
+    },
+    "api_rate_limit": {
+      "minimal": "Rate limit",
+      "medium": "API request limit reached. Please try again in a moment.",
+      "detailed": "Anthropic API rate limit reached. Wait about 1 minute and try again. Consider upgrading your API plan for sustained usage."
+    },
+    "api_quota_exceeded": {
+      "minimal": "API quota exceeded",
+      "medium": "API usage quota exceeded.",
+      "detailed": "API usage quota has been exceeded. Check your usage in the Anthropic console and upgrade your plan."
+    },
+    "api_network_error": {
+      "minimal": "Network error",
+      "medium": "Network connection problem. Check your internet connection.",
+      "detailed": "Cannot connect to the API server. Check your internet connection, firewall settings, and proxy configuration."
+    },
+    "api_timeout": {
+      "minimal": "Timeout",
+      "medium": "Request timed out. Please try again.",
+      "detailed": "API request timed out. Check your network status and try breaking the request into smaller parts."
+    },
+    "api_server_error": {
+      "minimal": "Server error",
+      "medium": "API server issue. Please try again later.",
+      "detailed": "An error occurred on the Anthropic API server. Check status.anthropic.com for service status."
+    },
+    "api_model_unavailable": {
+      "minimal": "Model unavailable",
+      "medium": "The requested AI model is not available.",
+      "detailed": "The specified AI model cannot be used. Select a different model in settings or try again later."
+    },
+    "api_context_too_long": {
+      "minimal": "Input too long",
+      "medium": "Input is too long. Please shorten your content.",
+      "detailed": "The conversation context exceeds the model's maximum token limit. Start a new session or reduce your input."
+    },
+    "api_authentication_failed": {
+      "minimal": "Auth failed",
+      "medium": "API authentication failed.",
+      "detailed": "API authentication failed. Verify that your API key is correctly configured."
+    },
+    "validation_required_field": {
+      "minimal": "Required field missing",
+      "medium": "A required field is missing.",
+      "detailed": "A required input field is missing. Please fill in all required fields."
+    },
+    "validation_invalid_format": {
+      "minimal": "Format error",
+      "medium": "Input format is invalid.",
+      "detailed": "The input value format is invalid. Please enter in the correct format."
+    },
+    "validation_invalid_path": {
+      "minimal": "Invalid path",
+      "medium": "The path is not valid.",
+      "detailed": "The specified file or directory path is not valid. Please check the path."
+    },
+    "validation_invalid_config": {
+      "minimal": "Invalid config",
+      "medium": "Configuration value is invalid.",
+      "detailed": "The configuration file contains invalid values. Please check and correct your settings."
+    },
+    "validation_tool_input": {
+      "minimal": "Tool input error",
+      "medium": "Invalid input passed to the tool.",
+      "detailed": "Invalid input value passed to the subagent tool."
+    },
+    "fs_file_not_found": {
+      "minimal": "File not found",
+      "medium": "Cannot find the file.",
+      "detailed": "The specified file does not exist. Please check the file path."
+    },
+    "fs_permission_denied": {
+      "minimal": "Permission denied",
+      "medium": "No permission to access the file.",
+      "detailed": "No permission to access the file or directory. Check file permissions or run with administrator privileges."
+    },
+    "fs_no_space": {
+      "minimal": "No space",
+      "medium": "Disk space is insufficient.",
+      "detailed": "No space left on disk. Delete unnecessary files to free up space."
+    },
+    "fs_path_too_long": {
+      "minimal": "Path too long",
+      "medium": "File path is too long.",
+      "detailed": "File path exceeds system limits. Use a shorter path."
+    },
+    "fs_directory_not_found": {
+      "minimal": "Folder not found",
+      "medium": "Cannot find the folder.",
+      "detailed": "The specified directory does not exist. Please check the directory path."
+    },
+    "fs_file_exists": {
+      "minimal": "File exists",
+      "medium": "A file with the same name already exists.",
+      "detailed": "A file with the same name already exists. Use a different name or delete the existing file."
+    },
+    "fs_read_error": {
+      "minimal": "Read failed",
+      "medium": "Failed to read the file.",
+      "detailed": "An error occurred while reading the file. The file may be corrupted or in use by another program."
+    },
+    "fs_write_error": {
+      "minimal": "Save failed",
+      "medium": "Failed to save the file.",
+      "detailed": "An error occurred while saving the file. Check disk space and write permissions."
+    },
+    "fs_access_denied": {
+      "minimal": "Access denied",
+      "medium": "Attempted to access a restricted path.",
+      "detailed": "Access outside the notes directory is not allowed for security reasons."
+    },
+    "config_not_found": {
+      "minimal": "Config missing",
+      "medium": "Cannot find the configuration file.",
+      "detailed": "GigaMind configuration file not found. Run 'gigamind config' to set up initial configuration."
+    },
+    "config_parse_error": {
+      "minimal": "Config error",
+      "medium": "Problem reading the configuration file.",
+      "detailed": "The configuration file (config.yaml) format is invalid. Check the YAML syntax."
+    },
+    "config_invalid_value": {
+      "minimal": "Invalid config value",
+      "medium": "Configuration value is invalid.",
+      "detailed": "The configuration file contains invalid values. Please check and correct your settings."
+    },
+    "config_missing_api_key": {
+      "minimal": "API key needed",
+      "medium": "API key is not configured.",
+      "detailed": "Anthropic API key is required. Run 'gigamind config' or set the ANTHROPIC_API_KEY environment variable."
+    },
+    "config_notes_dir_not_found": {
+      "minimal": "Notes folder missing",
+      "medium": "Cannot find the notes folder.",
+      "detailed": "The configured notes directory does not exist. Run 'gigamind config' to set the correct path."
+    },
+    "subagent_unknown": {
+      "minimal": "Agent not found",
+      "medium": "Cannot find the requested agent.",
+      "detailed": "Unknown subagent. Available agents: search-agent, note-agent, clone-agent"
+    },
+    "subagent_execution_failed": {
+      "minimal": "Agent failed",
+      "medium": "An error occurred during agent execution.",
+      "detailed": "An error occurred during subagent execution. Check the logs or try again."
+    },
+    "subagent_timeout": {
+      "minimal": "Agent timeout",
+      "medium": "Agent task took too long.",
+      "detailed": "Subagent task exceeded the time limit. Try breaking the request into smaller parts."
+    },
+    "subagent_tool_failed": {
+      "minimal": "Tool failed",
+      "medium": "Agent tool execution failed.",
+      "detailed": "An error occurred with a tool used by the subagent."
+    },
+    "subagent_max_iterations": {
+      "minimal": "Iteration limit",
+      "medium": "Agent attempted too many operations.",
+      "detailed": "Subagent reached the maximum iteration count. Please make your request more specific."
+    },
+    "subagent_not_initialized": {
+      "minimal": "Agent not initialized",
+      "medium": "Agent has not been initialized.",
+      "detailed": "Subagent has not been initialized. Please verify that the API key is configured."
+    }
+  },
+  "recovery_hints": {
+    "api_invalid_key": "Run gigamind config to reset your API key.",
+    "api_rate_limit": "Wait about 1 minute and try again.",
+    "api_quota_exceeded": "Upgrade your plan in the Anthropic console.",
+    "api_network_error": "Check your internet connection.",
+    "api_timeout": "Try breaking your request into smaller parts.",
+    "api_context_too_long": "Start a new session or clear the conversation.",
+    "fs_no_space": "Free up disk space.",
+    "fs_permission_denied": "Check file permissions or run with administrator privileges.",
+    "config_missing_api_key": "Run gigamind config to set your API key.",
+    "config_notes_dir_not_found": "Run gigamind config to reset your notes folder.",
+    "subagent_max_iterations": "Try making your request more specific."
+  },
+  "format": {
+    "hint": "Hint:",
+    "error_code": "Error code:",
+    "cause": "Cause:",
+    "path": "Path:",
+    "status_code": "Status code:",
+    "fallback_error": "An unknown error occurred.",
+    "standard_error_minimal": "An error occurred.",
+    "standard_error_medium": "An error occurred: {{message}}",
+    "standard_error_detailed": "An error occurred.\n\nMessage: {{message}}\n\n{{stack}}"
+  },
+  "api_key_invalid": {
+    "title": "Invalid API key.",
+    "solution_header": "Solution:",
+    "check_config": "Check your settings with /config",
+    "check_console": "Verify your API key at https://console.anthropic.com",
+    "full_message": "Invalid API key.\n\nSolution:\n- Check your settings with /config\n- Verify your API key at https://console.anthropic.com"
+  },
+  "authentication_failed": {
+    "title": "Authentication failed.",
+    "solution_header": "Solution:",
+    "check_api_key": "Verify your API key is correct",
+    "check_expiry": "Check if your API key has expired",
+    "full_message": "Authentication failed.\n\nSolution:\n- Verify your API key is correct\n- Check if your API key has expired"
+  },
+  "rate_limit": {
+    "title": "Too many requests.",
+    "solution_header": "Solution:",
+    "wait_and_retry": "Please wait a moment and try again (about 1 minute)",
+    "full_message": "Too many requests.\n\nSolution:\n- Please wait a moment and try again (about 1 minute)"
+  },
+  "quota_exceeded": {
+    "title": "API usage quota exceeded.",
+    "solution_header": "Solution:",
+    "check_usage": "Check your usage at https://console.anthropic.com",
+    "upgrade_plan": "Consider upgrading your plan if needed",
+    "full_message": "API usage quota exceeded.\n\nSolution:\n- Check your usage at https://console.anthropic.com\n- Consider upgrading your plan if needed"
+  },
+  "network_error": {
+    "title": "Network connection problem.",
+    "solution_header": "Solution:",
+    "check_internet": "Check your internet connection",
+    "check_vpn_proxy": "Verify VPN or proxy settings",
+    "full_message": "Network connection problem.\n\nSolution:\n- Check your internet connection\n- Verify VPN or proxy settings"
+  },
+  "timeout": {
+    "title": "Request timed out.",
+    "solution_header": "Solution:",
+    "check_network": "Check your network connection",
+    "retry_later": "Please try again in a moment",
+    "full_message": "Request timed out.\n\nSolution:\n- Check your network connection\n- Please try again in a moment"
+  },
+  "server_error": {
+    "title": "Server is experiencing temporary issues.",
+    "solution_header": "Solution:",
+    "retry_later": "Please try again in a moment",
+    "check_status": "If the problem persists, check https://status.anthropic.com",
+    "full_message": "Server is experiencing temporary issues.\n\nSolution:\n- Please try again in a moment\n- If the problem persists, check https://status.anthropic.com"
+  },
+  "generic": {
+    "title": "An error occurred",
+    "error_with_message": "An error occurred: {{message}}",
+    "solution_hint": "If the problem persists, check your settings or restart the app.",
+    "full_message": "An error occurred: {{message}}\n\nIf the problem persists, check your settings or restart the app."
+  },
+  "initialization": {
+    "title": "Error occurred",
+    "error_during_init": "Error occurred during initialization",
+    "solution_header": "Solution:",
+    "retry_hint": "Press 'r' to retry",
+    "reset_config_hint": "Press 's' to reset settings",
+    "exit_hint": "Press Ctrl+C to exit"
+  },
+  "validation": {
+    "api_key_required": "Please enter an API key",
+    "invalid_api_key_format": "Invalid Anthropic API key format (must start with sk-ant-)",
+    "api_key_validation_failed": "API key validation failed",
+    "api_key_validation_error": "Error during API key validation: {{message}}",
+    "unknown_error": "Unknown error"
+  },
+  "search": {
+    "error_during_search": "An error occurred during search: {{error}}"
+  },
+  "clone": {
+    "error_during_clone": "An error occurred during clone mode: {{error}}"
+  },
+  "note": {
+    "error_during_note": "An error occurred while writing note: {{error}}",
+    "error_during_note_friendly": "There was a problem writing the note."
+  },
+  "graph": {
+    "error_starting_server": "An error occurred while starting the graph server: {{error}}"
+  },
+  "import": {
+    "cancelled": "Import cancelled.",
+    "failed": "Import failed: {{error}}",
+    "dialog_error": "Dialog error: {{error}}"
+  },
+  "config": {
+    "save_error": "An error occurred while saving settings: {{error}}"
+  },
+  "api_key_not_set": "API key is not set."
 }

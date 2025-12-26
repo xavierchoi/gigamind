@@ -8,6 +8,7 @@ import {
   decryptOrParse,
   isEncrypted,
 } from "../utils/sessionEncryption.js";
+import { t } from "../i18n/index.js";
 
 export interface Session {
   id: string;
@@ -709,11 +710,11 @@ export class SessionManager {
       }
 
       if (!session) {
-        return { success: false, error: "세션을 찾을 수 없습니다" };
+        return { success: false, error: t("session.export_not_found") };
       }
 
       if (session.messages.length === 0) {
-        return { success: false, error: "내보낼 메시지가 없습니다" };
+        return { success: false, error: t("session.export_no_messages") };
       }
 
       const homeDir = os.homedir();
@@ -723,24 +724,24 @@ export class SessionManager {
       const fileName = `session_${session.id}.md`;
       const filePath = path.join(notesDir, fileName);
 
-      const createdDate = new Date(session.createdAt).toLocaleString("ko-KR");
-      const updatedDate = new Date(session.updatedAt).toLocaleString("ko-KR");
+      const createdDate = new Date(session.createdAt).toLocaleString();
+      const updatedDate = new Date(session.updatedAt).toLocaleString();
 
-      let markdown = `# GigaMind 세션\n\n`;
-      markdown += `- **세션 ID**: ${session.id}\n`;
-      markdown += `- **시작 시간**: ${createdDate}\n`;
-      markdown += `- **마지막 수정**: ${updatedDate}\n`;
-      markdown += `- **메시지 수**: ${session.messages.length}\n`;
+      let markdown = `# ${t("session.export_title")}\n\n`;
+      markdown += `- **${t("session.export_session_id")}**: ${session.id}\n`;
+      markdown += `- **${t("session.export_start_time")}**: ${createdDate}\n`;
+      markdown += `- **${t("session.export_last_modified")}**: ${updatedDate}\n`;
+      markdown += `- **${t("session.export_message_count")}**: ${session.messages.length}\n`;
       if (session.tags && session.tags.length > 0) {
-        markdown += `- **태그**: ${session.tags.join(", ")}\n`;
+        markdown += `- **${t("session.export_tags")}**: ${session.tags.join(", ")}\n`;
       }
       markdown += `\n---\n\n`;
 
       for (const message of session.messages) {
         if (message.role === "user") {
-          markdown += `## 사용자\n\n${message.content}\n\n`;
+          markdown += `## ${t("session.export_user")}\n\n${message.content}\n\n`;
         } else {
-          markdown += `## GigaMind\n\n${message.content}\n\n`;
+          markdown += `## ${t("session.export_gigamind")}\n\n${message.content}\n\n`;
         }
       }
 

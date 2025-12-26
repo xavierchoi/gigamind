@@ -150,11 +150,28 @@ function performSearch(query) {
 
 function renderSearchResults(results, query) {
   const count = results.length;
-  elements.searchCount.textContent = `${count} result${count !== 1 ? 's' : ''}`;
+  // Use translation API from graphAPI
+  const t = window.graphAPI?.t || ((key) => key);
+  const tFormat = window.graphAPI?.tFormat || ((key, values) => {
+    let template = key;
+    if (values) {
+      Object.keys(values).forEach(k => {
+        template = template.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), values[k]);
+      });
+    }
+    return template;
+  });
+
+  // Use singular or plural form based on count
+  if (count === 1) {
+    elements.searchCount.textContent = t('search_results_count_one');
+  } else {
+    elements.searchCount.textContent = tFormat('search_results_count', { count });
+  }
 
   if (results.length === 0) {
     elements.searchResultsList.innerHTML = `
-      <li class="search-results__empty">No matching nodes</li>
+      <li class="search-results__empty">${t('search_no_results')}</li>
     `;
     return;
   }

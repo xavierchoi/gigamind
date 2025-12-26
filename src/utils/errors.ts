@@ -4,11 +4,13 @@
  *
  * Provides hierarchical error classes with:
  * - Error codes (enum)
- * - User-friendly messages (Korean)
+ * - User-friendly messages (i18n supported)
  * - Original cause tracking
  * - Recovery hints
  * - Recoverability indicators
  */
+
+import { t } from "../i18n/index.js";
 
 // ============================================================================
 // Error Codes
@@ -65,7 +67,50 @@ export enum ErrorCode {
 }
 
 // ============================================================================
-// User-friendly error messages (Korean)
+// Error Code to i18n Key Mapping
+// ============================================================================
+
+const ERROR_CODE_KEYS: Record<ErrorCode, string> = {
+  [ErrorCode.UNKNOWN]: "unknown",
+  [ErrorCode.INTERNAL]: "internal",
+  [ErrorCode.API_INVALID_KEY]: "api_invalid_key",
+  [ErrorCode.API_RATE_LIMIT]: "api_rate_limit",
+  [ErrorCode.API_QUOTA_EXCEEDED]: "api_quota_exceeded",
+  [ErrorCode.API_NETWORK_ERROR]: "api_network_error",
+  [ErrorCode.API_TIMEOUT]: "api_timeout",
+  [ErrorCode.API_SERVER_ERROR]: "api_server_error",
+  [ErrorCode.API_MODEL_UNAVAILABLE]: "api_model_unavailable",
+  [ErrorCode.API_CONTEXT_TOO_LONG]: "api_context_too_long",
+  [ErrorCode.API_AUTHENTICATION_FAILED]: "api_authentication_failed",
+  [ErrorCode.VALIDATION_REQUIRED_FIELD]: "validation_required_field",
+  [ErrorCode.VALIDATION_INVALID_FORMAT]: "validation_invalid_format",
+  [ErrorCode.VALIDATION_INVALID_PATH]: "validation_invalid_path",
+  [ErrorCode.VALIDATION_INVALID_CONFIG]: "validation_invalid_config",
+  [ErrorCode.VALIDATION_TOOL_INPUT]: "validation_tool_input",
+  [ErrorCode.FS_FILE_NOT_FOUND]: "fs_file_not_found",
+  [ErrorCode.FS_PERMISSION_DENIED]: "fs_permission_denied",
+  [ErrorCode.FS_NO_SPACE]: "fs_no_space",
+  [ErrorCode.FS_PATH_TOO_LONG]: "fs_path_too_long",
+  [ErrorCode.FS_DIRECTORY_NOT_FOUND]: "fs_directory_not_found",
+  [ErrorCode.FS_FILE_EXISTS]: "fs_file_exists",
+  [ErrorCode.FS_READ_ERROR]: "fs_read_error",
+  [ErrorCode.FS_WRITE_ERROR]: "fs_write_error",
+  [ErrorCode.FS_ACCESS_DENIED]: "fs_access_denied",
+  [ErrorCode.CONFIG_NOT_FOUND]: "config_not_found",
+  [ErrorCode.CONFIG_PARSE_ERROR]: "config_parse_error",
+  [ErrorCode.CONFIG_INVALID_VALUE]: "config_invalid_value",
+  [ErrorCode.CONFIG_MISSING_API_KEY]: "config_missing_api_key",
+  [ErrorCode.CONFIG_NOTES_DIR_NOT_FOUND]: "config_notes_dir_not_found",
+  [ErrorCode.SUBAGENT_UNKNOWN]: "subagent_unknown",
+  [ErrorCode.SUBAGENT_EXECUTION_FAILED]: "subagent_execution_failed",
+  [ErrorCode.SUBAGENT_TIMEOUT]: "subagent_timeout",
+  [ErrorCode.SUBAGENT_TOOL_FAILED]: "subagent_tool_failed",
+  [ErrorCode.SUBAGENT_MAX_ITERATIONS]: "subagent_max_iterations",
+  [ErrorCode.SUBAGENT_NOT_INITIALIZED]: "subagent_not_initialized",
+};
+
+// ============================================================================
+// User-friendly error messages (i18n)
 // ============================================================================
 
 interface ErrorMessages {
@@ -74,214 +119,41 @@ interface ErrorMessages {
   detailed: string;
 }
 
-const ERROR_MESSAGES: Record<ErrorCode, ErrorMessages> = {
-  // Base errors
-  [ErrorCode.UNKNOWN]: {
-    minimal: "알 수 없는 오류",
-    medium: "알 수 없는 오류가 발생했어요.",
-    detailed: "예상치 못한 오류가 발생했습니다. 문제가 계속되면 로그를 확인해주세요.",
-  },
-  [ErrorCode.INTERNAL]: {
-    minimal: "내부 오류",
-    medium: "내부 오류가 발생했어요.",
-    detailed: "GigaMind 내부에서 오류가 발생했습니다. 버그 리포트를 제출해주세요.",
-  },
+/**
+ * Get localized error messages for a given error code
+ */
+function getErrorMessages(code: ErrorCode): ErrorMessages {
+  const key = ERROR_CODE_KEYS[code];
+  return {
+    minimal: t(`errors:codes.${key}.minimal`),
+    medium: t(`errors:codes.${key}.medium`),
+    detailed: t(`errors:codes.${key}.detailed`),
+  };
+}
 
-  // API errors
-  [ErrorCode.API_INVALID_KEY]: {
-    minimal: "API 키 오류",
-    medium: "API 키가 유효하지 않아요. 설정을 확인해주세요.",
-    detailed: "Anthropic API 키가 유효하지 않습니다. 'gigamind config'로 API 키를 다시 설정하거나 ANTHROPIC_API_KEY 환경변수를 확인해주세요.",
-  },
-  [ErrorCode.API_RATE_LIMIT]: {
-    minimal: "요청 제한",
-    medium: "API 요청 한도에 도달했어요. 잠시 후 다시 시도해주세요.",
-    detailed: "Anthropic API 요청 제한에 도달했습니다. 1분 정도 기다린 후 다시 시도해주세요. 지속적인 사용이 필요하면 API 플랜 업그레이드를 고려해보세요.",
-  },
-  [ErrorCode.API_QUOTA_EXCEEDED]: {
-    minimal: "API 할당량 초과",
-    medium: "API 사용 할당량을 초과했어요.",
-    detailed: "API 사용량 할당량이 초과되었습니다. Anthropic 콘솔에서 사용량을 확인하고 플랜을 업그레이드하세요.",
-  },
-  [ErrorCode.API_NETWORK_ERROR]: {
-    minimal: "네트워크 오류",
-    medium: "네트워크 연결에 문제가 있어요. 인터넷 연결을 확인해주세요.",
-    detailed: "API 서버에 연결할 수 없습니다. 인터넷 연결 상태, 방화벽 설정, 프록시 설정을 확인해주세요.",
-  },
-  [ErrorCode.API_TIMEOUT]: {
-    minimal: "시간 초과",
-    medium: "요청 시간이 초과되었어요. 다시 시도해주세요.",
-    detailed: "API 요청이 시간 초과되었습니다. 네트워크 상태를 확인하고 요청을 더 작게 나눠서 시도해보세요.",
-  },
-  [ErrorCode.API_SERVER_ERROR]: {
-    minimal: "서버 오류",
-    medium: "API 서버에 문제가 있어요. 잠시 후 다시 시도해주세요.",
-    detailed: "Anthropic API 서버에서 오류가 발생했습니다. status.anthropic.com에서 서비스 상태를 확인해보세요.",
-  },
-  [ErrorCode.API_MODEL_UNAVAILABLE]: {
-    minimal: "모델 사용 불가",
-    medium: "요청한 AI 모델을 사용할 수 없어요.",
-    detailed: "지정된 AI 모델을 사용할 수 없습니다. 설정에서 다른 모델을 선택하거나 잠시 후 다시 시도해주세요.",
-  },
-  [ErrorCode.API_CONTEXT_TOO_LONG]: {
-    minimal: "입력 초과",
-    medium: "입력이 너무 길어요. 내용을 줄여주세요.",
-    detailed: "대화 컨텍스트가 모델의 최대 토큰 수를 초과했습니다. 새 세션을 시작하거나 입력을 줄여주세요.",
-  },
-  [ErrorCode.API_AUTHENTICATION_FAILED]: {
-    minimal: "인증 실패",
-    medium: "API 인증에 실패했어요.",
-    detailed: "API 인증에 실패했습니다. API 키가 올바르게 설정되어 있는지 확인해주세요.",
-  },
+/**
+ * Get localized recovery hint for a given error code
+ */
+function getRecoveryHintForCode(code: ErrorCode): string | undefined {
+  const key = ERROR_CODE_KEYS[code];
+  const hint = t(`errors:recovery_hints.${key}`, { defaultValue: "" });
+  return hint || undefined;
+}
 
-  // Validation errors
-  [ErrorCode.VALIDATION_REQUIRED_FIELD]: {
-    minimal: "필수 항목 누락",
-    medium: "필수 항목이 누락되었어요.",
-    detailed: "필수 입력 항목이 누락되었습니다. 모든 필수 항목을 입력해주세요.",
-  },
-  [ErrorCode.VALIDATION_INVALID_FORMAT]: {
-    minimal: "형식 오류",
-    medium: "입력 형식이 올바르지 않아요.",
-    detailed: "입력값의 형식이 올바르지 않습니다. 올바른 형식으로 다시 입력해주세요.",
-  },
-  [ErrorCode.VALIDATION_INVALID_PATH]: {
-    minimal: "잘못된 경로",
-    medium: "경로가 유효하지 않아요.",
-    detailed: "지정된 파일 또는 디렉토리 경로가 유효하지 않습니다. 경로를 확인해주세요.",
-  },
-  [ErrorCode.VALIDATION_INVALID_CONFIG]: {
-    minimal: "잘못된 설정",
-    medium: "설정 값이 올바르지 않아요.",
-    detailed: "설정 파일의 값이 유효하지 않습니다. 설정을 확인하고 수정해주세요.",
-  },
-  [ErrorCode.VALIDATION_TOOL_INPUT]: {
-    minimal: "도구 입력 오류",
-    medium: "도구에 전달된 입력이 올바르지 않아요.",
-    detailed: "서브에이전트 도구에 전달된 입력 값이 유효하지 않습니다.",
-  },
-
-  // File system errors
-  [ErrorCode.FS_FILE_NOT_FOUND]: {
-    minimal: "파일 없음",
-    medium: "파일을 찾을 수 없어요.",
-    detailed: "지정된 파일이 존재하지 않습니다. 파일 경로를 확인해주세요.",
-  },
-  [ErrorCode.FS_PERMISSION_DENIED]: {
-    minimal: "권한 없음",
-    medium: "파일에 접근할 권한이 없어요.",
-    detailed: "파일 또는 디렉토리에 접근 권한이 없습니다. 파일 권한을 확인하거나 관리자 권한으로 실행해주세요.",
-  },
-  [ErrorCode.FS_NO_SPACE]: {
-    minimal: "공간 부족",
-    medium: "디스크 공간이 부족해요.",
-    detailed: "디스크에 남은 공간이 없습니다. 불필요한 파일을 삭제하여 공간을 확보해주세요.",
-  },
-  [ErrorCode.FS_PATH_TOO_LONG]: {
-    minimal: "경로 초과",
-    medium: "파일 경로가 너무 길어요.",
-    detailed: "파일 경로가 시스템 제한을 초과했습니다. 더 짧은 경로를 사용해주세요.",
-  },
-  [ErrorCode.FS_DIRECTORY_NOT_FOUND]: {
-    minimal: "폴더 없음",
-    medium: "폴더를 찾을 수 없어요.",
-    detailed: "지정된 디렉토리가 존재하지 않습니다. 디렉토리 경로를 확인해주세요.",
-  },
-  [ErrorCode.FS_FILE_EXISTS]: {
-    minimal: "파일 존재",
-    medium: "같은 이름의 파일이 이미 있어요.",
-    detailed: "동일한 이름의 파일이 이미 존재합니다. 다른 이름을 사용하거나 기존 파일을 삭제해주세요.",
-  },
-  [ErrorCode.FS_READ_ERROR]: {
-    minimal: "읽기 실패",
-    medium: "파일을 읽는데 실패했어요.",
-    detailed: "파일을 읽는 중 오류가 발생했습니다. 파일이 손상되었거나 다른 프로그램에서 사용 중일 수 있습니다.",
-  },
-  [ErrorCode.FS_WRITE_ERROR]: {
-    minimal: "저장 실패",
-    medium: "파일을 저장하는데 실패했어요.",
-    detailed: "파일을 저장하는 중 오류가 발생했습니다. 디스크 공간과 쓰기 권한을 확인해주세요.",
-  },
-  [ErrorCode.FS_ACCESS_DENIED]: {
-    minimal: "접근 거부",
-    medium: "허용되지 않은 경로에 접근하려고 했어요.",
-    detailed: "보안 상의 이유로 노트 디렉토리 외부에는 접근할 수 없습니다.",
-  },
-
-  // Config errors
-  [ErrorCode.CONFIG_NOT_FOUND]: {
-    minimal: "설정 없음",
-    medium: "설정 파일을 찾을 수 없어요.",
-    detailed: "GigaMind 설정 파일이 없습니다. 'gigamind config'를 실행하여 초기 설정을 진행해주세요.",
-  },
-  [ErrorCode.CONFIG_PARSE_ERROR]: {
-    minimal: "설정 오류",
-    medium: "설정 파일을 읽는데 문제가 있어요.",
-    detailed: "설정 파일(config.yaml)의 형식이 올바르지 않습니다. YAML 문법을 확인해주세요.",
-  },
-  [ErrorCode.CONFIG_INVALID_VALUE]: {
-    minimal: "잘못된 설정값",
-    medium: "설정값이 올바르지 않아요.",
-    detailed: "설정 파일에 유효하지 않은 값이 있습니다. 설정을 확인하고 수정해주세요.",
-  },
-  [ErrorCode.CONFIG_MISSING_API_KEY]: {
-    minimal: "API 키 필요",
-    medium: "API 키가 설정되지 않았어요.",
-    detailed: "Anthropic API 키가 필요합니다. 'gigamind config'를 실행하거나 ANTHROPIC_API_KEY 환경변수를 설정해주세요.",
-  },
-  [ErrorCode.CONFIG_NOTES_DIR_NOT_FOUND]: {
-    minimal: "노트 폴더 없음",
-    medium: "노트 폴더를 찾을 수 없어요.",
-    detailed: "설정된 노트 디렉토리가 존재하지 않습니다. 'gigamind config'로 올바른 경로를 설정해주세요.",
-  },
-
-  // Subagent errors
-  [ErrorCode.SUBAGENT_UNKNOWN]: {
-    minimal: "에이전트 없음",
-    medium: "요청한 에이전트를 찾을 수 없어요.",
-    detailed: "알 수 없는 서브에이전트입니다. 사용 가능한 에이전트: search-agent, note-agent, clone-agent",
-  },
-  [ErrorCode.SUBAGENT_EXECUTION_FAILED]: {
-    minimal: "에이전트 실패",
-    medium: "에이전트 실행 중 오류가 발생했어요.",
-    detailed: "서브에이전트 실행 중 오류가 발생했습니다. 로그를 확인하거나 다시 시도해주세요.",
-  },
-  [ErrorCode.SUBAGENT_TIMEOUT]: {
-    minimal: "에이전트 시간 초과",
-    medium: "에이전트 작업이 너무 오래 걸려요.",
-    detailed: "서브에이전트 작업이 시간 제한을 초과했습니다. 요청을 더 작은 단위로 나눠서 시도해보세요.",
-  },
-  [ErrorCode.SUBAGENT_TOOL_FAILED]: {
-    minimal: "도구 실패",
-    medium: "에이전트 도구 실행에 실패했어요.",
-    detailed: "서브에이전트가 사용한 도구에서 오류가 발생했습니다.",
-  },
-  [ErrorCode.SUBAGENT_MAX_ITERATIONS]: {
-    minimal: "반복 초과",
-    medium: "에이전트가 너무 많은 작업을 시도했어요.",
-    detailed: "서브에이전트가 최대 반복 횟수에 도달했습니다. 요청을 더 명확하게 작성해주세요.",
-  },
-  [ErrorCode.SUBAGENT_NOT_INITIALIZED]: {
-    minimal: "에이전트 미초기화",
-    medium: "에이전트가 초기화되지 않았어요.",
-    detailed: "서브에이전트가 초기화되지 않았습니다. API 키가 설정되어 있는지 확인해주세요.",
-  },
-};
-
-// Recovery hints for errors
-const RECOVERY_HINTS: Partial<Record<ErrorCode, string>> = {
-  [ErrorCode.API_INVALID_KEY]: "gigamind config 명령으로 API 키를 다시 설정하세요.",
-  [ErrorCode.API_RATE_LIMIT]: "1분 정도 기다린 후 다시 시도하세요.",
-  [ErrorCode.API_QUOTA_EXCEEDED]: "Anthropic 콘솔에서 플랜을 업그레이드하세요.",
-  [ErrorCode.API_NETWORK_ERROR]: "인터넷 연결을 확인하세요.",
-  [ErrorCode.API_TIMEOUT]: "요청을 더 작게 나눠서 시도하세요.",
-  [ErrorCode.API_CONTEXT_TOO_LONG]: "새 세션을 시작하거나 대화를 정리하세요.",
-  [ErrorCode.FS_NO_SPACE]: "디스크 공간을 확보하세요.",
-  [ErrorCode.FS_PERMISSION_DENIED]: "파일 권한을 확인하거나 관리자 권한으로 실행하세요.",
-  [ErrorCode.CONFIG_MISSING_API_KEY]: "gigamind config 명령으로 API 키를 설정하세요.",
-  [ErrorCode.CONFIG_NOTES_DIR_NOT_FOUND]: "gigamind config 명령으로 노트 폴더를 다시 설정하세요.",
-  [ErrorCode.SUBAGENT_MAX_ITERATIONS]: "요청을 더 구체적으로 작성해 보세요.",
-};
+// Recovery hint codes that have translations
+const RECOVERY_HINT_CODES = new Set<ErrorCode>([
+  ErrorCode.API_INVALID_KEY,
+  ErrorCode.API_RATE_LIMIT,
+  ErrorCode.API_QUOTA_EXCEEDED,
+  ErrorCode.API_NETWORK_ERROR,
+  ErrorCode.API_TIMEOUT,
+  ErrorCode.API_CONTEXT_TOO_LONG,
+  ErrorCode.FS_NO_SPACE,
+  ErrorCode.FS_PERMISSION_DENIED,
+  ErrorCode.CONFIG_MISSING_API_KEY,
+  ErrorCode.CONFIG_NOTES_DIR_NOT_FOUND,
+  ErrorCode.SUBAGENT_MAX_ITERATIONS,
+]);
 
 // Recoverability flags
 const RECOVERABLE_ERRORS = new Set<ErrorCode>([
@@ -313,14 +185,15 @@ export class GigaMindError extends Error {
       recoveryHint?: string;
     }
   ) {
-    const baseMessage = message || ERROR_MESSAGES[code]?.medium || "알 수 없는 오류가 발생했어요.";
+    const messages = getErrorMessages(code);
+    const baseMessage = message || messages.medium || t("errors:format.fallback_error");
     super(baseMessage);
 
     this.name = "GigaMindError";
     this.code = code;
     this.cause = options?.cause;
     this.recoverable = options?.recoverable ?? RECOVERABLE_ERRORS.has(code);
-    this.recoveryHint = options?.recoveryHint ?? RECOVERY_HINTS[code];
+    this.recoveryHint = options?.recoveryHint ?? (RECOVERY_HINT_CODES.has(code) ? getRecoveryHintForCode(code) : undefined);
     this.timestamp = new Date();
 
     // Maintains proper stack trace for where our error was thrown (only available on V8)
@@ -333,7 +206,8 @@ export class GigaMindError extends Error {
    * Get user-friendly message at specified detail level
    */
   getUserMessage(level: "minimal" | "medium" | "detailed" = "medium"): string {
-    return ERROR_MESSAGES[this.code]?.[level] || this.message;
+    const messages = getErrorMessages(this.code);
+    return messages[level] || this.message;
   }
 
   /**
@@ -576,20 +450,20 @@ export function formatErrorForUser(error: unknown, level: ErrorLevel = "medium")
 
     // Add recovery hint for medium/detailed levels
     if (level !== "minimal" && error.recoveryHint) {
-      message += `\n\n힌트: ${error.recoveryHint}`;
+      message += `\n\n${t("errors:format.hint")} ${error.recoveryHint}`;
     }
 
     // Add technical details for detailed level
     if (level === "detailed") {
-      message += `\n\n[오류 코드: ${error.code}]`;
+      message += `\n\n[${t("errors:format.error_code")} ${error.code}]`;
       if (error.cause) {
-        message += `\n[원인: ${error.cause.message}]`;
+        message += `\n[${t("errors:format.cause")} ${error.cause.message}]`;
       }
       if (error instanceof FileSystemError && error.path) {
-        message += `\n[경로: ${error.path}]`;
+        message += `\n[${t("errors:format.path")} ${error.path}]`;
       }
       if (error instanceof ApiError && error.statusCode) {
-        message += `\n[상태 코드: ${error.statusCode}]`;
+        message += `\n[${t("errors:format.status_code")} ${error.statusCode}]`;
       }
     }
 
@@ -600,16 +474,18 @@ export function formatErrorForUser(error: unknown, level: ErrorLevel = "medium")
   if (error instanceof Error) {
     switch (level) {
       case "minimal":
-        return "오류가 발생했어요.";
+        return t("errors:format.standard_error_minimal");
       case "medium":
-        return `오류가 발생했어요: ${error.message}`;
+        return t("errors:format.standard_error_medium", { message: error.message });
       case "detailed":
-        return `오류가 발생했습니다.\n\n메시지: ${error.message}\n\n${error.stack || ""}`;
+        return t("errors:format.standard_error_detailed", { message: error.message, stack: error.stack || "" });
     }
   }
 
   // Handle unknown errors
-  return level === "minimal" ? "오류가 발생했어요." : `오류가 발생했어요: ${String(error)}`;
+  return level === "minimal"
+    ? t("errors:format.standard_error_minimal")
+    : t("errors:format.standard_error_medium", { message: String(error) });
 }
 
 /**
@@ -649,13 +525,13 @@ export function getRecoveryHint(error: unknown): string | null {
     const message = error.message.toLowerCase();
 
     if (message.includes("rate_limit") || message.includes("429")) {
-      return RECOVERY_HINTS[ErrorCode.API_RATE_LIMIT] || null;
+      return getRecoveryHintForCode(ErrorCode.API_RATE_LIMIT) || null;
     }
     if (message.includes("network") || message.includes("econnrefused")) {
-      return RECOVERY_HINTS[ErrorCode.API_NETWORK_ERROR] || null;
+      return getRecoveryHintForCode(ErrorCode.API_NETWORK_ERROR) || null;
     }
     if (message.includes("timeout")) {
-      return RECOVERY_HINTS[ErrorCode.API_TIMEOUT] || null;
+      return getRecoveryHintForCode(ErrorCode.API_TIMEOUT) || null;
     }
   }
 

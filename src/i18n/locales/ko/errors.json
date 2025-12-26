@@ -1,4 +1,210 @@
 {
+  "codes": {
+    "unknown": {
+      "minimal": "알 수 없는 오류",
+      "medium": "알 수 없는 오류가 발생했어요.",
+      "detailed": "예상치 못한 오류가 발생했습니다. 문제가 계속되면 로그를 확인해주세요."
+    },
+    "internal": {
+      "minimal": "내부 오류",
+      "medium": "내부 오류가 발생했어요.",
+      "detailed": "GigaMind 내부에서 오류가 발생했습니다. 버그 리포트를 제출해주세요."
+    },
+    "api_invalid_key": {
+      "minimal": "API 키 오류",
+      "medium": "API 키가 유효하지 않아요. 설정을 확인해주세요.",
+      "detailed": "Anthropic API 키가 유효하지 않습니다. 'gigamind config'로 API 키를 다시 설정하거나 ANTHROPIC_API_KEY 환경변수를 확인해주세요."
+    },
+    "api_rate_limit": {
+      "minimal": "요청 제한",
+      "medium": "API 요청 한도에 도달했어요. 잠시 후 다시 시도해주세요.",
+      "detailed": "Anthropic API 요청 제한에 도달했습니다. 1분 정도 기다린 후 다시 시도해주세요. 지속적인 사용이 필요하면 API 플랜 업그레이드를 고려해보세요."
+    },
+    "api_quota_exceeded": {
+      "minimal": "API 할당량 초과",
+      "medium": "API 사용 할당량을 초과했어요.",
+      "detailed": "API 사용량 할당량이 초과되었습니다. Anthropic 콘솔에서 사용량을 확인하고 플랜을 업그레이드하세요."
+    },
+    "api_network_error": {
+      "minimal": "네트워크 오류",
+      "medium": "네트워크 연결에 문제가 있어요. 인터넷 연결을 확인해주세요.",
+      "detailed": "API 서버에 연결할 수 없습니다. 인터넷 연결 상태, 방화벽 설정, 프록시 설정을 확인해주세요."
+    },
+    "api_timeout": {
+      "minimal": "시간 초과",
+      "medium": "요청 시간이 초과되었어요. 다시 시도해주세요.",
+      "detailed": "API 요청이 시간 초과되었습니다. 네트워크 상태를 확인하고 요청을 더 작게 나눠서 시도해보세요."
+    },
+    "api_server_error": {
+      "minimal": "서버 오류",
+      "medium": "API 서버에 문제가 있어요. 잠시 후 다시 시도해주세요.",
+      "detailed": "Anthropic API 서버에서 오류가 발생했습니다. status.anthropic.com에서 서비스 상태를 확인해보세요."
+    },
+    "api_model_unavailable": {
+      "minimal": "모델 사용 불가",
+      "medium": "요청한 AI 모델을 사용할 수 없어요.",
+      "detailed": "지정된 AI 모델을 사용할 수 없습니다. 설정에서 다른 모델을 선택하거나 잠시 후 다시 시도해주세요."
+    },
+    "api_context_too_long": {
+      "minimal": "입력 초과",
+      "medium": "입력이 너무 길어요. 내용을 줄여주세요.",
+      "detailed": "대화 컨텍스트가 모델의 최대 토큰 수를 초과했습니다. 새 세션을 시작하거나 입력을 줄여주세요."
+    },
+    "api_authentication_failed": {
+      "minimal": "인증 실패",
+      "medium": "API 인증에 실패했어요.",
+      "detailed": "API 인증에 실패했습니다. API 키가 올바르게 설정되어 있는지 확인해주세요."
+    },
+    "validation_required_field": {
+      "minimal": "필수 항목 누락",
+      "medium": "필수 항목이 누락되었어요.",
+      "detailed": "필수 입력 항목이 누락되었습니다. 모든 필수 항목을 입력해주세요."
+    },
+    "validation_invalid_format": {
+      "minimal": "형식 오류",
+      "medium": "입력 형식이 올바르지 않아요.",
+      "detailed": "입력값의 형식이 올바르지 않습니다. 올바른 형식으로 다시 입력해주세요."
+    },
+    "validation_invalid_path": {
+      "minimal": "잘못된 경로",
+      "medium": "경로가 유효하지 않아요.",
+      "detailed": "지정된 파일 또는 디렉토리 경로가 유효하지 않습니다. 경로를 확인해주세요."
+    },
+    "validation_invalid_config": {
+      "minimal": "잘못된 설정",
+      "medium": "설정 값이 올바르지 않아요.",
+      "detailed": "설정 파일의 값이 유효하지 않습니다. 설정을 확인하고 수정해주세요."
+    },
+    "validation_tool_input": {
+      "minimal": "도구 입력 오류",
+      "medium": "도구에 전달된 입력이 올바르지 않아요.",
+      "detailed": "서브에이전트 도구에 전달된 입력 값이 유효하지 않습니다."
+    },
+    "fs_file_not_found": {
+      "minimal": "파일 없음",
+      "medium": "파일을 찾을 수 없어요.",
+      "detailed": "지정된 파일이 존재하지 않습니다. 파일 경로를 확인해주세요."
+    },
+    "fs_permission_denied": {
+      "minimal": "권한 없음",
+      "medium": "파일에 접근할 권한이 없어요.",
+      "detailed": "파일 또는 디렉토리에 접근 권한이 없습니다. 파일 권한을 확인하거나 관리자 권한으로 실행해주세요."
+    },
+    "fs_no_space": {
+      "minimal": "공간 부족",
+      "medium": "디스크 공간이 부족해요.",
+      "detailed": "디스크에 남은 공간이 없습니다. 불필요한 파일을 삭제하여 공간을 확보해주세요."
+    },
+    "fs_path_too_long": {
+      "minimal": "경로 초과",
+      "medium": "파일 경로가 너무 길어요.",
+      "detailed": "파일 경로가 시스템 제한을 초과했습니다. 더 짧은 경로를 사용해주세요."
+    },
+    "fs_directory_not_found": {
+      "minimal": "폴더 없음",
+      "medium": "폴더를 찾을 수 없어요.",
+      "detailed": "지정된 디렉토리가 존재하지 않습니다. 디렉토리 경로를 확인해주세요."
+    },
+    "fs_file_exists": {
+      "minimal": "파일 존재",
+      "medium": "같은 이름의 파일이 이미 있어요.",
+      "detailed": "동일한 이름의 파일이 이미 존재합니다. 다른 이름을 사용하거나 기존 파일을 삭제해주세요."
+    },
+    "fs_read_error": {
+      "minimal": "읽기 실패",
+      "medium": "파일을 읽는데 실패했어요.",
+      "detailed": "파일을 읽는 중 오류가 발생했습니다. 파일이 손상되었거나 다른 프로그램에서 사용 중일 수 있습니다."
+    },
+    "fs_write_error": {
+      "minimal": "저장 실패",
+      "medium": "파일을 저장하는데 실패했어요.",
+      "detailed": "파일을 저장하는 중 오류가 발생했습니다. 디스크 공간과 쓰기 권한을 확인해주세요."
+    },
+    "fs_access_denied": {
+      "minimal": "접근 거부",
+      "medium": "허용되지 않은 경로에 접근하려고 했어요.",
+      "detailed": "보안 상의 이유로 노트 디렉토리 외부에는 접근할 수 없습니다."
+    },
+    "config_not_found": {
+      "minimal": "설정 없음",
+      "medium": "설정 파일을 찾을 수 없어요.",
+      "detailed": "GigaMind 설정 파일이 없습니다. 'gigamind config'를 실행하여 초기 설정을 진행해주세요."
+    },
+    "config_parse_error": {
+      "minimal": "설정 오류",
+      "medium": "설정 파일을 읽는데 문제가 있어요.",
+      "detailed": "설정 파일(config.yaml)의 형식이 올바르지 않습니다. YAML 문법을 확인해주세요."
+    },
+    "config_invalid_value": {
+      "minimal": "잘못된 설정값",
+      "medium": "설정값이 올바르지 않아요.",
+      "detailed": "설정 파일에 유효하지 않은 값이 있습니다. 설정을 확인하고 수정해주세요."
+    },
+    "config_missing_api_key": {
+      "minimal": "API 키 필요",
+      "medium": "API 키가 설정되지 않았어요.",
+      "detailed": "Anthropic API 키가 필요합니다. 'gigamind config'를 실행하거나 ANTHROPIC_API_KEY 환경변수를 설정해주세요."
+    },
+    "config_notes_dir_not_found": {
+      "minimal": "노트 폴더 없음",
+      "medium": "노트 폴더를 찾을 수 없어요.",
+      "detailed": "설정된 노트 디렉토리가 존재하지 않습니다. 'gigamind config'로 올바른 경로를 설정해주세요."
+    },
+    "subagent_unknown": {
+      "minimal": "에이전트 없음",
+      "medium": "요청한 에이전트를 찾을 수 없어요.",
+      "detailed": "알 수 없는 서브에이전트입니다. 사용 가능한 에이전트: search-agent, note-agent, clone-agent"
+    },
+    "subagent_execution_failed": {
+      "minimal": "에이전트 실패",
+      "medium": "에이전트 실행 중 오류가 발생했어요.",
+      "detailed": "서브에이전트 실행 중 오류가 발생했습니다. 로그를 확인하거나 다시 시도해주세요."
+    },
+    "subagent_timeout": {
+      "minimal": "에이전트 시간 초과",
+      "medium": "에이전트 작업이 너무 오래 걸려요.",
+      "detailed": "서브에이전트 작업이 시간 제한을 초과했습니다. 요청을 더 작은 단위로 나눠서 시도해보세요."
+    },
+    "subagent_tool_failed": {
+      "minimal": "도구 실패",
+      "medium": "에이전트 도구 실행에 실패했어요.",
+      "detailed": "서브에이전트가 사용한 도구에서 오류가 발생했습니다."
+    },
+    "subagent_max_iterations": {
+      "minimal": "반복 초과",
+      "medium": "에이전트가 너무 많은 작업을 시도했어요.",
+      "detailed": "서브에이전트가 최대 반복 횟수에 도달했습니다. 요청을 더 명확하게 작성해주세요."
+    },
+    "subagent_not_initialized": {
+      "minimal": "에이전트 미초기화",
+      "medium": "에이전트가 초기화되지 않았어요.",
+      "detailed": "서브에이전트가 초기화되지 않았습니다. API 키가 설정되어 있는지 확인해주세요."
+    }
+  },
+  "recovery_hints": {
+    "api_invalid_key": "gigamind config 명령으로 API 키를 다시 설정하세요.",
+    "api_rate_limit": "1분 정도 기다린 후 다시 시도하세요.",
+    "api_quota_exceeded": "Anthropic 콘솔에서 플랜을 업그레이드하세요.",
+    "api_network_error": "인터넷 연결을 확인하세요.",
+    "api_timeout": "요청을 더 작게 나눠서 시도하세요.",
+    "api_context_too_long": "새 세션을 시작하거나 대화를 정리하세요.",
+    "fs_no_space": "디스크 공간을 확보하세요.",
+    "fs_permission_denied": "파일 권한을 확인하거나 관리자 권한으로 실행하세요.",
+    "config_missing_api_key": "gigamind config 명령으로 API 키를 설정하세요.",
+    "config_notes_dir_not_found": "gigamind config 명령으로 노트 폴더를 다시 설정하세요.",
+    "subagent_max_iterations": "요청을 더 구체적으로 작성해 보세요."
+  },
+  "format": {
+    "hint": "힌트:",
+    "error_code": "오류 코드:",
+    "cause": "원인:",
+    "path": "경로:",
+    "status_code": "상태 코드:",
+    "fallback_error": "알 수 없는 오류가 발생했어요.",
+    "standard_error_minimal": "오류가 발생했어요.",
+    "standard_error_medium": "오류가 발생했어요: {{message}}",
+    "standard_error_detailed": "오류가 발생했습니다.\n\n메시지: {{message}}\n\n{{stack}}"
+  },
   "api_key_invalid": {
     "title": "API 키가 유효하지 않습니다.",
     "solution_header": "해결 방법:",

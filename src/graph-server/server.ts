@@ -21,6 +21,62 @@ export interface GraphServerOptions {
 // Graph-specific translations
 const graphTranslations: Record<string, Record<string, string>> = {
   ko: {
+    // Page title
+    page_title: "GigaMind — 지식 그래프",
+    // Header stats
+    stat_nodes: "노드",
+    stat_edges: "연결",
+    stat_dangling: "미해결",
+    stat_orphan: "고립",
+    // Search
+    search_placeholder: "노드 검색...",
+    search_results_count: "{{count}}개 결과",
+    search_results_count_one: "1개 결과",
+    search_clear: "지우기",
+    search_no_results: "일치하는 노드 없음",
+    // Filters
+    filter_notes: "노트",
+    filter_orphan: "고립",
+    filter_dangling: "미해결",
+    filter_notes_title: "노트",
+    filter_orphan_title: "고립 노드",
+    filter_dangling_title: "미해결 참조",
+    // Controls
+    zoom_out_title: "축소 (-)",
+    zoom_in_title: "확대 (+)",
+    reset_view_title: "보기 초기화 (0)",
+    toggle_labels_title: "레이블 표시/숨김",
+    // Minimap
+    minimap_title: "전체 보기",
+    minimap_collapse_title: "접기",
+    // Sidebar
+    sidebar_close: "닫기",
+    sidebar_inbound: "인바운드",
+    sidebar_outbound: "아웃바운드",
+    sidebar_backlinks: "백링크",
+    sidebar_forward_links: "포워드 링크",
+    sidebar_no_backlinks: "백링크 없음",
+    sidebar_no_forward_links: "포워드 링크 없음",
+    // Focus mode
+    focus_mode_label: "포커스 모드",
+    focus_exit: "나가기",
+    // Load more
+    load_progress: "{{loaded}}개 중 {{total}}개 노드 표시",
+    load_more: "더 불러오기",
+    load_full_graph: "전체 그래프 불러오기",
+    loading_full_graph: "전체 그래프 불러오는 중...",
+    loading_more_nodes: "노드 더 불러오는 중...",
+    // Loading state
+    loading_text: "신경 그래프 초기화 중...",
+    // Errors
+    load_failed: "그래프 데이터 로드 실패",
+    // Shortcuts hint
+    shortcuts_search: "검색",
+    shortcuts_zoom: "줌",
+    shortcuts_reset: "초기화",
+    shortcuts_exit: "나가기",
+    shortcuts_fullscreen: "전체화면",
+    // Toast messages
     create_note_btn: "이 개념으로 노트 생성",
     create_note_hint: "클릭하면 GigaMind 명령어가 클립보드에 복사됩니다",
     toast_invalid_node: "유효하지 않은 노드입니다",
@@ -29,6 +85,62 @@ const graphTranslations: Record<string, Record<string, string>> = {
     toast_copy_failed: "복사 실패. 수동으로 입력해주세요: ",
   },
   en: {
+    // Page title
+    page_title: "GigaMind — Knowledge Graph",
+    // Header stats
+    stat_nodes: "nodes",
+    stat_edges: "edges",
+    stat_dangling: "dangling",
+    stat_orphan: "orphan",
+    // Search
+    search_placeholder: "Search nodes...",
+    search_results_count: "{{count}} results",
+    search_results_count_one: "1 result",
+    search_clear: "Clear",
+    search_no_results: "No matching nodes",
+    // Filters
+    filter_notes: "Notes",
+    filter_orphan: "Orphan",
+    filter_dangling: "Dangling",
+    filter_notes_title: "Notes",
+    filter_orphan_title: "Orphan nodes",
+    filter_dangling_title: "Dangling references",
+    // Controls
+    zoom_out_title: "Zoom out (-)",
+    zoom_in_title: "Zoom in (+)",
+    reset_view_title: "Reset view (0)",
+    toggle_labels_title: "Toggle labels",
+    // Minimap
+    minimap_title: "Overview",
+    minimap_collapse_title: "Collapse",
+    // Sidebar
+    sidebar_close: "Close",
+    sidebar_inbound: "inbound",
+    sidebar_outbound: "outbound",
+    sidebar_backlinks: "Backlinks",
+    sidebar_forward_links: "Forward Links",
+    sidebar_no_backlinks: "No backlinks",
+    sidebar_no_forward_links: "No forward links",
+    // Focus mode
+    focus_mode_label: "Focus Mode",
+    focus_exit: "Exit",
+    // Load more
+    load_progress: "Showing {{loaded}} of {{total}} nodes",
+    load_more: "Load More",
+    load_full_graph: "Load Full Graph",
+    loading_full_graph: "Loading full graph...",
+    loading_more_nodes: "Loading more nodes...",
+    // Loading state
+    loading_text: "Initializing neural graph...",
+    // Errors
+    load_failed: "Failed to load graph data",
+    // Shortcuts hint
+    shortcuts_search: "search",
+    shortcuts_zoom: "zoom",
+    shortcuts_reset: "reset",
+    shortcuts_exit: "exit",
+    shortcuts_fullscreen: "fullscreen",
+    // Toast messages
     create_note_btn: "Create note from this concept",
     create_note_hint: "Click to copy GigaMind command to clipboard",
     toast_invalid_node: "Invalid node",

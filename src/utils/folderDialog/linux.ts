@@ -1,5 +1,6 @@
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
+import { t } from "../../i18n/index.js";
 
 const execAsync = promisify(exec);
 
@@ -84,7 +85,7 @@ export async function isLinuxDialogSupported(): Promise<boolean> {
  * @returns 선택된 폴더 경로 또는 null (취소 시 또는 지원 안됨)
  */
 export async function openLinuxFolderDialog(title?: string): Promise<string | null> {
-  const dialogTitle = title ?? "폴더를 선택하세요";
+  const dialogTitle = title ?? t("folder_dialog.title");
 
   // zenity 먼저 시도 (GTK 기반, 더 일반적)
   if (await isCommandAvailable("zenity")) {

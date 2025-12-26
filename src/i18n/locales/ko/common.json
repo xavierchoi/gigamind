@@ -97,7 +97,17 @@
     "delete_confirm": "정말로 이 세션을 삭제하시겠습니까?\n\n- **세션 ID**: {{id}}\n- **생성 일시**: {{date}}\n- **메시지 수**: {{count}}개\n- **미리보기**: {{preview}}\n\n삭제하려면 다음을 입력하세요: `/session delete {{id}} confirm`",
     "delete_current_session_error": "현재 활성 세션은 삭제할 수 없습니다.",
     "session_deleted": "세션이 삭제되었습니다: {{id}}",
-    "delete_failed": "세션 삭제 실패: {{id}}"
+    "delete_failed": "세션 삭제 실패: {{id}}",
+    "export_not_found": "세션을 찾을 수 없습니다",
+    "export_no_messages": "내보낼 메시지가 없습니다",
+    "export_title": "GigaMind 세션",
+    "export_session_id": "세션 ID",
+    "export_start_time": "시작 시간",
+    "export_last_modified": "마지막 수정",
+    "export_message_count": "메시지 수",
+    "export_tags": "태그",
+    "export_user": "사용자",
+    "export_gigamind": "GigaMind"
   },
   "example_prompts": {
     "title": "이렇게 시작해보세요:",
@@ -212,7 +222,12 @@
     "api_key_error_format": "올바른 API 키 형식이 아닙니다 (sk-ant-로 시작해야 함)",
     "api_key_error_invalid": "유효하지 않은 API 키입니다",
     "api_key_error_unknown": "알 수 없는 오류가 발생했습니다",
-    "api_key_error_validation": "검증 중 오류 발생: {{error}}"
+    "api_key_error_validation": "검증 중 오류 발생: {{error}}",
+    "model.sonnet": "Claude Sonnet 4",
+    "model.opus": "Claude Opus 4",
+    "feedback.minimal": "최소",
+    "feedback.medium": "중간",
+    "feedback.detailed": "상세"
   },
   "path_validation": {
     "empty": "경로를 입력해주세요",
@@ -246,5 +261,114 @@
     "toast_clipboard_unavailable": "클립보드 API를 사용할 수 없습니다. 명령어: {{command}}",
     "toast_copied": "명령어가 클립보드에 복사되었습니다",
     "toast_copy_failed": "복사 실패. 수동으로 입력해주세요: {{command}}"
+  },
+  "time": {
+    "just_now": "방금 전",
+    "seconds_ago": "{{count}}초 전",
+    "minutes_ago": "{{count}}분 전",
+    "hours_ago": "{{count}}시간 전",
+    "yesterday": "어제",
+    "days_ago": "{{count}}일 전",
+    "weeks_ago": "{{count}}주 전",
+    "months_ago": "{{count}}개월 전",
+    "years_ago": "{{count}}년 전",
+    "soon": "곧",
+    "seconds_later": "{{count}}초 후",
+    "minutes_later": "{{count}}분 후",
+    "hours_later": "{{count}}시간 후",
+    "tomorrow": "내일",
+    "days_later": "{{count}}일 후",
+    "weeks_later": "{{count}}주 후",
+    "months_later": "{{count}}개월 후",
+    "years_later": "{{count}}년 후"
+  },
+  "subagent": {
+    "request_cancelled": "요청이 취소되었습니다"
+  },
+  "folder_dialog": {
+    "title": "폴더를 선택하세요"
+  },
+  "session_preview": {
+    "title": "이전 세션 발견",
+    "last_activity": "마지막 활동",
+    "minutes_ago": "{{count}}분 전",
+    "message_count": "메시지 수",
+    "message_count_unit": "{{count}}개",
+    "first_message": "첫 메시지",
+    "recent_preview": "최근 대화 미리보기:",
+    "restore_prompt": "세션을 복원하시겠습니까?",
+    "button": {
+      "restore": "세션 복원",
+      "new": "새 세션",
+      "toggle_preview": "미리보기 토글"
+    }
+  },
+  "import": {
+    "title": "노트 가져오기",
+    "source": {
+      "obsidian": "Obsidian Vault",
+      "markdown": "일반 마크다운 폴더",
+      "cancel": "취소"
+    },
+    "prompt": {
+      "select_source": "어디서 가져올까요?",
+      "enter_path": "{{source}} 경로를 입력하세요",
+      "enter_path_direct": "경로 직접 입력:",
+      "open_folder_dialog": "[B] 폴더 선택 다이얼로그 열기"
+    },
+    "status": {
+      "analyzing": "노트를 분석하는 중...",
+      "searching_files": "파일 검색 중...",
+      "searching_images": "이미지 파일 검색 중...",
+      "building_wikilink_map": "위키링크 매핑 구축 중...",
+      "copying_images": "이미지 파일 복사 중...",
+      "processing_note": "노트 처리 중: {{title}}",
+      "cancelling": "취소 중...",
+      "rolling_back": "롤백 중..."
+    },
+    "error": {
+      "path_not_found": "경로를 찾을 수 없습니다: {{path}}",
+      "no_markdown_files": "마크다운 파일을 찾을 수 없습니다",
+      "dialog_error": "다이얼로그 오류: {{error}}",
+      "import_failed": "가져오기 실패",
+      "check_path": "경로가 올바른지 확인해주세요."
+    },
+    "progress": {
+      "notes_found": "발견된 노트: {{count}}개",
+      "images_found": "발견된 이미지: {{count}}개",
+      "processing": "처리 중: {{current}}/{{total}}",
+      "source": "소스: {{path}}"
+    },
+    "hint": {
+      "home_dir_unix": "~ 는 홈 디렉토리를 의미합니다. ESC로 취소할 수 있어요.",
+      "home_dir_windows": "%USERPROFILE%은 홈 디렉토리를 의미합니다. ESC로 취소할 수 있어요.",
+      "esc_cancel": "ESC: 취소"
+    },
+    "folder_dialog": {
+      "title": "{{source}} 선택",
+      "opening": "폴더 선택 다이얼로그가 열렸습니다...",
+      "instruction": "시스템 폴더 선택 다이얼로그에서 폴더를 선택해주세요."
+    },
+    "complete": {
+      "title": "가져오기 완료!",
+      "notes_imported": "{{count}}개 노트를 가져왔어요.",
+      "images_imported": "{{count}}개 이미지를 복사했어요.",
+      "source": "소스: {{path}}",
+      "notes_location": "노트 저장 위치: {{path}}/ (폴더별 자동 분류)",
+      "images_location": "이미지 저장 위치: {{path}}/attachments/",
+      "restart_hint": "새 노트를 인식하려면 gigamind를 다시 실행해주세요.",
+      "press_enter": "Enter를 눌러 계속..."
+    },
+    "cancelled": {
+      "title": "가져오기가 취소되었어요",
+      "rolled_back": "생성된 파일들이 롤백되었어요. 변경사항 없음.",
+      "partial_notes": "취소 전까지 {{count}}개 노트를 가져왔어요.",
+      "partial_images": "취소 전까지 {{count}}개 이미지를 복사했어요.",
+      "source": "소스: {{path}}",
+      "press_enter": "Enter를 눌러 계속..."
+    },
+    "actions": {
+      "retry": "Enter: 다시 시도 | ESC: 취소"
+    }
   }
 }

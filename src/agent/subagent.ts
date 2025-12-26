@@ -25,6 +25,7 @@ import {
   isRecoverableError,
   type ErrorLevel,
 } from "../utils/errors.js";
+import { t } from "../i18n/index.js";
 
 const logger = getLogger();
 
@@ -400,7 +401,7 @@ export class SubagentInvoker {
         success: false,
         response: "",
         toolsUsed: [],
-        error: "요청이 취소되었습니다",
+        error: t("subagent.request_cancelled"),
         aborted: true,
       };
     }
@@ -415,7 +416,7 @@ export class SubagentInvoker {
             success: false,
             response: finalResponse,
             toolsUsed,
-            error: "요청이 취소되었습니다",
+            error: t("subagent.request_cancelled"),
             aborted: true,
           };
         }
@@ -623,7 +624,7 @@ export class SubagentInvoker {
           success: false,
           response: finalResponse,
           toolsUsed,
-          error: "요청이 취소되었습니다",
+          error: t("subagent.request_cancelled"),
           aborted: true,
         };
       }
@@ -635,7 +636,7 @@ export class SubagentInvoker {
           success: false,
           response: finalResponse,
           toolsUsed,
-          error: "요청이 취소되었습니다",
+          error: t("subagent.request_cancelled"),
           aborted: true,
         };
       }

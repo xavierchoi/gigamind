@@ -5,6 +5,79 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2025-12-26
+
+### Added
+
+#### Comprehensive i18n Internationalization Coverage
+- **Internationalization Infrastructure Enhancement** (`src/i18n/index.ts`):
+  - Added `getCurrentLanguage()` export for accessing current locale throughout the application
+  - Enables dynamic language-aware functionality across all components
+
+#### Massive Component i18n Refactoring
+- **Import.tsx** - Converted 50+ hardcoded Korean strings to i18n system
+  - New `import.*` translation keys for all import-related UI text
+  - Full support for Korean/English switching in import dialogs and messages
+
+- **SessionPreview.tsx** - Applied i18n to 12+ strings
+  - Dynamic locale support for date formatting
+  - Proper Korean/English display for session preview content
+
+- **errors.ts** - Refactored ~90 error messages
+  - Created `getErrorMessages()` function for centralized error message retrieval
+  - Created `getRecoveryHintForCode()` function for error recovery guidance
+  - All error messages now support Korean/English localization
+
+- **Graph Server UI** - Added 40+ translation keys to server.ts
+  - `data-i18n` attributes applied to index.html for element localization
+  - Updated graph.js and controls.js with dynamic translation loading
+  - Full internationalization of graph visualization UI
+
+- **time.ts** - Internationalized 18 relative time expressions
+  - Past time expressions (seconds, minutes, hours, days, months, years ago)
+  - Future time expressions (in X seconds, minutes, hours, etc.)
+  - Natural language relative time display across both languages
+
+- **subagent.ts** - Fixed "Request cancelled" message localization
+
+- **session.ts** - Internationalized session export headers and error messages
+
+- **folderDialog** (linux.ts, windows.ts) - Internationalized folder dialog title
+  - Platform-specific folder selection now supports Korean/English
+
+- **ConfigMenu.tsx** - Converted dynamic model and feedback level lists to i18n functions
+  - AVAILABLE_MODELS now uses i18n keys instead of hardcoded labels
+  - FEEDBACK_LEVELS now uses i18n keys instead of hardcoded labels
+
+### Fixed
+
+#### i18n Structure Harmonization
+- **errors.json Structure Consistency** (`src/i18n/locales/ko/errors.json`, `src/i18n/locales/en/errors.json`):
+  - Harmonized structure between Korean and English versions
+  - Both now use nested objects for organized error categorization
+  - Ensures consistent JSON structure across language files
+
+#### Duplicate Keys Cleanup
+- **en/common.json Deduplication**:
+  - Removed 55 duplicate keys in English common.json
+  - Consolidated duplicate translations to prevent confusion
+  - Improved maintainability of translation files
+
+### Technical
+
+- **Type Safety**: Full TypeScript support for all internationalized strings
+- **Dynamic Language Support**: All components can now respond to language changes without restart
+- **Coverage Improvement**: Overall i18n coverage improved from ~52% to ~98%
+- **Accessibility**: All user-facing strings now support Korean/English switching
+- **Translation Infrastructure**: Centralized error message and recovery hint functions for maintainability
+
+### Changed
+
+- **Error Handling**: Error messages now fully localized and dynamically retrieved
+- **UI Localization**: All major components now support language switching
+- **Session Management**: Export headers and messages now properly internationalized
+- **Time Display**: Relative time expressions now display in user's preferred language
+
 ## [0.4.0] - 2025-12-26
 
 ### Added

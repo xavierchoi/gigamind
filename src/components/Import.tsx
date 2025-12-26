@@ -13,6 +13,7 @@ import {
   isFolderDialogSupported,
 } from "../utils/folderDialog/index.js";
 import { generateNoteId } from "../utils/frontmatter.js";
+import { t } from "../i18n/index.js";
 
 type ImportStep =
   | "source"
@@ -283,11 +284,13 @@ function updateImagePaths(
   return updatedContent;
 }
 
-const IMPORT_SOURCE_OPTIONS = [
-  { label: "Obsidian Vault", value: "obsidian" },
-  { label: "일반 마크다운 폴더", value: "markdown" },
-  { label: "취소", value: "__cancel__" },
-];
+function getImportSourceOptions() {
+  return [
+    { label: t("import.source.obsidian"), value: "obsidian" },
+    { label: t("import.source.markdown"), value: "markdown" },
+    { label: t("import.source.cancel"), value: "__cancel__" },
+  ];
+}
 
 // Progress bar component
 function ProgressBar({ current, total, width = 30 }: { current: number; total: number; width?: number }) {
@@ -353,8 +356,8 @@ export function Import({ notesDir, onComplete, onCancel }: ImportProps) {
     setStep("folderDialog");
 
     try {
-      const sourceLabel = source === "obsidian" ? "Obsidian Vault" : "마크다운 폴더";
-      const selectedPath = await openFolderDialog(`${sourceLabel} 선택`);
+      const sourceLabel = source === "obsidian" ? t("import.source.obsidian") : t("import.source.markdown");
+      const selectedPath = await openFolderDialog(t("import.folder_dialog.title", { source: sourceLabel }));
 
       if (selectedPath) {
         // Set the selected path and return to path step
@@ -375,7 +378,7 @@ export function Import({ notesDir, onComplete, onCancel }: ImportProps) {
     // ESC during import to cancel
     if (key.escape && step === "importing") {
       cancelledRef.current = true;
-      setImportStatus("취소 중...");
+      setImportStatus(t("import.status.cancelling"));
     }
 
     // "B" key to open folder dialog in path step
@@ -395,7 +398,7 @@ export function Import({ notesDir, onComplete, onCancel }: ImportProps) {
     const expandedPath = expandPath(trimmedPath);
     setSourcePath(expandedPath);
     setStep("importing");
-    setImportStatus("노트를 분석하는 중...");
+    setImportStatus(t("import.status.analyzing"));
 
     // Import session for rollback support
     const importSession: ImportSession = {
@@ -408,11 +411,11 @@ export function Import({ notesDir, onComplete, onCancel }: ImportProps) {
       try {
         await fs.access(expandedPath);
       } catch {
-        throw new Error(`경로를 찾을 수 없습니다: ${expandedPath}`);
+        throw new Error(t("import.error.path_not_found", { path: expandedPath }));
       }
 
       // Find markdown files
-      setImportStatus("파일 검색 중...");
+      setImportStatus(t("import.status.searching_files"));
       const files = await glob("**/*.md", {
         cwd: expandedPath,
         nodir: true,
@@ -421,11 +424,11 @@ export function Import({ notesDir, onComplete, onCancel }: ImportProps) {
       });
 
       if (files.length === 0) {
-        throw new Error("마크다운 파일을 찾을 수 없습니다");
+        throw new Error(t("import.error.no_markdown_files"));
       }
 
       // Find image files
-      setImportStatus("이미지 파일 검색 중...");
+      setImportStatus(t("import.status.searching_images"));
       const imagePatterns = IMAGE_EXTENSIONS.map((ext) => `**/*${ext}`);
       const allImageFiles: string[] = [];
       for (const pattern of imagePatterns) {
@@ -460,7 +463,7 @@ export function Import({ notesDir, onComplete, onCancel }: ImportProps) {
       // ============================================
       // PASS 1: Build wikilink mapping (collect all file info first)
       // ============================================
-      setImportStatus("위키링크 매핑 구축 중...");
+      setImportStatus(t("import.status.building_wikilink_map"));
       const wikilinkMapping = new Map<string, WikilinkMapping>();
       const fileInfos: Array<{
         oldPath: string;
@@ -521,7 +524,7 @@ export function Import({ notesDir, onComplete, onCancel }: ImportProps) {
       // Copy images
       // ============================================
       let imagesImported = 0;
-      setImportStatus("이미지 파일 복사 중...");
+      setImportStatus(t("import.status.copying_images"));
       for (const imagePath of allImageFiles) {
         if (cancelledRef.current) break;
 
@@ -558,7 +561,7 @@ export function Import({ notesDir, onComplete, onCancel }: ImportProps) {
       for (let i = 0; i < fileInfos.length; i++) {
         // Check for cancellation with rollback
         if (cancelledRef.current) {
-          setImportStatus("롤백 중...");
+          setImportStatus(t("import.status.rolling_back"));
           await rollbackImport(importSession);
           const cancelResult: ImportResult = {
             success: false,
@@ -576,7 +579,7 @@ export function Import({ notesDir, onComplete, onCancel }: ImportProps) {
 
         const { oldPath, newPath, id, originalTitle, targetFolder } = fileInfos[i];
 
-        setImportStatus(`노트 처리 중: ${originalTitle}`);
+        setImportStatus(t("import.status.processing_note", { title: originalTitle }));
         setImportProgress({
           files: files.length,
           images: allImageFiles.length,
@@ -671,13 +674,13 @@ export function Import({ notesDir, onComplete, onCancel }: ImportProps) {
     return (
       <Box flexDirection="column" padding={1}>
         <Box marginBottom={1}>
-          <Text color="cyan" bold>📥 노트 가져오기</Text>
+          <Text color="cyan" bold>{"📥 "}{t("import.title")}</Text>
         </Box>
         <Text color="yellow" bold>
-          ? 어디서 가져올까요?
+          ? {t("import.prompt.select_source")}
         </Text>
         <Box marginTop={1}>
-          <SelectInput items={IMPORT_SOURCE_OPTIONS} onSelect={handleSourceSelect} />
+          <SelectInput items={getImportSourceOptions()} onSelect={handleSourceSelect} />
         </Box>
       </Box>
     );
@@ -689,31 +692,31 @@ export function Import({ notesDir, onComplete, onCancel }: ImportProps) {
     const placeholder = source === "obsidian"
       ? (isWindows ? "%USERPROFILE%\\Documents\\ObsidianVault" : "~/Documents/ObsidianVault")
       : (isWindows ? "%USERPROFILE%\\Documents\\notes" : "~/Documents/notes");
-    const sourceLabel = source === "obsidian" ? "Obsidian Vault" : "마크다운 폴더";
+    const sourceLabel = source === "obsidian" ? t("import.source.obsidian") : t("import.source.markdown");
 
     return (
       <Box flexDirection="column" padding={1}>
         <Box marginBottom={1}>
-          <Text color="cyan" bold>{"📥 노트 가져오기"}</Text>
+          <Text color="cyan" bold>{"📥 "}{t("import.title")}</Text>
         </Box>
 
         {/* Folder dialog option */}
         {dialogSupported && (
           <Box marginBottom={1}>
-            <Text color="green">[B] 폴더 선택 다이얼로그 열기</Text>
+            <Text color="green">{t("import.prompt.open_folder_dialog")}</Text>
           </Box>
         )}
 
         {/* Dialog error message */}
         {dialogError && (
           <Box marginBottom={1}>
-            <Text color="red">{"⚠️ 다이얼로그 오류: "}{dialogError}</Text>
+            <Text color="red">{"⚠️ "}{t("import.error.dialog_error", { error: dialogError })}</Text>
           </Box>
         )}
 
-        <Text color="gray">{"경로 직접 입력:"}</Text>
+        <Text color="gray">{t("import.prompt.enter_path_direct")}</Text>
         <Text color="yellow" bold>
-          ? {sourceLabel} 경로를 입력하세요
+          ? {t("import.prompt.enter_path", { source: sourceLabel })}
         </Text>
         <Box marginTop={1}>
           <Text color="cyan">{"> "}</Text>
@@ -726,9 +729,7 @@ export function Import({ notesDir, onComplete, onCancel }: ImportProps) {
         </Box>
         <Box marginTop={1}>
           <Text color="gray">
-            {process.platform === "win32"
-              ? "💡 %USERPROFILE%은 홈 디렉토리를 의미합니다. ESC로 취소할 수 있어요."
-              : "💡 ~ 는 홈 디렉토리를 의미합니다. ESC로 취소할 수 있어요."}
+            {"💡 "}{isWindows ? t("import.hint.home_dir_windows") : t("import.hint.home_dir_unix")}
           </Text>
         </Box>
       </Box>
@@ -739,16 +740,16 @@ export function Import({ notesDir, onComplete, onCancel }: ImportProps) {
     return (
       <Box flexDirection="column" padding={1}>
         <Box marginBottom={1}>
-          <Text color="cyan" bold>{"📥 노트 가져오기"}</Text>
+          <Text color="cyan" bold>{"📥 "}{t("import.title")}</Text>
         </Box>
         <Box>
           <Text color="cyan">
             <Spinner type="dots" />
           </Text>
-          <Text>{" 📂 폴더 선택 다이얼로그가 열렸습니다..."}</Text>
+          <Text>{" 📂 "}{t("import.folder_dialog.opening")}</Text>
         </Box>
         <Box marginTop={1}>
-          <Text color="gray">{"시스템 폴더 선택 다이얼로그에서 폴더를 선택해주세요."}</Text>
+          <Text color="gray">{t("import.folder_dialog.instruction")}</Text>
         </Box>
       </Box>
     );
@@ -758,7 +759,7 @@ export function Import({ notesDir, onComplete, onCancel }: ImportProps) {
     return (
       <Box flexDirection="column" padding={1}>
         <Box marginBottom={1}>
-          <Text color="cyan" bold>📥 노트 가져오기</Text>
+          <Text color="cyan" bold>{"📥 "}{t("import.title")}</Text>
         </Box>
         <Box>
           <Text color="cyan">
@@ -774,27 +775,27 @@ export function Import({ notesDir, onComplete, onCancel }: ImportProps) {
               </Box>
             )}
             <Text color="gray">
-              ├─ 발견된 노트: {importProgress.files}개
+              {"├─ "}{t("import.progress.notes_found", { count: importProgress.files })}
             </Text>
             <Text color="gray">
-              ├─ 발견된 이미지: {importProgress.images}개
+              {"├─ "}{t("import.progress.images_found", { count: importProgress.images })}
             </Text>
             {importProgress.current > 0 && (
               <Text color="gray">
-                └─ 처리 중: {importProgress.current}/{importProgress.files}
+                {"└─ "}{t("import.progress.processing", { current: importProgress.current, total: importProgress.files })}
               </Text>
             )}
           </Box>
         )}
         <Box marginTop={1}>
           <Text color="gray">
-            소스: {sourcePath}
+            {t("import.progress.source", { path: sourcePath })}
           </Text>
         </Box>
         {showCancelHint && (
           <Box marginTop={1}>
             <Text color="gray" dimColor>
-              ESC: 취소
+              {t("import.hint.esc_cancel")}
             </Text>
           </Box>
         )}
@@ -813,24 +814,24 @@ export function Import({ notesDir, onComplete, onCancel }: ImportProps) {
           flexDirection="column"
         >
           <Text color="green" bold>
-            ✅ 가져오기 완료!
+            {"✅ "}{t("import.complete.title")}
           </Text>
           <Newline />
-          <Text>{result.filesImported}개 노트를 가져왔어요.</Text>
+          <Text>{t("import.complete.notes_imported", { count: result.filesImported })}</Text>
           {result.imagesImported > 0 && (
-            <Text>{result.imagesImported}개 이미지를 복사했어요.</Text>
+            <Text>{t("import.complete.images_imported", { count: result.imagesImported })}</Text>
           )}
           <Newline />
-          <Text color="gray">소스: {result.sourcePath}</Text>
-          <Text color="gray">노트 저장 위치: {expandPath(notesDir)}/ (폴더별 자동 분류)</Text>
+          <Text color="gray">{t("import.complete.source", { path: result.sourcePath })}</Text>
+          <Text color="gray">{t("import.complete.notes_location", { path: expandPath(notesDir) })}</Text>
           {result.imagesImported > 0 && (
-            <Text color="gray">이미지 저장 위치: {expandPath(notesDir)}/attachments/</Text>
+            <Text color="gray">{t("import.complete.images_location", { path: expandPath(notesDir) })}</Text>
           )}
           <Newline />
-          <Text color="yellow">💡 새 노트를 인식하려면 gigamind를 다시 실행해주세요.</Text>
+          <Text color="yellow">{"💡 "}{t("import.complete.restart_hint")}</Text>
         </Box>
         <Box marginTop={1}>
-          <Text color="gray">Enter를 눌러 계속...</Text>
+          <Text color="gray">{t("import.complete.press_enter")}</Text>
         </Box>
       </Box>
     );
@@ -847,24 +848,24 @@ export function Import({ notesDir, onComplete, onCancel }: ImportProps) {
           flexDirection="column"
         >
           <Text color="yellow" bold>
-            ⚠️ 가져오기가 취소되었어요
+            {"⚠️ "}{t("import.cancelled.title")}
           </Text>
           <Newline />
           {result.rolledBack ? (
-            <Text>생성된 파일들이 롤백되었어요. 변경사항 없음.</Text>
+            <Text>{t("import.cancelled.rolled_back")}</Text>
           ) : (
             <>
-              <Text>취소 전까지 {result.filesImported}개 노트를 가져왔어요.</Text>
+              <Text>{t("import.cancelled.partial_notes", { count: result.filesImported })}</Text>
               {result.imagesImported > 0 && (
-                <Text>취소 전까지 {result.imagesImported}개 이미지를 복사했어요.</Text>
+                <Text>{t("import.cancelled.partial_images", { count: result.imagesImported })}</Text>
               )}
             </>
           )}
           <Newline />
-          <Text color="gray">소스: {result.sourcePath}</Text>
+          <Text color="gray">{t("import.cancelled.source", { path: result.sourcePath })}</Text>
         </Box>
         <Box marginTop={1}>
-          <Text color="gray">Enter를 눌러 계속...</Text>
+          <Text color="gray">{t("import.cancelled.press_enter")}</Text>
         </Box>
       </Box>
     );
@@ -881,15 +882,15 @@ export function Import({ notesDir, onComplete, onCancel }: ImportProps) {
           flexDirection="column"
         >
           <Text color="red" bold>
-            ❌ 가져오기 실패
+            {"❌ "}{t("import.error.import_failed")}
           </Text>
           <Newline />
           <Text color="red">{error}</Text>
           <Newline />
-          <Text color="gray">경로가 올바른지 확인해주세요.</Text>
+          <Text color="gray">{t("import.error.check_path")}</Text>
         </Box>
         <Box marginTop={1} flexDirection="column">
-          <Text color="gray">Enter: 다시 시도 | ESC: 취소</Text>
+          <Text color="gray">{t("import.actions.retry")}</Text>
         </Box>
       </Box>
     );

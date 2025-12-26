@@ -110,13 +110,59 @@ function t(key) {
  * Apply translations to DOM elements with data-i18n attribute
  */
 function applyI18nToDOM() {
+  // Translate text content
   document.querySelectorAll('[data-i18n]').forEach(el => {
     const key = el.getAttribute('data-i18n');
     const translation = state.i18n.translations[key];
     if (translation) {
+      // For title element, set document.title as well
+      if (el.tagName === 'TITLE') {
+        document.title = translation;
+      }
       el.textContent = translation;
     }
   });
+
+  // Translate placeholder attributes
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    const key = el.getAttribute('data-i18n-placeholder');
+    const translation = state.i18n.translations[key];
+    if (translation) {
+      el.placeholder = translation;
+    }
+  });
+
+  // Translate title attributes (tooltips)
+  document.querySelectorAll('[data-i18n-title]').forEach(el => {
+    const key = el.getAttribute('data-i18n-title');
+    const translation = state.i18n.translations[key];
+    if (translation) {
+      el.title = translation;
+    }
+  });
+
+  // Translate aria-label attributes
+  document.querySelectorAll('[data-i18n-aria-label]').forEach(el => {
+    const key = el.getAttribute('data-i18n-aria-label');
+    const translation = state.i18n.translations[key];
+    if (translation) {
+      el.setAttribute('aria-label', translation);
+    }
+  });
+}
+
+/**
+ * Format a translation template with values
+ * e.g., "Showing {{loaded}} of {{total}} nodes" with {loaded: 5, total: 10}
+ */
+function tFormat(key, values) {
+  let template = state.i18n.translations[key] || key;
+  if (values) {
+    Object.keys(values).forEach(k => {
+      template = template.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), values[k]);
+    });
+  }
+  return template;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -173,7 +219,7 @@ async function initGraph() {
     }, 300);
   } catch (error) {
     console.error('Failed to initialize graph:', error);
-    document.querySelector('.loading__text').textContent = 'Failed to load graph data';
+    document.querySelector('.loading__text').textContent = t('load_failed');
   }
 }
 
@@ -261,7 +307,7 @@ async function loadFullGraph() {
   }
 
   state.loading.isLoading = true;
-  showLoadingIndicator(true, 'Loading full graph...');
+  showLoadingIndicator(true, t('loading_full_graph'));
 
   try {
     const response = await fetch('/api/graph?all=true');
@@ -306,21 +352,23 @@ async function loadFullGraph() {
 /**
  * Show/hide the loading indicator
  */
-function showLoadingIndicator(show, message = 'Loading more nodes...') {
+function showLoadingIndicator(show, message = null) {
+  const defaultMessage = t('loading_more_nodes') || 'Loading more nodes...';
   let indicator = document.getElementById('progressive-loading-indicator');
 
   if (show) {
+    const displayMessage = message || defaultMessage;
     if (!indicator) {
       indicator = document.createElement('div');
       indicator.id = 'progressive-loading-indicator';
       indicator.className = 'progressive-loading';
       indicator.innerHTML = `
         <div class="progressive-loading__spinner"></div>
-        <span class="progressive-loading__text">${message}</span>
+        <span class="progressive-loading__text">${displayMessage}</span>
       `;
       document.body.appendChild(indicator);
     } else {
-      indicator.querySelector('.progressive-loading__text').textContent = message;
+      indicator.querySelector('.progressive-loading__text').textContent = displayMessage;
     }
     indicator.hidden = false;
   } else if (indicator) {
@@ -384,7 +432,7 @@ function updateLoadMoreUI() {
 
     const loaded = state.loading.loadedNodeIds.size;
     const total = state.loading.totalNodes;
-    progressText.textContent = `Showing ${loaded} of ${total} nodes`;
+    progressText.textContent = tFormat('load_progress', { loaded, total });
 
     loadMoreBtn.disabled = state.loading.isLoading;
     loadAllBtn.disabled = state.loading.isLoading;
@@ -970,11 +1018,11 @@ function showNodeDetails(node) {
 
   backlinksList.innerHTML = backlinks.length
     ? backlinks.map(n => `<li class="sidebar__list-item" data-node-id="${n.id}">${n.title}</li>`).join('')
-    : '<li class="sidebar__list-empty">No backlinks</li>';
+    : `<li class="sidebar__list-empty">${t('sidebar_no_backlinks')}</li>`;
 
   forwardlinksList.innerHTML = forwardlinks.length
     ? forwardlinks.map(n => `<li class="sidebar__list-item" data-node-id="${n.id}">${n.title}</li>`).join('')
-    : '<li class="sidebar__list-empty">No forward links</li>';
+    : `<li class="sidebar__list-empty">${t('sidebar_no_forward_links')}</li>`;
 
   // Show/hide create note button for dangling nodes
   const createNoteSection = document.getElementById('sidebar-create-note');
@@ -1243,6 +1291,8 @@ window.graphAPI = {
   loadMoreNodes,
   loadFullGraph,
   handleCreateNote,
+  t,
+  tFormat,
   getFilters: () => state.filters,
   getNodes: () => state.fullGraphData?.nodes || [],
   getLoadingState: () => ({
