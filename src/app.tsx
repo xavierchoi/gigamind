@@ -33,6 +33,7 @@ import {
   cloneCommand,
   noteCommand,
   sessionCommand,
+  similarLinksCommand,
   type CommandContext,
   type AppState,
 } from "./commands/index.js";
@@ -174,6 +175,10 @@ export function App() {
   const currentToolRef = useRef<string | null>(null);
   const currentToolStartTimeRef = useRef<number | null>(null);
 
+  // Refs for throttled streaming text updates to reduce terminal flickering
+  const streamingBufferRef = useRef<string>('');
+  const flushTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   // Initialize command registry with all commands
   const commandRegistry = useMemo(() => {
     const registry = new CommandRegistry();
@@ -185,8 +190,28 @@ export function App() {
       cloneCommand,
       noteCommand,
       sessionCommand,
+      similarLinksCommand,
     ]);
     return registry;
+  }, []);
+
+  // Flush streaming buffer to state - batches multiple text chunks into single re-renders
+  const flushStreamingBuffer = useCallback(() => {
+    if (streamingBufferRef.current) {
+      setStreamingText(prev => prev + streamingBufferRef.current);
+      streamingBufferRef.current = '';
+    }
+    flushTimeoutRef.current = null;
+  }, []);
+
+  // Cleanup streaming buffer timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (flushTimeoutRef.current) {
+        clearTimeout(flushTimeoutRef.current);
+        flushTimeoutRef.current = null;
+      }
+    };
   }, []);
 
   // Refresh stats callback for commands that modify notes
@@ -546,7 +571,16 @@ export function App() {
             onText: (text) => {
               // Ignore if this is from an old request
               if (requestGenerationRef.current !== currentGeneration) return;
-              setStreamingText((prev) => prev + text);
+
+              // Batch text chunks to reduce terminal flickering
+              streamingBufferRef.current += text;
+
+              // Throttle: flush every 50ms instead of every chunk
+              if (!flushTimeoutRef.current) {
+                flushTimeoutRef.current = setTimeout(() => {
+                  flushStreamingBuffer();
+                }, 50);
+              }
             },
             onToolUse: (toolName) => {
               if (requestGenerationRef.current !== currentGeneration) return;
@@ -585,6 +619,15 @@ export function App() {
               // Ignore if this is from an old request
               if (requestGenerationRef.current !== currentGeneration) return;
               abortControllerRef.current = null;
+
+              // Flush any remaining buffered text before clearing
+              if (flushTimeoutRef.current) {
+                clearTimeout(flushTimeoutRef.current);
+                flushTimeoutRef.current = null;
+              }
+              flushStreamingBuffer();
+              streamingBufferRef.current = '';
+
               setMessages((prev) => [...prev, { role: "assistant", content: fullText }]);
               setStreamingText("");
               setIsLoading(false);
@@ -613,6 +656,15 @@ export function App() {
               }
 
               abortControllerRef.current = null;
+
+              // Flush any remaining buffered text before clearing
+              if (flushTimeoutRef.current) {
+                clearTimeout(flushTimeoutRef.current);
+                flushTimeoutRef.current = null;
+              }
+              flushStreamingBuffer();
+              streamingBufferRef.current = '';
+
               const friendlyMessage = formatErrorMessage(err);
               setMessages((prev) => [
                 ...prev,
@@ -621,6 +673,7 @@ export function App() {
                   content: friendlyMessage,
                 },
               ]);
+              setStreamingText("");
               setIsLoading(false);
               setLoadingStartTime(undefined);
               setCurrentTool(null);
@@ -639,6 +692,16 @@ export function App() {
         );
       } catch (err) {
         abortControllerRef.current = null;
+
+        // Flush any remaining buffered text before clearing
+        if (flushTimeoutRef.current) {
+          clearTimeout(flushTimeoutRef.current);
+          flushTimeoutRef.current = null;
+        }
+        flushStreamingBuffer();
+        streamingBufferRef.current = '';
+
+        setStreamingText("");
         setIsLoading(false);
         setLoadingStartTime(undefined);
         setCurrentTool(null);
@@ -664,7 +727,7 @@ export function App() {
         ]);
       }
     },
-    [client, isLoading, config, sessionManager, commandRegistry, buildCommandContext]
+    [client, isLoading, config, sessionManager, commandRegistry, buildCommandContext, flushStreamingBuffer]
   );
 
   // Question answer handler
@@ -698,6 +761,14 @@ export function App() {
         abortControllerRef.current.abort();
         abortControllerRef.current = null;
       }
+
+      // Flush any remaining buffered text before clearing
+      if (flushTimeoutRef.current) {
+        clearTimeout(flushTimeoutRef.current);
+        flushTimeoutRef.current = null;
+      }
+      flushStreamingBuffer();
+      streamingBufferRef.current = '';
 
       setIsLoading(false);
       setLoadingStartTime(undefined);

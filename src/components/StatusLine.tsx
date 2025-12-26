@@ -5,16 +5,16 @@ import { t } from "../i18n/index.js";
 
 interface StatusLineProps {
   notesDir: string;
-  refreshInterval?: number; // 기본값: 300ms
+  refreshInterval?: number; // 기본값: 2000ms
 }
 
 /**
- * 프롬프트 아래에 표시되는 실시간 상태 표시줄
- * 노트 수, 연결 수, 미생성 링크 수, 고립 노트 수를 표시
+ * Memoized status line component - displays real-time stats below the prompt
+ * Shows note count, connection count, dangling links, and orphan notes
  */
-export function StatusLine({
+export const StatusLine = React.memo(function StatusLine({
   notesDir,
-  refreshInterval = 300,
+  refreshInterval = 2000,
 }: StatusLineProps) {
   const [stats, setStats] = useState<QuickNoteStats>({
     noteCount: 0,
@@ -32,7 +32,18 @@ export function StatusLine({
       try {
         const newStats = await getQuickStats(notesDir);
         if (isMounted) {
-          setStats(newStats);
+          // Only update if stats actually changed to prevent unnecessary re-renders
+          setStats((prev) => {
+            if (
+              prev.noteCount === newStats.noteCount &&
+              prev.connectionCount === newStats.connectionCount &&
+              prev.danglingCount === newStats.danglingCount &&
+              prev.orphanCount === newStats.orphanCount
+            ) {
+              return prev; // No change, prevent re-render
+            }
+            return newStats;
+          });
         }
       } catch {
         // 에러 발생 시 조용히 실패 - UI 방해 방지
@@ -42,7 +53,7 @@ export function StatusLine({
     // 초기 fetch
     fetchStats();
 
-    // 300ms 간격으로 갱신
+    // 2초 간격으로 갱신 (flickering 방지)
     const interval = setInterval(fetchStats, refreshInterval);
 
     return () => {
@@ -76,4 +87,4 @@ export function StatusLine({
       </Text>
     </Box>
   );
-}
+});

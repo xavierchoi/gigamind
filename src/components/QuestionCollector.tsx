@@ -6,7 +6,7 @@
  * Includes "Other" option for custom text input.
  */
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import { Box, Text, useInput } from "ink";
 import SelectInput from "ink-select-input";
 import TextInput from "ink-text-input";
@@ -32,7 +32,10 @@ interface SelectItem {
   description?: string;
 }
 
-export function QuestionCollector({
+/**
+ * Memoized question collector component - re-renders only when props change
+ */
+export const QuestionCollector = React.memo(function QuestionCollector({
   question,
   progress,
   onAnswer,
@@ -43,8 +46,8 @@ export function QuestionCollector({
   const [otherInput, setOtherInput] = useState("");
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
 
-  // Build options list with "Other" option
-  const items: SelectItem[] = [
+  // Build options list with "Other" option - memoized to prevent re-creation on every render
+  const items: SelectItem[] = useMemo(() => [
     ...question.options.map((opt) => ({
       label: opt.label,
       value: opt.label,
@@ -55,7 +58,7 @@ export function QuestionCollector({
       value: "__OTHER__",
       description: t("common:question_collector.other_placeholder"),
     },
-  ];
+  ], [question.options, t]);
 
   // Handle keyboard input
   useInput((input, key) => {
@@ -278,6 +281,6 @@ export function QuestionCollector({
       </Box>
     </Box>
   );
-}
+});
 
 export default QuestionCollector;

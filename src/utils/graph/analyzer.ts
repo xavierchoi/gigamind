@@ -61,8 +61,11 @@ function getIOConcurrency(): number {
 
 /**
  * 디렉토리에서 모든 마크다운 파일 수집 (재귀)
+ *
+ * @param dir 검색할 디렉토리 경로
+ * @returns 마크다운 파일 경로 배열
  */
-async function collectMarkdownFiles(dir: string): Promise<string[]> {
+export async function collectMarkdownFiles(dir: string): Promise<string[]> {
   const files: string[] = [];
 
   // Check if the root directory exists first

@@ -11,7 +11,10 @@ export interface ToolUsageIndicatorProps {
   searchProgress?: { filesFound?: number; filesMatched?: number } | null;  // search progress info
 }
 
-export function ToolUsageIndicator({
+/**
+ * Memoized tool usage indicator component - re-renders only when props change
+ */
+export const ToolUsageIndicator = React.memo(function ToolUsageIndicator({
   startTime,
   currentTool,
   currentToolStartTime,
@@ -21,36 +24,26 @@ export function ToolUsageIndicator({
   const [elapsed, setElapsed] = useState(0);
   const [currentToolElapsed, setCurrentToolElapsed] = useState(0);
 
-  // Update elapsed time every 1 second
+  // Update both elapsed timers with a single interval to prevent double re-renders
   useEffect(() => {
-    if (!startTime) return;
+    if (!startTime && !currentToolStartTime) return;
 
-    const updateElapsed = () => {
-      setElapsed(Math.floor((Date.now() - startTime) / 1000));
+    const updateTimers = () => {
+      if (startTime) {
+        setElapsed(Math.floor((Date.now() - startTime) / 1000));
+      }
+      if (currentToolStartTime) {
+        setCurrentToolElapsed(Math.floor((Date.now() - currentToolStartTime) / 1000));
+      } else {
+        setCurrentToolElapsed(0);
+      }
     };
 
-    updateElapsed();
-    const interval = setInterval(updateElapsed, 1000);
+    updateTimers();
+    const interval = setInterval(updateTimers, 1000);
 
     return () => clearInterval(interval);
-  }, [startTime]);
-
-  // Update current tool elapsed time every 1 second
-  useEffect(() => {
-    if (!currentToolStartTime) {
-      setCurrentToolElapsed(0);
-      return;
-    }
-
-    const updateCurrentToolElapsed = () => {
-      setCurrentToolElapsed(Math.floor((Date.now() - currentToolStartTime) / 1000));
-    };
-
-    updateCurrentToolElapsed();
-    const interval = setInterval(updateCurrentToolElapsed, 1000);
-
-    return () => clearInterval(interval);
-  }, [currentToolStartTime]);
+  }, [startTime, currentToolStartTime]);
 
   // Format time to Xs
   const formatTime = (seconds: number): string => {
@@ -118,4 +111,4 @@ export function ToolUsageIndicator({
       </Box>
     </Box>
   );
-}
+});

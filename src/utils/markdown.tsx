@@ -13,7 +13,8 @@ type TokenType =
   | "codeBlock"
   | "heading"
   | "listItem"
-  | "newline";
+  | "newline"
+  | "emptyLine"; // Paragraph break (blank line)
 
 interface Token {
   type: TokenType;
@@ -165,11 +166,16 @@ function parseMarkdown(text: string): Token[] {
     if (line.trim()) {
       const inlineTokens = parseInlineMarkdown(line);
       tokens.push(...inlineTokens);
-    }
-
-    // Add newline between lines (except last)
-    if (i < lines.length - 1) {
-      tokens.push({ type: "newline", content: "" });
+      // Add newline between lines (except last)
+      if (i < lines.length - 1) {
+        tokens.push({ type: "newline", content: "" });
+      }
+    } else {
+      // Empty line = paragraph break (but avoid consecutive empty lines)
+      const lastToken = tokens[tokens.length - 1];
+      if (lastToken && lastToken.type !== "emptyLine") {
+        tokens.push({ type: "emptyLine", content: "" });
+      }
     }
   }
 
@@ -219,9 +225,11 @@ function InlineToken({ token }: { token: Token }): React.ReactElement {
 function Heading({
   content,
   level,
+  isFirst = false,
 }: {
   content: string;
   level: number;
+  isFirst?: boolean;
 }): React.ReactElement {
   const colors: Record<number, string> = {
     1: "yellow",
@@ -236,12 +244,14 @@ function Heading({
   const inlineTokens = parseInlineMarkdown(content);
 
   return (
-    <Text bold color={colors[level] || "white"}>
-      {prefix}
-      {inlineTokens.map((token, idx) => (
-        <InlineToken key={idx} token={token} />
-      ))}
-    </Text>
+    <Box marginTop={isFirst ? 0 : 1}>
+      <Text bold color={colors[level] || "white"}>
+        {prefix}
+        {inlineTokens.map((token, idx) => (
+          <InlineToken key={idx} token={token} />
+        ))}
+      </Text>
+    </Box>
   );
 }
 
@@ -286,7 +296,7 @@ function CodeBlock({
       borderStyle="round"
       borderColor="gray"
       paddingX={1}
-      marginY={0}
+      marginY={1}
     >
       {language && (
         <Text color="gray" dimColor>
@@ -328,6 +338,7 @@ export function MarkdownText({ children }: { children: string }): React.ReactEle
             key={elements.length}
             content={token.content}
             level={token.level || 1}
+            isFirst={elements.length === 0}
           />
         );
         break;
@@ -356,6 +367,12 @@ export function MarkdownText({ children }: { children: string }): React.ReactEle
 
       case "newline":
         flushLine();
+        break;
+
+      case "emptyLine":
+        flushLine();
+        // Add visual paragraph break (empty line)
+        elements.push(<Text key={elements.length}>{" "}</Text>);
         break;
 
       default:

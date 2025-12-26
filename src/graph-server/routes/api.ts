@@ -6,7 +6,9 @@
 import { Router, type Request, type Response } from "express";
 import { analyzeNoteGraph, getQuickStats } from "../../utils/graph/analyzer.js";
 import { normalizeNoteTitle } from "../../utils/graph/wikilinks.js";
-import type { NoteGraphStats, BacklinkEntry } from "../../utils/graph/types.js";
+import { clusterDanglingLinks } from "../../utils/graph/clusterAnalyzer.js";
+import { mergeSimilarLinks } from "../../utils/graph/linkMerger.js";
+import type { NoteGraphStats, BacklinkEntry, SimilarLinkCluster, MergeLinkResult } from "../../utils/graph/types.js";
 import path from "node:path";
 
 /**
@@ -57,6 +59,35 @@ interface StatsAPIResponse {
   orphanCount: number;
   danglingCount: number;
   lastUpdated: number;
+}
+
+/**
+ * Similar links cluster API response
+ */
+interface SimilarLinksAPIResponse {
+  clusters: SimilarLinkCluster[];
+  totalClusters: number;
+  totalDanglingLinks: number;
+  analyzedAt: number;
+}
+
+/**
+ * Merge similar links request body
+ */
+interface MergeSimilarLinksRequest {
+  oldTargets: string[];
+  newTarget: string;
+  preserveAsAlias: boolean;
+}
+
+/**
+ * Merge similar links API response
+ */
+interface MergeSimilarLinksAPIResponse {
+  filesModified: number;
+  linksReplaced: number;
+  modifiedFiles: string[];
+  errors: Record<string, string>;
 }
 
 /**
@@ -380,6 +411,96 @@ export function createGraphRouter(notesDir: string): Router {
     } catch (error) {
       console.error("Error fetching focused graph:", error);
       res.status(500).json({ error: "Failed to analyze graph" });
+    }
+  });
+
+  // GET /api/similar-links - Get similar dangling link clusters
+  router.get("/similar-links", async (req: Request, res: Response) => {
+    try {
+      const { threshold, limit } = req.query;
+
+      const parsedThreshold = threshold ? parseFloat(threshold as string) : 0.7;
+      const parsedLimit = limit ? parseInt(limit as string, 10) : 50;
+
+      // Validate threshold range (including NaN check)
+      if (isNaN(parsedThreshold) || parsedThreshold < 0 || parsedThreshold > 1) {
+        return res.status(400).json({ error: "Threshold must be a number between 0 and 1" });
+      }
+
+      // Validate limit range (including NaN check)
+      if (isNaN(parsedLimit) || parsedLimit < 1 || parsedLimit > 1000) {
+        return res.status(400).json({ error: "Limit must be between 1 and 1000" });
+      }
+
+      const stats = await analyzeNoteGraph(notesDir, { includeContext: false });
+
+      console.log(`[Similar Links API] Found ${stats.danglingLinks.length} dangling links`);
+      if (stats.danglingLinks.length > 0) {
+        console.log(`[Similar Links API] Sample dangling links:`, stats.danglingLinks.slice(0, 5).map(d => d.target));
+      }
+
+      const clusters = clusterDanglingLinks(stats.danglingLinks, {
+        threshold: parsedThreshold,
+        maxResults: parsedLimit,
+      });
+
+      console.log(`[Similar Links API] Found ${clusters.length} clusters at threshold ${parsedThreshold}`);
+
+      const response: SimilarLinksAPIResponse = {
+        clusters,
+        totalClusters: clusters.length,
+        totalDanglingLinks: stats.danglingLinks.length,
+        analyzedAt: Date.now(),
+      };
+
+      res.json(response);
+    } catch (error) {
+      console.error("Error analyzing similar links:", error);
+      res.status(500).json({ error: "Failed to analyze similar links" });
+    }
+  });
+
+  // POST /api/similar-links/merge - Merge similar links
+  router.post("/similar-links/merge", async (req: Request, res: Response) => {
+    try {
+      const { oldTargets, newTarget, preserveAsAlias } = req.body as MergeSimilarLinksRequest;
+
+      // Validate request body
+      if (!oldTargets || !Array.isArray(oldTargets) || oldTargets.length === 0) {
+        return res.status(400).json({ error: "oldTargets must be a non-empty array" });
+      }
+
+      // Validate each oldTarget is a non-empty string
+      if (!oldTargets.every((target: unknown) => typeof target === "string" && (target as string).trim().length > 0)) {
+        return res.status(400).json({ error: "Each oldTarget must be a non-empty string" });
+      }
+
+      if (!newTarget || typeof newTarget !== "string" || !newTarget.trim()) {
+        return res.status(400).json({ error: "newTarget must be a non-empty string" });
+      }
+
+      if (typeof preserveAsAlias !== "boolean") {
+        return res.status(400).json({ error: "preserveAsAlias must be a boolean" });
+      }
+
+      const result: MergeLinkResult = await mergeSimilarLinks(notesDir, {
+        oldTargets,
+        newTarget,
+        preserveAsAlias,
+      });
+
+      // Convert Map to plain object for JSON response
+      const response: MergeSimilarLinksAPIResponse = {
+        filesModified: result.filesModified,
+        linksReplaced: result.linksReplaced,
+        modifiedFiles: result.modifiedFiles,
+        errors: Object.fromEntries(result.errors),
+      };
+
+      res.json(response);
+    } catch (error) {
+      console.error("Error merging similar links:", error);
+      res.status(500).json({ error: "Failed to merge similar links" });
     }
   });
 

@@ -1,0 +1,16 @@
+{
+  "title": "유사 링크 분석",
+  "cluster": "클러스터",
+  "recommended": "추천",
+  "similarity": "유사도",
+  "occurrences": "회 언급",
+  "merge": "통합",
+  "mergeConfirm": "{{count}}개 링크를 '{{target}}'으로 통합하시겠습니까?",
+  "mergeSuccess": "{{files}}개 파일에서 {{links}}개 링크가 통합되었습니다",
+  "mergeError": "병합 중 오류가 발생했습니다",
+  "noSimilarLinks": "유사한 dangling link가 없습니다",
+  "threshold": "임계값",
+  "analyze": "분석",
+  "cancel": "취소",
+  "preserveAlias": "원본 표기를 alias로 보존"
+}

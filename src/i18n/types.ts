@@ -88,6 +88,23 @@ export interface OnboardingTranslations {
   skipOnboarding: string;
 }
 
+export interface SimilarLinksTranslations {
+  title: string;
+  cluster: string;
+  recommended: string;
+  similarity: string;
+  occurrences: string;
+  merge: string;
+  mergeConfirm: string;
+  mergeSuccess: string;
+  mergeError: string;
+  noSimilarLinks: string;
+  threshold: string;
+  analyze: string;
+  cancel: string;
+  preserveAlias: string;
+}
+
 // Combined translations type
 export interface Translations {
   common: CommonTranslations;
@@ -95,6 +112,7 @@ export interface Translations {
   errors: ErrorTranslations;
   prompts: PromptTranslations;
   onboarding: OnboardingTranslations;
+  'similar-links': SimilarLinksTranslations;
 }
 
 // Supported languages

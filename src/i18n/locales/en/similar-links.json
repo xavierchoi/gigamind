@@ -1,0 +1,16 @@
+{
+  "title": "Similar Link Analysis",
+  "cluster": "Cluster",
+  "recommended": "Recommended",
+  "similarity": "Similarity",
+  "occurrences": " occurrences",
+  "merge": "Merge",
+  "mergeConfirm": "Merge {{count}} links to '{{target}}'?",
+  "mergeSuccess": "{{links}} links merged in {{files}} files",
+  "mergeError": "Error occurred during merge",
+  "noSimilarLinks": "No similar dangling links found",
+  "threshold": "Threshold",
+  "analyze": "Analyze",
+  "cancel": "Cancel",
+  "preserveAlias": "Preserve original as alias"
+}

@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useEffect } from "react";
-import { Box, Text, useInput } from "ink";
+import React, { useState, useCallback, useEffect, useMemo } from "react";
+import { Box, Text, useInput, useStdout } from "ink";
 import TextInput from "ink-text-input";
 import Spinner from "ink-spinner";
 import { MarkdownText } from "../utils/markdown.js";
@@ -74,41 +74,53 @@ interface ChatProps {
   onQuestionCancel?: () => void;
 }
 
-function MessageBubble({ message }: { message: Message }) {
+/**
+ * Memoized message bubble component - prevents re-renders when message prop is unchanged
+ */
+const MessageBubble = React.memo(function MessageBubble({ message }: { message: Message }) {
   const isUser = message.role === "user";
 
   if (isUser) {
     // User message: highlighted with dark gray background like text selection
+    // Compact: reduced marginY from 1 to 0, using marginTop only
     return (
-      <Box flexDirection="column" marginY={1}>
+      <Box flexDirection="column" marginTop={1}>
         <Text backgroundColor="#3a3a3a" color="white">{` > ${message.content} `}</Text>
       </Box>
     );
   }
 
-  // AI response: no prefix, with bottom margin for visual separation
+  // AI response: no prefix, compact bottom margin
+  // Compact: reduced marginBottom from 2 to 1, marginLeft from 2 to 1
   return (
-    <Box flexDirection="column" marginBottom={2} marginLeft={2}>
+    <Box flexDirection="column" marginBottom={1} marginLeft={1}>
       <MarkdownText>{message.content}</MarkdownText>
     </Box>
   );
-}
+});
 
-function StreamingMessage({ text }: { text: string }) {
+/**
+ * Memoized streaming message component - re-renders only when text changes
+ */
+const StreamingMessage = React.memo(function StreamingMessage({ text }: { text: string }) {
   if (!text) return null;
 
   // Streaming AI response: same style as completed AI response with cursor
+  // Compact: reduced marginBottom from 2 to 1, marginLeft from 2 to 1
   return (
-    <Box flexDirection="column" marginBottom={2} marginLeft={2}>
+    <Box flexDirection="column" marginBottom={1} marginLeft={1}>
       <Box flexDirection="row">
         <MarkdownText>{text}</MarkdownText>
         <Text color="gray">_</Text>
       </Box>
     </Box>
   );
-}
+});
 
-function CommandHints({ input, selectedIndex }: { input: string; selectedIndex: number }) {
+/**
+ * Memoized command hints component - re-renders only when input or selectedIndex changes
+ */
+const CommandHints = React.memo(function CommandHints({ input, selectedIndex }: { input: string; selectedIndex: number }) {
   // Show hints when input starts with "/" but is not a complete command
   if (!input.startsWith("/") || input.includes(" ")) return null;
 
@@ -132,9 +144,12 @@ function CommandHints({ input, selectedIndex }: { input: string; selectedIndex: 
       ))}
     </Box>
   );
-}
+});
 
-function LoadingIndicator({ startTime }: { startTime?: number }) {
+/**
+ * Memoized loading indicator component - re-renders only when startTime changes
+ */
+const LoadingIndicator = React.memo(function LoadingIndicator({ startTime }: { startTime?: number }) {
   const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
@@ -156,9 +171,12 @@ function LoadingIndicator({ startTime }: { startTime?: number }) {
       <Text color="gray" dimColor> | {t("common:cancel_hint.esc_to_cancel")}</Text>
     </Box>
   );
-}
+});
 
-function ExamplePrompts({ onSelect }: { onSelect: (text: string) => void }) {
+/**
+ * Memoized example prompts component - re-renders only when onSelect callback changes
+ */
+const ExamplePrompts = React.memo(function ExamplePrompts({ onSelect }: { onSelect: (text: string) => void }) {
   const examplePrompts = getExamplePrompts();
   return (
     <Box flexDirection="column" marginBottom={1} paddingX={1}>
@@ -172,9 +190,12 @@ function ExamplePrompts({ onSelect }: { onSelect: (text: string) => void }) {
       <Text color="gray" dimColor>{t("common:example_prompts.hint")}</Text>
     </Box>
   );
-}
+});
 
-function CharacterCounter({ count }: { count: number }) {
+/**
+ * Memoized character counter component - re-renders only when count changes
+ */
+const CharacterCounter = React.memo(function CharacterCounter({ count }: { count: number }) {
   let color: string = "gray";
   let prefix = "";
   if (count > 500) {
@@ -191,12 +212,12 @@ function CharacterCounter({ count }: { count: number }) {
       {prefix}{t("common:input.characters", { count })}
     </Text>
   );
-}
+});
 
 /**
- * Intent indicator showing detected AI intent with emoji
+ * Memoized intent indicator component - re-renders only when intent changes
  */
-function IntentIndicator({ intent }: { intent: IntentInfo }) {
+const IntentIndicator = React.memo(function IntentIndicator({ intent }: { intent: IntentInfo }) {
   // Map agent names to emojis and i18n keys
   const agentConfig: Record<string, { emoji: string; key: string }> = {
     "search-agent": { emoji: "magnifier", key: "search_agent" },
@@ -228,8 +249,9 @@ function IntentIndicator({ intent }: { intent: IntentInfo }) {
 
   const emoji = emojiMap[config.emoji] || "";
 
+  // Compact: reduced marginLeft from 2 to 1
   return (
-    <Box marginLeft={2} marginBottom={1}>
+    <Box marginLeft={1} marginBottom={1}>
       <Text color="cyan">
         {emoji}{" "}
         {isUncertain && <Text color="yellow">{t("common:intent.uncertain_prefix")}</Text>}
@@ -238,7 +260,7 @@ function IntentIndicator({ intent }: { intent: IntentInfo }) {
       </Text>
     </Box>
   );
-}
+});
 
 export function Chat({
   messages,
@@ -267,6 +289,50 @@ export function Chat({
   const [tabIndex, setTabIndex] = useState(0);
   const [showEmptyWarning, setShowEmptyWarning] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
+
+  // Terminal size awareness to prevent scrollback issues
+  const { stdout } = useStdout();
+  const terminalHeight = stdout?.rows ?? 24;
+
+  // Calculate available space for messages
+  // Fixed UI elements take approximately:
+  // - StatusBar (top): ~4 lines (border + content)
+  // - Input area: ~3 lines (border + content)
+  // - Help text: ~1 line
+  // - StatusLine: ~1 line
+  // - Padding/margins: ~2 lines
+  // Total fixed: ~11 lines
+  const FIXED_UI_LINES = 11;
+  const availableMessageLines = Math.max(5, terminalHeight - FIXED_UI_LINES);
+
+  // Estimate lines per message (user: ~2, assistant: ~4 on average)
+  const estimateMessageLines = (msg: Message): number => {
+    const baseLines = msg.role === "user" ? 2 : 3;
+    // Add extra lines for longer content (rough estimate: 1 line per 80 chars)
+    const contentLines = Math.ceil(msg.content.length / 80);
+    return Math.min(baseLines + contentLines, 10); // Cap at 10 lines per message
+  };
+
+  // Limit visible messages to fit within viewport
+  const visibleMessages = useMemo(() => {
+    if (messages.length === 0) return messages;
+
+    // Always show at least the last message
+    let totalLines = 0;
+    let startIndex = messages.length - 1;
+
+    // Work backwards from the end, adding messages until we exceed available space
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msgLines = estimateMessageLines(messages[i]);
+      if (totalLines + msgLines > availableMessageLines && i < messages.length - 1) {
+        break;
+      }
+      totalLines += msgLines;
+      startIndex = i;
+    }
+
+    return messages.slice(startIndex);
+  }, [messages, availableMessageLines]);
 
   // Get matching commands for current input
   const slashCommands = getSlashCommands();
@@ -402,14 +468,31 @@ export function Chat({
     }
   }, [historyIndex]);
 
+  // Memoized callback for ExamplePrompts to prevent unnecessary re-renders
+  const handleExampleSelect = useCallback((text: string) => {
+    onSubmit(text);
+    addToHistory(text);
+  }, [onSubmit, addToHistory]);
+
   // Show example prompts only on first session with welcome message only
   const showExamples = isFirstSession && messages.length <= 1 && !isLoading && !input;
 
+  // Calculate how many messages are hidden
+  const hiddenMessageCount = messages.length - visibleMessages.length;
+
   return (
     <Box flexDirection="column" padding={1}>
-      {/* Messages area */}
-      <Box flexDirection="column" marginBottom={1}>
-        {messages.map((msg, idx) => (
+      {/* Messages area with height constraint to prevent scrollback overflow */}
+      <Box flexDirection="column" marginBottom={1} height={availableMessageLines}>
+        {/* Truncation indicator when older messages are hidden */}
+        {hiddenMessageCount > 0 && (
+          <Box marginBottom={1}>
+            <Text color="gray" dimColor>
+              {t("common:messages.hidden_count", { count: hiddenMessageCount })}
+            </Text>
+          </Box>
+        )}
+        {visibleMessages.map((msg, idx) => (
           <MessageBubble key={idx} message={msg} />
         ))}
 
@@ -443,10 +526,7 @@ export function Chat({
 
       {/* Example prompts for first-time users */}
       {showExamples && (
-        <ExamplePrompts onSelect={(text) => {
-          onSubmit(text);
-          addToHistory(text);
-        }} />
+        <ExamplePrompts onSelect={handleExampleSelect} />
       )}
 
       {/* Command hints - hide when question UI is active */}

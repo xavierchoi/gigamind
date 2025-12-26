@@ -121,6 +121,9 @@
   "command_hints": {
     "available_commands": "사용 가능한 명령어 (Tab: 자동완성):"
   },
+  "messages": {
+    "hidden_count": "... {{count}}개의 이전 메시지 숨김 (히스토리에서 위로 스크롤)"
+  },
   "status": {
     "notes": "노트:",
     "connections": "연결:",

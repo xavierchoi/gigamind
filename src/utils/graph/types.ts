@@ -139,3 +139,75 @@ export interface CacheEntry<T> {
   /** 파일 해시 (변경 감지용) */
   hash?: string;
 }
+
+/**
+ * 유사 링크 클러스터
+ * 유사한 dangling link들을 그룹화한 결과
+ */
+export interface SimilarLinkCluster {
+  /** 클러스터 고유 ID */
+  id: string;
+  /** 대표 링크 타겟 (가장 빈도가 높은 것) */
+  representativeTarget: string;
+  /** 클러스터에 포함된 유사 링크들 */
+  members: SimilarLinkMember[];
+  /** 클러스터 총 출현 횟수 */
+  totalOccurrences: number;
+  /** 평균 유사도 점수 */
+  averageSimilarity: number;
+}
+
+/**
+ * 클러스터 멤버 (유사 링크)
+ */
+export interface SimilarLinkMember {
+  /** 링크 타겟 텍스트 */
+  target: string;
+  /** 대표 타겟과의 유사도 점수 (0-1) */
+  similarity: number;
+  /** 이 링크가 포함된 노트들 */
+  sources: Array<{
+    notePath: string;
+    noteTitle: string;
+    count: number;
+  }>;
+}
+
+/**
+ * 유사 링크 분석 옵션
+ */
+export interface SimilarityAnalysisOptions {
+  /** 유사도 임계값 (기본: 0.7) */
+  threshold?: number;
+  /** 최소 클러스터 크기 (기본: 2) */
+  minClusterSize?: number;
+  /** 최대 결과 수 (기본: 50) */
+  maxResults?: number;
+}
+
+/**
+ * 링크 병합 요청
+ * 유사 위키링크를 표준 표기로 일괄 병합하기 위한 요청
+ */
+export interface MergeLinkRequest {
+  /** 병합 대상 링크들 (구 표기법들) */
+  oldTargets: string[];
+  /** 새로운 표준 표기 */
+  newTarget: string;
+  /** 원래 텍스트를 alias로 보존할지 여부 */
+  preserveAsAlias: boolean;
+}
+
+/**
+ * 링크 병합 결과
+ */
+export interface MergeLinkResult {
+  /** 수정된 파일 수 */
+  filesModified: number;
+  /** 총 치환된 링크 수 */
+  linksReplaced: number;
+  /** 수정된 파일 경로 목록 */
+  modifiedFiles: string[];
+  /** 에러가 발생한 파일 (경로 -> 에러 메시지) */
+  errors: Map<string, string>;
+}

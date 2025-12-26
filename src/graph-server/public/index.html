@@ -103,6 +103,19 @@
       </button>
     </div>
 
+    <!-- Similar Links toggle -->
+    <button class="filter-btn" id="similar-links-toggle" data-i18n-title="similar_links_toggle_title" title="Similar Links">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="6" cy="6" r="3"/>
+        <circle cx="18" cy="6" r="3"/>
+        <circle cx="12" cy="18" r="3"/>
+        <line x1="9" y1="6" x2="15" y2="6"/>
+        <line x1="7.5" y1="8.5" x2="10.5" y2="15.5"/>
+        <line x1="16.5" y1="8.5" x2="13.5" y2="15.5"/>
+      </svg>
+      <span class="filter-label" data-i18n="similar_links_label">Similar</span>
+    </button>
+
     <!-- View controls -->
     <div class="control-group">
       <button class="control-btn" id="zoom-out" data-i18n-title="zoom_out_title" title="Zoom out (-)">
@@ -146,6 +159,80 @@
     </div>
     <canvas id="minimap-canvas" width="180" height="120"></canvas>
     <div class="minimap__viewport" id="minimap-viewport"></div>
+  </div>
+
+  <!-- Similar Links Panel -->
+  <aside class="similar-links-panel" id="similar-links-panel" hidden>
+    <header class="similar-links-panel__header">
+      <h2 class="similar-links-panel__title" data-i18n="similar_links_title">Similar Links</h2>
+      <button class="similar-links-panel__close" id="close-similar-links" data-i18n-aria-label="sidebar_close" aria-label="Close">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </header>
+
+    <!-- Analysis controls -->
+    <div class="similar-links-panel__controls">
+      <div class="similar-links-panel__threshold">
+        <label class="similar-links-panel__label" data-i18n="similar_links_threshold">Threshold</label>
+        <input type="range" id="similarity-threshold" min="50" max="95" value="70" class="similar-links-panel__slider">
+        <span class="similar-links-panel__threshold-value" id="threshold-value">70%</span>
+      </div>
+      <button class="similar-links-panel__analyze-btn" id="analyze-similar-links">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="23 4 23 10 17 10"/>
+          <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+        </svg>
+        <span data-i18n="similar_links_analyze">Analyze</span>
+      </button>
+    </div>
+
+    <!-- Loading state -->
+    <div class="similar-links-panel__loading" id="similar-links-loading" hidden role="status" aria-live="polite">
+      <div class="similar-links-panel__spinner"></div>
+      <span data-i18n="similar_links_loading">Analyzing similar links...</span>
+    </div>
+
+    <!-- Empty state -->
+    <div class="similar-links-panel__empty" id="similar-links-empty" hidden role="status" aria-live="polite">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M8 15s1.5 2 4 2 4-2 4-2"/>
+        <line x1="9" y1="9" x2="9.01" y2="9"/>
+        <line x1="15" y1="9" x2="15.01" y2="9"/>
+      </svg>
+      <p data-i18n="similar_links_no_results">No similar dangling links found</p>
+    </div>
+
+    <!-- Clusters list -->
+    <div class="similar-links-panel__clusters" id="similar-links-clusters"></div>
+  </aside>
+
+  <!-- Merge Confirmation Modal -->
+  <div class="merge-modal" id="merge-modal" hidden>
+    <div class="merge-modal__backdrop"></div>
+    <div class="merge-modal__content">
+      <h3 class="merge-modal__title" data-i18n="merge_confirm_title">Confirm Merge</h3>
+      <p class="merge-modal__message" id="merge-modal-message"></p>
+
+      <div class="merge-modal__options">
+        <label class="merge-modal__checkbox">
+          <input type="checkbox" id="merge-preserve-alias" checked>
+          <span data-i18n="merge_preserve_alias">Preserve original text as alias</span>
+        </label>
+      </div>
+
+      <div class="merge-modal__actions">
+        <button class="merge-modal__btn merge-modal__btn--secondary" id="merge-cancel">
+          <span data-i18n="merge_cancel">Cancel</span>
+        </button>
+        <button class="merge-modal__btn merge-modal__btn--primary" id="merge-confirm">
+          <span data-i18n="merge_confirm">Merge</span>
+        </button>
+      </div>
+    </div>
   </div>
 
   <!-- Node detail sidebar -->
@@ -275,6 +362,7 @@
     <kbd>/</kbd> <span data-i18n="shortcuts_search">search</span>
     <kbd>+</kbd><kbd>-</kbd> <span data-i18n="shortcuts_zoom">zoom</span>
     <kbd>0</kbd> <span data-i18n="shortcuts_reset">reset</span>
+    <kbd>S</kbd> <span data-i18n="shortcuts_similar">similar</span>
     <kbd>ESC</kbd> <span data-i18n="shortcuts_exit">exit</span>
     <kbd>F</kbd> <span data-i18n="shortcuts_fullscreen">fullscreen</span>
   </div>
@@ -287,5 +375,6 @@
   <script src="https://d3js.org/d3.v7.min.js"></script>
   <script src="js/graph.js"></script>
   <script src="js/controls.js"></script>
+  <script src="js/similar-links.js"></script>
 </body>
 </html>

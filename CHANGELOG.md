@@ -5,6 +5,104 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.4] - 2025-12-26
+
+### Fixed
+
+#### Similar Links Button Functionality
+- **JavaScript Variable Naming Conflict Resolution** (`src/graph-server/public/js/similar-links.js`):
+  - Resolved SyntaxError preventing similar-links.js module from loading
+  - Root cause: Both `controls.js` and `similar-links.js` declared `const elements` in global scope, causing variable collision
+  - Solution: Renamed `elements` to `slElements` in similar-links.js to eliminate naming conflict
+  - Similar Links button now fully responsive and functional
+
+- **Defensive Programming Improvements** (`src/graph-server/public/js/similar-links.js`):
+  - Added null safety checks in `openPanel()` function to prevent errors if DOM elements are not found
+  - Added null safety checks in `closePanel()` function for robust error handling
+  - Improved error resilience for missing or undefined DOM references
+
+#### API and Debugging Enhancements
+- **Enhanced API Response** (`src/graph-server/routes/api.ts`):
+  - Added `totalDanglingLinks` field to `/api/similar-links` endpoint response
+  - Provides better debugging information and UI feedback capabilities
+  - Helps track dangling link statistics for monitoring
+
+- **Comprehensive Debug Logging** (`src/graph-server/public/js/similar-links.js`):
+  - Added console logging at module initialization
+  - Added logging for button click events
+  - Added logging for API calls and responses
+  - Added logging for panel rendering operations
+  - Enables easier troubleshooting and feature verification
+
+- **Server-Side Logging** (`src/graph-server/routes/api.ts`):
+  - Added server-side console logging for similar links API endpoint
+  - Helps identify issues on both client and server sides
+
+## [0.4.3] - 2025-12-26
+
+### Fixed
+
+#### Terminal Rendering Performance and Stability
+- **StatusLine Polling Optimization** (`src/components/StatusLine.tsx`):
+  - Reduced polling interval from 300ms to 2000ms to decrease CPU overhead
+  - Implemented state diffing to prevent unnecessary re-renders when data hasn't changed
+  - Applied React.memo wrapper for component memoization
+
+- **Timer Consolidation** (`src/components/ToolUsageIndicator.tsx`):
+  - Combined two separate 1-second intervals into a single unified interval
+  - Applied React.memo wrapper to prevent unnecessary re-renders
+
+- **Streaming Text Throttling** (`src/app.tsx`):
+  - Implemented 50ms throttled buffer for streaming text updates
+  - Reduces re-renders from per-chunk basis to maximum 20 updates per second
+  - Added proper cleanup and final flush on stream completion
+
+### Changed
+
+#### React Component Memoization
+- **Applied React.memo to 10+ components** for performance optimization:
+  - MessageBubble, StreamingMessage, CommandHints, LoadingIndicator
+  - ExamplePrompts, CharacterCounter, IntentIndicator
+  - ToolUsageIndicator, StatusLine, QuestionCollector
+  - Added useCallback for handler functions to prevent reference changes
+  - Added useMemo for items array in QuestionCollector
+
+#### Viewport-Aware Message Rendering
+- **Terminal Height Awareness** (`src/components/Chat.tsx`):
+  - Integrated useStdout hook for real-time terminal height detection
+  - Implemented dynamic message limiting based on available viewport space
+  - Added truncation indicator to inform users of hidden messages
+  - Reduced component margins for more compact terminal layout
+
+### Performance Improvements
+- **Reduced Terminal Flickering**: Eliminated flickering issues caused by excessive re-renders
+- **Improved Scroll Performance**: Better handling of scroll behavior with viewport-aware rendering
+- **Lower CPU Usage**: Optimized polling intervals and state diffing reduce overall CPU consumption
+- **Smoother Streaming**: Throttled text updates provide smoother visual experience during streaming responses
+
+## [0.4.2] - 2025-12-26
+
+### Changed
+
+#### Markdown Output Readability Enhancements (`src/utils/markdown.tsx`)
+- **Empty Line (Paragraph Break) Handling**:
+  - Added new `emptyLine` token type for proper whitespace rendering
+  - Empty lines now rendered as visual spacing instead of being ignored
+  - Consecutive empty lines merged into single spacing to prevent excessive blank space
+
+- **Heading Spacing**:
+  - Added `marginTop={1}` to Heading component (except first heading)
+  - Improved section separation and visual hierarchy
+
+- **Code Block Spacing**:
+  - Updated code block margins from `marginY={0}` to `marginY={1}`
+  - Added visual spacing before and after code blocks for better readability
+
+### Fixed
+
+- **Answer Output Readability**: Significantly improved visual spacing and paragraph separation throughout AI responses
+- **Visual Hierarchy**: Better distinction between different content sections through improved margin spacing
+
 ## [0.4.1] - 2025-12-26
 
 ### Added

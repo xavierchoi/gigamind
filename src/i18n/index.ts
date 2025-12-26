@@ -9,6 +9,7 @@ import koCommands from './locales/ko/commands.json' with { type: 'json' };
 import koErrors from './locales/ko/errors.json' with { type: 'json' };
 import koPrompts from './locales/ko/prompts.json' with { type: 'json' };
 import koOnboarding from './locales/ko/onboarding.json' with { type: 'json' };
+import koSimilarLinks from './locales/ko/similar-links.json' with { type: 'json' };
 
 // Import English translations
 import enCommon from './locales/en/common.json' with { type: 'json' };
@@ -16,12 +17,13 @@ import enCommands from './locales/en/commands.json' with { type: 'json' };
 import enErrors from './locales/en/errors.json' with { type: 'json' };
 import enPrompts from './locales/en/prompts.json' with { type: 'json' };
 import enOnboarding from './locales/en/onboarding.json' with { type: 'json' };
+import enSimilarLinks from './locales/en/similar-links.json' with { type: 'json' };
 
 export async function initI18n(language: string = 'ko') {
   await i18next.init({
     lng: language,
     fallbackLng: 'ko',
-    ns: ['common', 'commands', 'errors', 'prompts', 'onboarding'],
+    ns: ['common', 'commands', 'errors', 'prompts', 'onboarding', 'similar-links'],
     defaultNS: 'common',
     resources: {
       ko: {
@@ -30,6 +32,7 @@ export async function initI18n(language: string = 'ko') {
         errors: koErrors,
         prompts: koPrompts,
         onboarding: koOnboarding,
+        'similar-links': koSimilarLinks,
       },
       en: {
         common: enCommon,
@@ -37,6 +40,7 @@ export async function initI18n(language: string = 'ko') {
         errors: enErrors,
         prompts: enPrompts,
         onboarding: enOnboarding,
+        'similar-links': enSimilarLinks,
       },
     },
   });

@@ -121,6 +121,9 @@
   "command_hints": {
     "available_commands": "Available commands (Tab: autocomplete):"
   },
+  "messages": {
+    "hidden_count": "... {{count}} older messages hidden (scroll up in history)"
+  },
   "status": {
     "notes": "Notes:",
     "connections": "Links:",

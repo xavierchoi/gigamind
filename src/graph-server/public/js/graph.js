@@ -1277,6 +1277,66 @@ document.getElementById('graph-canvas').addEventListener('click', (e) => {
 // Public API
 // ═══════════════════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Cluster Highlighting (for Similar Links feature)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Highlight nodes that belong to a cluster
+ * @param {string[]} nodeIds - Array of node IDs to highlight
+ * @param {string} color - Color to use for highlighting
+ */
+function highlightClusterNodes(nodeIds, color) {
+  const nodeIdSet = new Set(nodeIds);
+
+  // Set custom property for the cluster color
+  document.documentElement.style.setProperty('--cluster-highlight-color', color);
+
+  // Apply highlighting class to matching nodes
+  state.g.selectAll('.node')
+    .classed('node--cluster-highlight', d => nodeIdSet.has(d.id))
+    .style('opacity', d => nodeIdSet.has(d.id) ? 1 : 0.3);
+
+  // Dim non-cluster links
+  state.g.selectAll('.link')
+    .style('opacity', link => {
+      const sourceId = link.source.id || link.source;
+      const targetId = link.target.id || link.target;
+      return nodeIdSet.has(sourceId) || nodeIdSet.has(targetId) ? 1 : 0.1;
+    });
+
+  // Show labels for highlighted nodes
+  state.g.selectAll('.node')
+    .select('.node-label')
+    .style('opacity', d => nodeIdSet.has(d.id) ? 1 : 0);
+}
+
+/**
+ * Clear cluster highlighting and restore normal view
+ */
+function clearClusterHighlight() {
+  // Remove highlighting class from all nodes
+  state.g.selectAll('.node')
+    .classed('node--cluster-highlight', false)
+    .style('opacity', 1);
+
+  // Restore link opacity
+  state.g.selectAll('.link')
+    .style('opacity', 1);
+
+  // Restore label visibility based on current settings
+  state.g.selectAll('.node')
+    .select('.node-label')
+    .style('opacity', d => {
+      if (state.labelsVisible) return 1;
+      if (d.id === state.focusedNodeId || d.id === state.selectedNodeId) return 1;
+      return null; // Let CSS handle it
+    });
+
+  // Remove custom property
+  document.documentElement.style.removeProperty('--cluster-highlight-color');
+}
+
 window.graphAPI = {
   zoomIn,
   zoomOut,
@@ -1291,6 +1351,9 @@ window.graphAPI = {
   loadMoreNodes,
   loadFullGraph,
   handleCreateNote,
+  highlightClusterNodes,
+  clearClusterHighlight,
+  showToast,
   t,
   tFormat,
   getFilters: () => state.filters,

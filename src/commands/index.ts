@@ -21,6 +21,7 @@ export { GraphCommand, graphCommand } from "./GraphCommand.js";
 export { SessionCommand, sessionCommand } from "./SessionCommand.js";
 export { SearchCommand, searchCommand } from "./SearchCommand.js";
 export { ClearCommand, clearCommand } from "./ClearCommand.js";
+export { SimilarLinksCommand, similarLinksCommand } from "./SimilarLinksCommand.js";
 
 /**
  * CommandRegistry manages all registered commands and routes execution.
