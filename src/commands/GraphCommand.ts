@@ -11,7 +11,7 @@ import i18next from "i18next";
 
 export class GraphCommand extends BaseCommand {
   readonly name = "graph";
-  readonly description = t('commands:graph.description');
+  get description() { return t('commands:graph.description'); }
   readonly usage = "/graph";
 
   /**

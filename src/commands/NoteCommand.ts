@@ -13,7 +13,7 @@ import { t } from "../i18n/index.js";
 
 export class NoteCommand extends BaseCommand {
   name = "note";
-  description = t('commands:note.description');
+  get description() { return t('commands:note.description'); }
   usage = "/note <내용>";
   requiresArgs = true;
   category = "notes" as const;

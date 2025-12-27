@@ -42,6 +42,8 @@ const state = {
     locale: 'en',
     translations: {},
   },
+  // Pinned nodes - Map of nodeId -> {fx, fy}
+  pinnedNodes: new Map(),
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -74,6 +76,14 @@ const CONFIG = {
     width: 180,
     height: 120,
     padding: 10,
+  },
+  accessibility: {
+    // Index of currently focused node for keyboard navigation
+    focusedNodeIndex: -1,
+    // ID of the last navigated node for connection traversal
+    lastNavigatedNodeId: null,
+    // Whether reduced motion is preferred
+    prefersReducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
   },
 };
 
@@ -597,15 +607,31 @@ function renderNodes() {
     .attr('class', d => `node node--${d.type}`)
     .attr('transform', d => `translate(${d.x || 0}, ${d.y || 0})`)
     .style('opacity', 1)
+    // Accessibility attributes for keyboard navigation
+    .attr('tabindex', '0')
+    .attr('role', 'button')
+    .attr('aria-label', d => getNodeAriaLabel(d))
     .call(drag(state.simulation))
     .on('click', handleNodeClick)
     .on('dblclick', handleNodeDoubleClick)
+    .on('contextmenu', handleNodeContextMenu)
     .on('mouseenter', handleNodeHover)
-    .on('mouseleave', handleNodeLeave);
+    .on('mouseleave', handleNodeLeave)
+    // Keyboard event handlers
+    .on('keydown', handleNodeKeydown)
+    .on('focus', handleNodeFocus)
+    .on('blur', handleNodeBlur);
 
   nodeEnter.append('circle')
     .attr('r', d => getNodeRadius(d))
     .attr('filter', 'url(#glow)');
+
+  // Pin indicator (small pin icon)
+  nodeEnter.append('path')
+    .attr('class', 'node-pin-indicator')
+    .attr('d', 'M0,-4L2,-2L2,2L0,4L-2,2L-2,-2Z')
+    .attr('transform', d => `translate(${getNodeRadius(d) - 2}, ${-getNodeRadius(d) + 2})`)
+    .style('opacity', 0);
 
   nodeEnter.append('text')
     .attr('class', 'node-label')
@@ -620,15 +646,36 @@ function renderNodes() {
       let classes = `node node--${d.type}`;
       if (d.id === state.focusedNodeId) classes += ' node--focused';
       if (d.id === state.selectedNodeId) classes += ' node--selected';
+      if (state.pinnedNodes.has(d.id)) classes += ' node--pinned';
       return classes;
-    });
+    })
+    .attr('aria-label', d => getNodeAriaLabel(d))
+    .attr('aria-pressed', d => d.id === state.selectedNodeId ? 'true' : 'false');
 
   nodeUpdate.select('circle')
     .attr('r', getNodeRadius);
 
-  nodeUpdate.select('text')
+  // Update pin indicator visibility
+  nodeUpdate.select('.node-pin-indicator')
+    .attr('transform', d => `translate(${getNodeRadius(d) - 2}, ${-getNodeRadius(d) + 2})`)
+    .style('opacity', d => state.pinnedNodes.has(d.id) ? 1 : 0);
+
+  nodeUpdate.select('.node-label')
     .attr('dy', d => getNodeRadius(d) + 14)
     .text(d => truncateTitle(d.title));
+}
+
+/**
+ * Handle right-click context menu on nodes
+ */
+function handleNodeContextMenu(event, d) {
+  event.preventDefault();
+  event.stopPropagation();
+
+  // Show context menu via controls API
+  if (window.controlsAPI?.contextMenu) {
+    window.controlsAPI.contextMenu.show(event, d);
+  }
 }
 
 function ticked() {
@@ -863,14 +910,133 @@ function drag(simulation) {
 
   function dragended(event, d) {
     if (!event.active) simulation.alphaTarget(0);
-    d.fx = null;
-    d.fy = null;
+
+    // If node is pinned, keep the fixed position
+    if (state.pinnedNodes.has(d.id)) {
+      d.fx = d.x;
+      d.fy = d.y;
+      state.pinnedNodes.set(d.id, { fx: d.x, fy: d.y });
+    } else {
+      d.fx = null;
+      d.fy = null;
+    }
+
+    // Save state to history
+    saveStateToHistory();
   }
 
   return d3.drag()
     .on('start', dragstarted)
     .on('drag', dragged)
     .on('end', dragended);
+}
+
+/**
+ * Toggle pin state for a node
+ * @param {string} nodeId - ID of the node to toggle
+ */
+function toggleNodePin(nodeId) {
+  const node = state.nodes.find(n => n.id === nodeId) ||
+               state.fullGraphData?.nodes.find(n => n.id === nodeId);
+
+  if (!node) return;
+
+  if (state.pinnedNodes.has(nodeId)) {
+    // Unpin
+    state.pinnedNodes.delete(nodeId);
+    node.fx = null;
+    node.fy = null;
+    node.pinned = false;
+    showToast(t('toast_node_unpinned') || 'Node unpinned');
+  } else {
+    // Pin
+    const pos = { fx: node.x, fy: node.y };
+    state.pinnedNodes.set(nodeId, pos);
+    node.fx = node.x;
+    node.fy = node.y;
+    node.pinned = true;
+    showToast(t('toast_node_pinned') || 'Node pinned');
+  }
+
+  // Update visual
+  renderGraph();
+  updateMinimap();
+  saveStateToHistory();
+}
+
+/**
+ * Check if a node is pinned
+ * @param {string} nodeId - ID of the node to check
+ * @returns {boolean} True if pinned
+ */
+function isNodePinned(nodeId) {
+  return state.pinnedNodes.has(nodeId);
+}
+
+/**
+ * Save current state to history for undo/redo
+ */
+function saveStateToHistory() {
+  if (window.controlsAPI?.history) {
+    window.controlsAPI.history.push({
+      focusedNodeId: state.focusedNodeId,
+      pinnedNodes: new Map(state.pinnedNodes),
+      transform: state.currentTransform ? {
+        x: state.currentTransform.x,
+        y: state.currentTransform.y,
+        k: state.currentTransform.k
+      } : null
+    });
+  }
+}
+
+/**
+ * Restore a previous state from history
+ * @param {Object} savedState - State object from history
+ */
+function restoreState(savedState) {
+  if (!savedState) return;
+
+  // Restore pinned nodes
+  if (savedState.pinnedNodes) {
+    state.pinnedNodes = new Map(savedState.pinnedNodes);
+
+    // Apply pinned positions to nodes
+    state.nodes.forEach(node => {
+      if (state.pinnedNodes.has(node.id)) {
+        const pos = state.pinnedNodes.get(node.id);
+        node.fx = pos.fx;
+        node.fy = pos.fy;
+        node.pinned = true;
+      } else {
+        node.fx = null;
+        node.fy = null;
+        node.pinned = false;
+      }
+    });
+  }
+
+  // Restore focus mode
+  if (savedState.focusedNodeId !== state.focusedNodeId) {
+    if (savedState.focusedNodeId) {
+      enterFocusMode(savedState.focusedNodeId);
+    } else if (state.focusedNodeId) {
+      exitFocusMode();
+    }
+  }
+
+  // Restore transform
+  if (savedState.transform && state.svg && state.zoom) {
+    const transform = d3.zoomIdentity
+      .translate(savedState.transform.x, savedState.transform.y)
+      .scale(savedState.transform.k);
+    state.svg.transition()
+      .duration(CONFIG.animation.duration)
+      .call(state.zoom.transform, transform);
+  }
+
+  renderGraph();
+  updateMinimap();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -883,6 +1049,19 @@ function enterFocusMode(nodeId) {
   const focusedNode = state.fullGraphData.nodes.find(n => n.id === nodeId);
   if (focusedNode) {
     document.getElementById('focus-node-name').textContent = focusedNode.title;
+
+    // Update breadcrumb navigation
+    if (window.controlsAPI?.focusHistory) {
+      window.controlsAPI.focusHistory.push(nodeId, focusedNode.title);
+    }
+
+    // Update URL state
+    if (window.controlsAPI?.urlState) {
+      window.controlsAPI.urlState.update({
+        focusedNodeId: nodeId,
+        zoom: state.currentZoomLevel
+      });
+    }
   }
 
   const connectedIds = new Set([nodeId]);
@@ -915,6 +1094,9 @@ function enterFocusMode(nodeId) {
       .scale(1.5);
     state.svg.transition().duration(CONFIG.animation.duration).call(state.zoom.transform, transform);
   }
+
+  // Save state to history
+  saveStateToHistory();
 }
 
 function exitFocusMode() {
@@ -933,7 +1115,20 @@ function exitFocusMode() {
 
   document.getElementById('focus-indicator').hidden = true;
 
+  // Clear breadcrumb
+  if (window.controlsAPI?.focusHistory) {
+    window.controlsAPI.focusHistory.clear();
+  }
+
+  // Update URL state
+  if (window.controlsAPI?.urlState) {
+    window.controlsAPI.urlState.update({});
+  }
+
   resetView();
+
+  // Save state to history
+  saveStateToHistory();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1159,6 +1354,196 @@ function focusOnNode(nodeId) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// Accessibility
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Generate accessible label for a node
+ * @param {Object} d - Node data
+ * @returns {string} Accessible label describing the node
+ */
+function getNodeAriaLabel(d) {
+  const inbound = state.fullGraphData?.links.filter(l => (l.target.id || l.target) === d.id).length || 0;
+  const outbound = state.fullGraphData?.links.filter(l => (l.source.id || l.source) === d.id).length || 0;
+
+  const typeLabel = d.type === 'note' ? t('node_type_note') || 'Note' :
+                    d.type === 'orphan' ? t('node_type_orphan') || 'Orphan note' :
+                    t('node_type_dangling') || 'Dangling reference';
+
+  return `${d.title}. ${typeLabel}. ${inbound} ${t('sr_inbound') || 'inbound'}, ${outbound} ${t('sr_outbound') || 'outbound'} ${t('sr_connections') || 'connections'}. ${t('sr_press_enter') || 'Press Enter to focus, Space for details'}`;
+}
+
+/**
+ * Handle keyboard events on nodes
+ * @param {KeyboardEvent} event - The keyboard event
+ * @param {Object} d - Node data
+ */
+function handleNodeKeydown(event, d) {
+  switch (event.key) {
+    case 'Enter':
+      // Enter to focus on node
+      event.preventDefault();
+      handleNodeClick(event, d);
+      announceToScreenReader(t('sr_focused_on') || 'Focused on ' + d.title);
+      break;
+
+    case ' ':
+    case 'Spacebar':
+      // Space to show details
+      event.preventDefault();
+      showNodeDetails(d);
+      announceToScreenReader(t('sr_details_opened') || 'Details panel opened for ' + d.title);
+      break;
+
+    case 'ArrowRight':
+    case 'ArrowDown':
+      // Navigate to connected nodes (outbound)
+      event.preventDefault();
+      navigateToConnectedNode(d, 'outbound');
+      break;
+
+    case 'ArrowLeft':
+    case 'ArrowUp':
+      // Navigate to connected nodes (inbound)
+      event.preventDefault();
+      navigateToConnectedNode(d, 'inbound');
+      break;
+
+    case 'Escape':
+      // Exit focus mode
+      if (state.focusedNodeId) {
+        event.preventDefault();
+        exitFocusMode();
+        announceToScreenReader(t('sr_exited_focus') || 'Exited focus mode');
+      }
+      break;
+  }
+}
+
+/**
+ * Navigate to a connected node using arrow keys
+ * @param {Object} currentNode - Current node
+ * @param {string} direction - 'inbound' or 'outbound'
+ */
+function navigateToConnectedNode(currentNode, direction) {
+  let connectedNodes = [];
+
+  if (direction === 'outbound') {
+    connectedNodes = state.fullGraphData.links
+      .filter(l => (l.source.id || l.source) === currentNode.id)
+      .map(l => state.nodes.find(n => n.id === (l.target.id || l.target)))
+      .filter(Boolean);
+  } else {
+    connectedNodes = state.fullGraphData.links
+      .filter(l => (l.target.id || l.target) === currentNode.id)
+      .map(l => state.nodes.find(n => n.id === (l.source.id || l.source)))
+      .filter(Boolean);
+  }
+
+  if (connectedNodes.length === 0) {
+    announceToScreenReader(t('sr_no_connections') || 'No ' + direction + ' connections');
+    return;
+  }
+
+  // Find the next node to focus (cycle through connected nodes)
+  const currentIndex = connectedNodes.findIndex(n => n.id === CONFIG.accessibility.lastNavigatedNodeId);
+  const nextIndex = (currentIndex + 1) % connectedNodes.length;
+  const nextNode = connectedNodes[nextIndex];
+
+  CONFIG.accessibility.lastNavigatedNodeId = nextNode.id;
+
+  // Focus on the next node
+  const nodeElement = state.g.selectAll('.node').filter(n => n.id === nextNode.id).node();
+  if (nodeElement) {
+    nodeElement.focus();
+    // Pan to center the node in view
+    centerOnNode(nextNode);
+    announceToScreenReader(`${t('sr_navigated_to') || 'Navigated to'} ${nextNode.title}`);
+  }
+}
+
+/**
+ * Center the view on a specific node
+ * @param {Object} node - Node to center on
+ */
+function centerOnNode(node) {
+  if (!node || node.x === undefined) return;
+
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+  const scale = state.currentZoomLevel || 1;
+
+  const transform = d3.zoomIdentity
+    .translate(width / 2 - node.x * scale, height / 2 - node.y * scale)
+    .scale(scale);
+
+  state.svg.transition()
+    .duration(CONFIG.accessibility.prefersReducedMotion ? 0 : CONFIG.animation.duration)
+    .call(state.zoom.transform, transform);
+}
+
+/**
+ * Handle node focus event
+ * @param {FocusEvent} event - The focus event
+ * @param {Object} d - Node data
+ */
+function handleNodeFocus(event, d) {
+  // Show tooltip on focus for keyboard users
+  showTooltip(event, d);
+
+  // Highlight connected links
+  state.g.selectAll('.link')
+    .classed('link--highlighted', link =>
+      link.source.id === d.id || link.target.id === d.id
+    );
+}
+
+/**
+ * Handle node blur event
+ * @param {FocusEvent} event - The focus event
+ * @param {Object} d - Node data
+ */
+function handleNodeBlur(event, d) {
+  hideTooltip();
+
+  // Remove link highlighting
+  state.g.selectAll('.link')
+    .classed('link--highlighted', false);
+}
+
+/**
+ * Announce a message to screen readers
+ * @param {string} message - Message to announce
+ */
+function announceToScreenReader(message) {
+  const announcer = document.getElementById('sr-announcements');
+  if (announcer) {
+    announcer.textContent = message;
+    // Clear after a short delay to allow repeated announcements
+    setTimeout(() => {
+      announcer.textContent = '';
+    }, 1000);
+  }
+}
+
+/**
+ * Update graph summary for screen readers
+ */
+function updateGraphSummary() {
+  const summary = document.getElementById('sr-graph-summary');
+  if (!summary || !state.stats) return;
+
+  const text = tFormat('sr_graph_summary', {
+    notes: state.stats.noteCount,
+    connections: state.stats.connectionCount,
+    dangling: state.stats.danglingCount,
+    orphan: state.stats.orphanCount
+  }) || `Graph contains ${state.stats.noteCount} notes, ${state.stats.connectionCount} connections, ${state.stats.danglingCount} dangling references, and ${state.stats.orphanCount} orphan nodes.`;
+
+  summary.textContent = text;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Utilities
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -1228,9 +1613,17 @@ function showToast(message, duration = 3000) {
 }
 
 function updateStats(stats) {
+  state.stats = stats;
+
   const animateNumber = (el, target) => {
     const current = parseInt(el.textContent) || 0;
     if (current === target) return;
+
+    // Skip animation if reduced motion is preferred
+    if (CONFIG.accessibility.prefersReducedMotion) {
+      el.textContent = target;
+      return;
+    }
 
     const diff = target - current;
     const step = Math.ceil(Math.abs(diff) / 10);
@@ -1253,6 +1646,9 @@ function updateStats(stats) {
   animateNumber(document.getElementById('stat-connections'), stats.connectionCount);
   animateNumber(document.getElementById('stat-dangling'), stats.danglingCount);
   animateNumber(document.getElementById('stat-orphan'), stats.orphanCount);
+
+  // Update screen reader summary
+  updateGraphSummary();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1345,6 +1741,7 @@ window.graphAPI = {
   focusOnNode,
   exitFocusMode,
   hideNodeDetails,
+  showNodeDetails,
   toggleLabels,
   toggleFilter,
   panToMinimapPosition,
@@ -1356,8 +1753,19 @@ window.graphAPI = {
   showToast,
   t,
   tFormat,
+  // Node pinning
+  toggleNodePin,
+  isNodePinned,
+  // State management
+  restoreState,
+  // Accessibility APIs
+  announceToScreenReader,
+  centerOnNode,
+  // Getters
   getFilters: () => state.filters,
   getNodes: () => state.fullGraphData?.nodes || [],
+  getFocusedNodeId: () => state.focusedNodeId,
+  getSelectedNodeId: () => state.selectedNodeId,
   getLoadingState: () => ({
     isLoading: state.loading.isLoading,
     loadedCount: state.loading.loadedNodeIds.size,
@@ -1365,6 +1773,7 @@ window.graphAPI = {
     hasMore: state.loading.hasMore,
     isFullGraphLoaded: state.loading.isFullGraphLoaded,
   }),
+  getPrefersReducedMotion: () => CONFIG.accessibility.prefersReducedMotion,
 };
 
 // Initialize on load

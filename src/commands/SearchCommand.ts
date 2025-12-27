@@ -12,7 +12,7 @@ import { t } from "../i18n/index.js";
 
 export class SearchCommand extends BaseCommand {
   name = "search";
-  description = t('commands:search.description');
+  get description() { return t('commands:search.description'); }
   usage = "/search <query>";
   requiresArgs = true;
   category = "ai" as const;

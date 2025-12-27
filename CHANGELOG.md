@@ -5,6 +5,54 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.6] - 2025-12-26
+
+### Added
+- Comprehensive accessibility improvements with ARIA attributes (role, aria-label, aria-live) for enhanced screen reader support
+- Full keyboard navigation support: Tab/Shift+Tab for focus, Enter/Space for interactions, arrow keys for list navigation
+- Skip links for rapid keyboard navigation to main content areas
+- Web Worker implementation for similarity calculation to prevent main thread blocking during O(n²) operations
+- Progress UI with cancellation capability for long-running similarity detection
+- Undo/Redo history system with Ctrl+Z and Ctrl+Y keyboard shortcuts for all graph modifications
+- Node pinning functionality to lock node positions in graph visualization
+- URL-based state persistence for sharing selected nodes and graph state
+- Breadcrumb navigation for improved contextual awareness in graph hierarchy
+- Context menu (right-click) support for quick node and link operations
+- Zod schema validation for graph and RAG modules with version management (GRAPH_SCHEMA_VERSION, RAG_SCHEMA_VERSION)
+- Runtime validation utility functions for type-safe data operations
+- Translations for accessibility features in both English and Korean locales
+
+### Changed
+- Graph similarity detection now uses Web Worker for non-blocking operations
+- Refactored similarity-links.js to support progress tracking and cancellation
+- Enhanced graph visualization keyboard interaction patterns
+- Improved color contrast throughout UI to meet WCAG AA standards (4.5:1 ratio minimum)
+- Added prefers-reduced-motion media query support for users who prefer reduced animations
+
+### Fixed
+- Main thread blocking during similarity calculations resolved through Worker implementation
+- Color contrast issues in graph UI elements for improved accessibility
+- Keyboard navigation consistency across graph components
+
+## [0.4.5] - 2025-12-26
+
+### Changed
+- Restructured i18n type definitions to match actual JSON structure: CommonTranslations now uses 32 nested sections, ErrorTranslations uses 36 error codes with 3 detail levels (minimal/medium/detailed), OnboardingTranslations uses 11 actual onboarding steps
+- Unified English and Korean commands.json structure: en/commands.json now uses same nested hierarchy as ko/commands.json with all original translations preserved
+- Introduced two-tier type system: manual interfaces (*Translations) for documentation, JSON-inferred types (*JSON) for runtime type safety
+- Renamed JSON-inferred types in index.ts to avoid conflicts: CommonJSON, CommandsJSON, ErrorsJSON, etc.
+
+### Added
+- Type utilities for enhanced type safety: NestedKeyOf<T> for dot-notation paths in nested objects, PathValue<T, P> for extracting values at specific paths
+- JSON-based type inference support for improved compile-time validation
+- Comprehensive documentation for type utilities including usage examples and performance notes
+
+### Fixed
+- Resolved type mismatch between translation JSON structure and TypeScript type definitions
+- Corrected OnboardingTranslations structure to reflect 11 actual onboarding steps (previously step1/step2/step3)
+- Aligned ErrorTranslations hierarchy with error code organization and detail levels
+- Fixed type name conflicts between types.ts and index.ts exports
+
 ## [0.4.4] - 2025-12-26
 
 ### Fixed

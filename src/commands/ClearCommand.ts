@@ -8,7 +8,7 @@ import { t } from "../i18n/index.js";
  */
 export class ClearCommand extends BaseCommand {
   readonly name = "clear";
-  readonly description = t('commands:clear.description');
+  get description() { return t('commands:clear.description'); }
   readonly usage = "/clear";
 
   async execute(_args: string[], context: CommandContext): Promise<CommandResult> {

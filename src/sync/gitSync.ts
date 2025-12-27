@@ -1,4 +1,4 @@
-import { exec, execSync } from "node:child_process";
+import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -7,7 +7,7 @@ import crypto from "node:crypto";
 import { getLogger } from "../utils/logger.js";
 import type { Session } from "../agent/session.js";
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 const logger = getLogger();
 
 // ==================== Types ====================
@@ -545,7 +545,7 @@ export class GitSyncManager {
    */
   private async isGitAvailable(): Promise<boolean> {
     try {
-      await execAsync("git --version");
+      await execFileAsync("git", ["--version"]);
       return true;
     } catch {
       return false;
@@ -611,18 +611,19 @@ export class GitSyncManager {
   }
 
   /**
-   * Run a git command
+   * Run a git command securely using execFile to avoid shell injection
    */
   private async runGitCommand(
     command: string,
     args: string[]
   ): Promise<GitCommandResult> {
-    const fullCommand = `git -C "${this.notesDir}" ${command} ${args.map((a) => `"${a}"`).join(" ")}`;
+    // Build argument list: -C <notesDir> <command> <args...>
+    const gitArgs = ["-C", this.notesDir, command, ...args];
 
-    logger.debug("[GitSync] Running command", { command: fullCommand });
+    logger.debug("[GitSync] Running command", { command: "git", args: gitArgs });
 
     try {
-      const { stdout, stderr } = await execAsync(fullCommand, {
+      const { stdout, stderr } = await execFileAsync("git", gitArgs, {
         cwd: this.notesDir,
         encoding: "utf-8",
         maxBuffer: 10 * 1024 * 1024, // 10MB buffer
@@ -1008,7 +1009,7 @@ export function createGitSyncManager(
  */
 export async function isGitRepository(dir: string): Promise<boolean> {
   try {
-    await execAsync(`git -C "${dir}" rev-parse --is-inside-work-tree`);
+    await execFileAsync("git", ["-C", dir, "rev-parse", "--is-inside-work-tree"]);
     return true;
   } catch {
     return false;
@@ -1023,7 +1024,7 @@ export async function getGitRemoteUrl(
   remoteName: string = "origin"
 ): Promise<string | null> {
   try {
-    const { stdout } = await execAsync(`git -C "${dir}" remote get-url ${remoteName}`);
+    const { stdout } = await execFileAsync("git", ["-C", dir, "remote", "get-url", remoteName]);
     return stdout.trim() || null;
   } catch {
     return null;
@@ -1041,8 +1042,8 @@ export async function setGitRemoteUrl(
   const hasRemote = await getGitRemoteUrl(dir, remoteName);
 
   if (hasRemote) {
-    await execAsync(`git -C "${dir}" remote set-url ${remoteName} "${url}"`);
+    await execFileAsync("git", ["-C", dir, "remote", "set-url", remoteName, url]);
   } else {
-    await execAsync(`git -C "${dir}" remote add ${remoteName} "${url}"`);
+    await execFileAsync("git", ["-C", dir, "remote", "add", remoteName, url]);
   }
 }

@@ -163,6 +163,14 @@ export class AbortError extends Error {
   }
 }
 
+/**
+ * Default maximum number of messages to keep in conversation history.
+ * This prevents unbounded growth and token limit issues in long sessions.
+ * The value of 50 (25 user + 25 assistant exchanges) provides ~100K tokens
+ * of context while leaving room for system prompts and tool responses.
+ */
+const DEFAULT_MAX_HISTORY_MESSAGES = 50;
+
 export interface GigaMindClientOptions {
   apiKey?: string;
   model?: string;
@@ -172,6 +180,12 @@ export interface GigaMindClientOptions {
   errorLevel?: ErrorLevel;
   /** Note summary detail level - controls how much context is preserved when creating notes */
   noteDetail?: import("../utils/config.js").NoteDetailLevel;
+  /**
+   * Maximum number of messages to keep in conversation history.
+   * When exceeded, oldest messages are removed (sliding window).
+   * Default: 50 messages. Set to 0 or undefined for no limit (not recommended).
+   */
+  maxHistoryMessages?: number;
 }
 
 export class GigaMindClient {
@@ -184,6 +198,7 @@ export class GigaMindClient {
   private noteDetail: import("../utils/config.js").NoteDetailLevel;
   private conversationHistory: MessageParam[] = [];
   private subagentInvoker: SubagentInvoker | null = null;
+  private maxHistoryMessages: number;
 
   constructor(options?: GigaMindClientOptions) {
     this.apiKey = options?.apiKey || process.env.ANTHROPIC_API_KEY || "";
@@ -195,6 +210,7 @@ export class GigaMindClient {
     this.enableSubagents = options?.enableSubagents ?? true;
     this.errorLevel = options?.errorLevel || "medium";
     this.noteDetail = options?.noteDetail || "balanced";
+    this.maxHistoryMessages = options?.maxHistoryMessages ?? DEFAULT_MAX_HISTORY_MESSAGES;
 
     // Initialize subagent invoker if enabled
     if (this.enableSubagents && this.apiKey) {
@@ -205,6 +221,29 @@ export class GigaMindClient {
         errorLevel: this.errorLevel,
         noteDetail: this.noteDetail,
       });
+    }
+  }
+
+  /**
+   * Trim conversation history to stay within the configured limit.
+   * Uses sliding window: removes oldest messages when limit is exceeded.
+   * Always removes in pairs to maintain user-assistant message alternation.
+   */
+  private trimHistory(): void {
+    if (this.maxHistoryMessages <= 0) {
+      // No limit configured
+      return;
+    }
+
+    while (this.conversationHistory.length > this.maxHistoryMessages) {
+      // Remove oldest messages, preferably in pairs to maintain conversation coherence
+      // If history starts with user message, remove user + assistant pair
+      // Otherwise just remove the oldest message
+      if (this.conversationHistory.length >= 2) {
+        this.conversationHistory.splice(0, 2);
+      } else {
+        this.conversationHistory.shift();
+      }
     }
   }
 
@@ -455,6 +494,9 @@ export class GigaMindClient {
             content: subagentResponse,
           });
 
+          // Trim history to configured limit
+          this.trimHistory();
+
           callbacks?.onComplete?.(subagentResponse);
           return subagentResponse;
         } catch (subagentError) {
@@ -483,6 +525,9 @@ export class GigaMindClient {
         role: "assistant",
         content: fullResponse,
       });
+
+      // Trim history to configured limit
+      this.trimHistory();
 
       callbacks?.onComplete?.(fullResponse);
       return fullResponse;
@@ -554,6 +599,9 @@ export class GigaMindClient {
         content: subagentResponse,
       });
 
+      // Trim history to configured limit
+      this.trimHistory();
+
       return subagentResponse;
     }
 
@@ -567,6 +615,9 @@ export class GigaMindClient {
       role: "assistant",
       content: assistantMessage,
     });
+
+    // Trim history to configured limit
+    this.trimHistory();
 
     return assistantMessage;
   }
@@ -628,6 +679,8 @@ export class GigaMindClient {
       role: msg.role,
       content: msg.content,
     }));
+    // Trim to configured limit after restoration
+    this.trimHistory();
   }
 
   clearHistory(): void {
@@ -647,6 +700,25 @@ export class GigaMindClient {
       role,
       content,
     });
+    // Trim to configured limit after adding
+    this.trimHistory();
+  }
+
+  /**
+   * Get the maximum history messages limit
+   */
+  getMaxHistoryMessages(): number {
+    return this.maxHistoryMessages;
+  }
+
+  /**
+   * Set the maximum history messages limit
+   * @param limit - Maximum number of messages to keep (0 for unlimited)
+   */
+  setMaxHistoryMessages(limit: number): void {
+    this.maxHistoryMessages = limit;
+    // Apply the new limit immediately
+    this.trimHistory();
   }
 
   /**

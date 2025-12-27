@@ -1,69 +1,66 @@
 {
-  "help_description": "Show help",
-  "config_description": "View settings",
-  "clear_description": "Clear conversation history",
-  "search_description": "Search notes",
-  "note_description": "Create new note",
-  "clone_description": "Answer like you, based on your notes",
-  "me_description": "Same as /clone (shortcut)",
-  "import_description": "Import external notes (Obsidian, Markdown)",
-  "graph_description": "Visualize note graph (browser)",
-  "exit_description": "Exit GigaMind",
-  "help_title": "Available Commands",
-  "general_questions": "General questions: \"What can you do?\", \"Help\", \"/help\"",
-  "note_writing": "Note writing: \"Take a note\", \"Remember this\", \"/note\"",
-  "note_search": "Note search: \"Find my notes about...\", \"/search\"",
-  "clone_mode": "Clone mode: \"Answer like me\", \"/clone\", \"/me\"",
-  "import_notes": "Import: \"Import my Obsidian notes\", \"/import\"",
-  "settings": "Settings: \"Change settings\", \"/config\"",
-  "slash_commands_title": "Slash Commands",
-  "command_search": "/search: Search notes",
-  "command_note": "/note: Create new note",
-  "command_clone": "/clone (or /me): Answer based on your notes, like you would",
-  "command_import": "/import: Import external notes (Obsidian, Markdown) to GigaMind",
-  "command_help": "/help: See all commands",
-  "command_config": "/config: Change settings",
-  "command_graph": "/graph: Visualize note graph in browser",
-  "command_clear": "/clear: Clear conversation history",
-  "examples_title": "Examples",
-  "example_organize": "\"Organize what I learned today\" - Create notes through conversation",
-  "example_search": "\"Find project ideas in my notes\" - Search your notes",
-  "example_clone": "\"/clone What do you think about this topic?\" - Answer from your perspective",
-  "init": {
-    "description": "Initialize GigaMind project",
-    "success": "Project initialized successfully",
-    "alreadyInitialized": "Project is already initialized",
-    "creatingConfig": "Creating configuration file..."
+  "help": {
+    "title": "Available Commands:",
+    "description": "Show help",
+    "natural_language_section": "You can also say:",
+    "natural_language_examples": {
+      "search_notes": "\"Find notes about the project\" -> Note search",
+      "clone_mode": "\"What did I think about this topic?\" -> Clone mode",
+      "find_in_notes": "\"Find OO in my notes\" -> Note search",
+      "take_memo": "\"Take a memo about OO\" -> Note writing",
+      "my_perspective": "\"Explain from my perspective\" -> Clone mode"
+    },
+    "shortcuts_section": "Keyboard Shortcuts:",
+    "shortcuts": {
+      "exit": "Ctrl+C: Exit",
+      "cancel": "Esc: Cancel response",
+      "history": "Up/Down arrows: Input history"
+    }
   },
   "search": {
-    "description": "Search knowledge base",
-    "noResults": "No results found",
-    "searching": "Searching...",
-    "resultsFound": "Found {{count}} results"
+    "description": "Search notes",
+    "usage": "Usage: /search <query>",
+    "example": "Example: /search project ideas",
+    "enter_query": "Please enter a search query."
   },
-  "add": {
-    "description": "Add new note",
-    "success": "Note added successfully",
-    "failed": "Failed to add note"
+  "note": {
+    "description": "Create new note",
+    "usage": "Usage: /note <content>",
+    "enter_content": "Please enter note content.",
+    "examples": {
+      "title": "Examples:",
+      "meeting_idea": "/note A new project idea came up in today's meeting",
+      "react_summary": "/note React 18 Suspense feature summary",
+      "book_memo": "/note Book notes: \"The One Thing\" - Focus on the most important thing"
+    },
+    "help_text": "I'll create a note based on your input!"
   },
-  "sync": {
-    "description": "Sync knowledge base",
-    "syncing": "Syncing...",
-    "success": "Sync completed",
-    "failed": "Sync failed"
+  "clone": {
+    "description": "Answer like you, based on your notes",
+    "short_description": "Same as /clone (shortcut)",
+    "usage": "Usage: /clone <question> or /me <question>",
+    "enter_question": "Please enter a question.",
+    "examples": {
+      "title": "Examples:",
+      "project_opinion": "/clone What do you think about this project?",
+      "productivity": "/me What are ways to increase productivity?",
+      "book_recommendation": "/clone Any book recommendations from recent reads?"
+    },
+    "help_text": "I'll answer like you based on the content recorded in your notes!"
   },
   "graph": {
-    "description": "Visualize knowledge graph",
-    "starting": "Starting graph server...",
-    "running": "Graph server is running",
-    "stopped": "Graph server stopped"
-  },
-  "unknown_command": {
-    "message": "Unknown command: /{{command}}",
-    "see_help": "Type /help to see available commands."
-  },
-  "ambiguous_command": {
-    "message": "Multiple commands match /{{command}}: {{matches}}\nPlease be more specific."
+    "description": "Visualize note graph (browser)",
+    "opened_message": "Graph opened in browser.",
+    "url_label": "URL:",
+    "shortcuts_title": "Shortcuts:",
+    "shortcuts": {
+      "search": "/ : Search notes",
+      "zoom": "+/- : Zoom in/out",
+      "reset_view": "0 : Reset view",
+      "exit_focus": "ESC : Exit focus mode",
+      "fullscreen": "F : Fullscreen"
+    },
+    "auto_shutdown": "Server will auto-shutdown after 30 minutes of inactivity."
   },
   "session": {
     "description": "Session management (list, export, load, search, delete)",
@@ -78,5 +75,48 @@
     "usage_load": "/session load <id> - Load and resume a session",
     "usage_search": "/session search <query> - Search through session messages",
     "usage_delete": "/session delete <id> - Delete a session"
+  },
+  "config": {
+    "description": "View settings"
+  },
+  "import": {
+    "description": "Import external notes (Obsidian, Markdown)",
+    "title": "Import Notes",
+    "completed": "Import completed!",
+    "cancelled_partial": "Import cancelled.",
+    "notes_imported": "Imported {{count}} notes.",
+    "images_copied": "Copied {{count}} images.",
+    "source_label": "Source:",
+    "destination_label": "Destination:",
+    "before_cancel": "Before cancellation"
+  },
+  "clear": {
+    "description": "Clear conversation history"
+  },
+  "sync": {
+    "description": "Git sync (coming soon)",
+    "not_implemented": "The {{command}} feature is coming soon. Stay tuned!",
+    "see_help": "Type /help to see available commands."
+  },
+  "unknown_command": {
+    "message": "Unknown command: /{{command}}",
+    "see_help": "Type /help to see available commands."
+  },
+  "ambiguous_command": {
+    "message": "Multiple commands match /{{command}}: {{matches}}\nPlease be more specific."
+  },
+  "welcome_message": {
+    "setup_complete": "Setup complete!",
+    "setup_complete_with_name": "Setup complete, {{name}}!",
+    "ready_to_chat": "You can now start chatting with GigaMind.",
+    "import_configured": "Note import has been configured:",
+    "import_source_obsidian": "Obsidian Vault",
+    "import_source_markdown": "Markdown folder",
+    "import_path_label": "Path:",
+    "import_start_hint": "Type /import to start importing!",
+    "capabilities_title": "Here's what you can do:",
+    "capability_organize": "\"Organize what I learned today\" - Create notes through conversation",
+    "capability_search": "\"Find project ideas in my notes\" - Search your notes",
+    "capability_clone": "/clone question - Answer from your perspective based on your notes"
   }
 }
