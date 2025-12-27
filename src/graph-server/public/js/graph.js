@@ -50,6 +50,22 @@ const state = {
 // Configuration
 // ═══════════════════════════════════════════════════════════════════════════
 
+/**
+ * Get the computed value of a CSS custom property
+ * @param {string} name - CSS variable name (e.g., '--minimap-link')
+ * @returns {string} The computed value
+ */
+function getCSSVariable(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+/**
+ * Update minimap colors when theme changes
+ */
+function updateMinimapColors() {
+  updateMinimap();
+}
+
 const CONFIG = {
   node: {
     minRadius: 4,
@@ -86,6 +102,34 @@ const CONFIG = {
     prefersReducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
   },
 };
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Touch Device Detection
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Detect touch device and add appropriate class to body
+ * Enables touch-specific CSS optimizations
+ */
+function detectTouchDevice() {
+  const isTouchDevice = (
+    ('ontouchstart' in window) ||
+    (navigator.maxTouchPoints > 0) ||
+    (navigator.msMaxTouchPoints > 0)
+  );
+
+  const isCoarsePointer = window.matchMedia('(pointer: coarse)').matches;
+  const hasNoHover = window.matchMedia('(hover: none)').matches;
+
+  if (isTouchDevice || (isCoarsePointer && hasNoHover)) {
+    document.body.classList.add('touch-device');
+  }
+
+  // Also detect hybrid devices (like Surface)
+  if (isCoarsePointer && !hasNoHover) {
+    document.body.classList.add('hybrid-device');
+  }
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Internationalization (i18n)
@@ -176,17 +220,171 @@ function tFormat(key, values) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// Error Handling
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Determine the error type and return appropriate user-friendly message
+ * @param {Error} error - The error object
+ * @param {Response} [response] - Optional fetch response for status codes
+ * @returns {Object} Object with messageKey and detailedError
+ */
+function categorizeError(error, response = null) {
+  let messageKey = 'error_network';
+  let detailedError = error.toString();
+
+  if (response) {
+    // Server error (5xx)
+    if (response.status >= 500) {
+      messageKey = 'error_server';
+      detailedError = `Server Error (${response.status}): ${response.statusText}`;
+    }
+    // Client error (4xx)
+    else if (response.status >= 400) {
+      messageKey = 'error_not_found';
+      detailedError = `Request Error (${response.status}): ${response.statusText}`;
+    }
+  } else if (error.name === 'TypeError' && error.message.includes('fetch')) {
+    messageKey = 'error_network';
+    detailedError = 'Network connection failed. Please check your internet connection.';
+  } else if (error.name === 'SyntaxError') {
+    messageKey = 'error_parse';
+    detailedError = 'Failed to parse server response. The data may be corrupted.';
+  } else if (error.name === 'AbortError') {
+    messageKey = 'error_timeout';
+    detailedError = 'Request timed out. Please try again.';
+  }
+
+  return { messageKey, detailedError };
+}
+
+/**
+ * Show error state UI
+ * @param {Error} error - The error object
+ * @param {Response} [response] - Optional fetch response
+ */
+function showError(error, response = null) {
+  const loadingContent = document.getElementById('loading-content');
+  const loadingError = document.getElementById('loading-error');
+  const errorMessage = document.getElementById('error-message');
+  const errorDetails = document.getElementById('error-details');
+
+  if (!loadingContent || !loadingError) return;
+
+  // Categorize the error
+  const { messageKey, detailedError } = categorizeError(error, response);
+
+  // Hide loading content, show error state
+  loadingContent.hidden = true;
+  loadingError.hidden = false;
+
+  // Set error message (translated if available)
+  const translatedMessage = t(messageKey);
+  errorMessage.textContent = translatedMessage !== messageKey
+    ? translatedMessage
+    : getDefaultErrorMessage(messageKey);
+
+  // Set error details
+  errorDetails.textContent = detailedError;
+  errorDetails.hidden = true; // Start hidden
+
+  // Announce to screen readers
+  announceToScreenReader(t('sr_error_occurred') || 'An error occurred while loading the graph');
+}
+
+/**
+ * Get default error message if translation is not available
+ * @param {string} messageKey - The error message key
+ * @returns {string} Default error message
+ */
+function getDefaultErrorMessage(messageKey) {
+  const defaults = {
+    error_network: 'Unable to connect to server. Please check your connection.',
+    error_server: 'Server error occurred. Please try again later.',
+    error_not_found: 'The requested resource was not found.',
+    error_parse: 'Failed to process server response.',
+    error_timeout: 'Request timed out. Please try again.',
+  };
+  return defaults[messageKey] || 'An unexpected error occurred.';
+}
+
+/**
+ * Hide error state and show loading content
+ */
+function hideError() {
+  const loadingContent = document.getElementById('loading-content');
+  const loadingError = document.getElementById('loading-error');
+  const errorDetails = document.getElementById('error-details');
+
+  if (!loadingContent || !loadingError) return;
+
+  loadingError.hidden = true;
+  loadingContent.hidden = false;
+
+  // Reset error details
+  if (errorDetails) {
+    errorDetails.hidden = true;
+  }
+}
+
+/**
+ * Toggle error details visibility
+ */
+function toggleErrorDetails() {
+  const errorDetails = document.getElementById('error-details');
+  const detailsBtn = document.getElementById('error-details-btn');
+
+  if (!errorDetails || !detailsBtn) return;
+
+  const isHidden = errorDetails.hidden;
+  errorDetails.hidden = !isHidden;
+
+  // Update button text
+  detailsBtn.textContent = isHidden
+    ? (t('error_hide_details') || 'Hide Details')
+    : (t('error_show_details') || 'Show Details');
+}
+
+/**
+ * Initialize error UI event listeners
+ */
+function initErrorHandlers() {
+  const retryBtn = document.getElementById('retry-btn');
+  const detailsBtn = document.getElementById('error-details-btn');
+
+  if (retryBtn) {
+    retryBtn.addEventListener('click', () => {
+      hideError();
+      initGraph();
+    });
+  }
+
+  if (detailsBtn) {
+    detailsBtn.addEventListener('click', toggleErrorDetails);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Initialization
 // ═══════════════════════════════════════════════════════════════════════════
 
 async function initGraph() {
   try {
+    // Detect touch device and add appropriate class
+    detectTouchDevice();
+
     // Load i18n translations first
     await loadI18n();
 
     // Fetch initial page with most connected nodes (hubs) first
     const response = await fetch(`/api/graph?limit=${state.loading.pageSize}&sort=connections`);
-    if (!response.ok) throw new Error('Failed to fetch graph data');
+
+    // Handle HTTP errors with response context
+    if (!response.ok) {
+      const error = new Error(`HTTP ${response.status}: ${response.statusText}`);
+      showError(error, response);
+      return;
+    }
 
     const data = await response.json();
 
@@ -222,6 +420,10 @@ async function initGraph() {
     renderGraph();
     initMinimap();
     initLoadMoreUI();
+    initEmptyStateUI();
+
+    // Check for empty state after data is loaded
+    checkEmptyState();
 
     // Staggered reveal
     setTimeout(() => {
@@ -229,7 +431,7 @@ async function initGraph() {
     }, 300);
   } catch (error) {
     console.error('Failed to initialize graph:', error);
-    document.querySelector('.loading__text').textContent = t('load_failed');
+    showError(error);
   }
 }
 
@@ -499,6 +701,41 @@ function initSVG() {
     .attr('d', 'M0,-4L10,0L0,4')
     .attr('fill', 'var(--link-hover)');
 
+  // Colorblind accessibility patterns
+  // Orphan node pattern: diagonal hatching for visual distinction
+  const orphanPattern = defs.append('pattern')
+    .attr('id', 'orphan-hatch')
+    .attr('patternUnits', 'userSpaceOnUse')
+    .attr('width', 6)
+    .attr('height', 6)
+    .attr('patternTransform', 'rotate(45)');
+
+  orphanPattern.append('rect')
+    .attr('width', 6)
+    .attr('height', 6)
+    .attr('fill', 'var(--node-orphan)');
+
+  orphanPattern.append('line')
+    .attr('x1', 0)
+    .attr('y1', 0)
+    .attr('x2', 0)
+    .attr('y2', 6)
+    .attr('stroke', 'var(--node-orphan-pattern-line)')
+    .attr('stroke-width', 2);
+
+  // Inner circle pattern for orphan nodes (dotted border effect)
+  const orphanDotPattern = defs.append('pattern')
+    .attr('id', 'orphan-dots')
+    .attr('patternUnits', 'userSpaceOnUse')
+    .attr('width', 4)
+    .attr('height', 4);
+
+  orphanDotPattern.append('circle')
+    .attr('cx', 2)
+    .attr('cy', 2)
+    .attr('r', 1)
+    .attr('fill', 'var(--surface-2)');
+
   // Main container
   state.g = svg.append('g').attr('class', 'graph-container');
   state.g.append('g').attr('class', 'links-group');
@@ -622,9 +859,43 @@ function renderNodes() {
     .on('focus', handleNodeFocus)
     .on('blur', handleNodeBlur);
 
+  // Touch hit area - larger invisible circle for touch devices
+  // Ensures minimum 44px touch target as per WCAG guidelines
+  nodeEnter.append('circle')
+    .attr('class', 'node-touch-area')
+    .attr('r', d => Math.max(22, getNodeRadius(d) + 12))
+    .style('fill', 'transparent')
+    .style('stroke', 'none')
+    .style('pointer-events', 'all');
+
+  // Visible node circle
   nodeEnter.append('circle')
     .attr('r', d => getNodeRadius(d))
     .attr('filter', 'url(#glow)');
+
+  // Colorblind accessibility: Cross mark for orphan nodes
+  // Adds shape differentiation beyond color alone
+  nodeEnter.filter(d => d.type === 'orphan')
+    .append('g')
+    .attr('class', 'node-cross-group')
+    .each(function(d) {
+      const crossSize = getNodeRadius(d) * 0.5;
+      const g = d3.select(this);
+      // Horizontal line
+      g.append('line')
+        .attr('class', 'node-cross')
+        .attr('x1', -crossSize)
+        .attr('y1', 0)
+        .attr('x2', crossSize)
+        .attr('y2', 0);
+      // Vertical line
+      g.append('line')
+        .attr('class', 'node-cross')
+        .attr('x1', 0)
+        .attr('y1', -crossSize)
+        .attr('x2', 0)
+        .attr('y2', crossSize);
+    });
 
   // Pin indicator (small pin icon)
   nodeEnter.append('path')
@@ -652,7 +923,12 @@ function renderNodes() {
     .attr('aria-label', d => getNodeAriaLabel(d))
     .attr('aria-pressed', d => d.id === state.selectedNodeId ? 'true' : 'false');
 
-  nodeUpdate.select('circle')
+  // Update touch hit area
+  nodeUpdate.select('.node-touch-area')
+    .attr('r', d => Math.max(22, getNodeRadius(d) + 12));
+
+  // Update visible node circle (select second circle, not touch area)
+  nodeUpdate.selectAll('circle:not(.node-touch-area)')
     .attr('r', getNodeRadius);
 
   // Update pin indicator visibility
@@ -759,8 +1035,14 @@ function updateMinimap() {
     canvasHeight: height,
   };
 
+  // Get colors from CSS variables (supports theme switching)
+  const linkColor = getCSSVariable('--minimap-link') || 'rgba(124, 156, 188, 0.15)';
+  const noteColor = getCSSVariable('--minimap-node-note') || '#7c9cbc';
+  const orphanColor = getCSSVariable('--minimap-node-orphan') || '#6c7080';
+  const danglingColor = getCSSVariable('--minimap-node-dangling') || '#c4956c';
+
   // Draw links
-  ctx.strokeStyle = 'rgba(124, 156, 188, 0.15)';
+  ctx.strokeStyle = linkColor;
   ctx.lineWidth = 0.5;
   state.links.forEach(link => {
     const sx = link.source.x * scale + offsetX;
@@ -783,11 +1065,11 @@ function updateMinimap() {
     ctx.arc(x, y, r, 0, Math.PI * 2);
 
     if (node.type === 'note') {
-      ctx.fillStyle = '#7c9cbc';
+      ctx.fillStyle = noteColor;
     } else if (node.type === 'orphan') {
-      ctx.fillStyle = '#6c7080';
+      ctx.fillStyle = orphanColor;
     } else {
-      ctx.fillStyle = '#c4956c';
+      ctx.fillStyle = danglingColor;
     }
     ctx.fill();
   });
@@ -937,7 +1219,7 @@ function drag(simulation) {
  */
 function toggleNodePin(nodeId) {
   const node = state.nodes.find(n => n.id === nodeId) ||
-               state.fullGraphData?.nodes.find(n => n.id === nodeId);
+    state.fullGraphData?.nodes.find(n => n.id === nodeId);
 
   if (!node) return;
 
@@ -1173,6 +1455,134 @@ function computeFilteredStats() {
 // Sidebar / Node Details
 // ═══════════════════════════════════════════════════════════════════════════
 
+const SIDEBAR_CONFIG = {
+  initialDisplayCount: 5,
+};
+
+/**
+ * Render a list of links with "Show More" functionality for performance
+ * @param {Array} items - Array of node objects to render
+ * @param {HTMLElement} listElement - The UL element to render into
+ * @param {string} emptyMessage - Message to show when list is empty
+ * @param {string} listId - Unique identifier for this list (for toggle state)
+ */
+function renderLinkList(items, listElement, emptyMessage, listId) {
+  // Clear existing content
+  listElement.innerHTML = '';
+
+  if (items.length === 0) {
+    listElement.innerHTML = `<li class="sidebar__list-empty">${emptyMessage}</li>`;
+    return;
+  }
+
+  const initialCount = SIDEBAR_CONFIG.initialDisplayCount;
+  const hasMore = items.length > initialCount;
+
+  // Use DocumentFragment for better performance
+  const fragment = document.createDocumentFragment();
+
+  items.forEach((node, index) => {
+    const li = document.createElement('li');
+    li.className = 'sidebar__list-item';
+    li.setAttribute('data-node-id', node.id);
+    li.setAttribute('tabindex', '0');
+    li.setAttribute('role', 'button');
+    li.setAttribute('aria-label', `${t('sr_navigate_to') || 'Navigate to'} ${node.title}`);
+    li.textContent = node.title;
+
+    // Hide items beyond initial count
+    if (hasMore && index >= initialCount) {
+      li.classList.add('sidebar__list-item--hidden');
+    }
+
+    // Add staggered animation delay for visible items
+    if (index < initialCount) {
+      li.style.animationDelay = `${index * 30}ms`;
+    }
+
+    fragment.appendChild(li);
+  });
+
+  // Add "Show More" button if needed
+  if (hasMore) {
+    const hiddenCount = items.length - initialCount;
+    const showMoreLi = document.createElement('li');
+    showMoreLi.className = 'sidebar__list-more';
+    showMoreLi.innerHTML = `
+      <button class="sidebar__show-more-btn"
+              data-list-id="${listId}"
+              data-expanded="false"
+              aria-expanded="false"
+              aria-label="${t('sidebar_show_more') || 'Show'} ${hiddenCount} ${t('sidebar_more_items') || 'more items'}">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+        <span class="sidebar__show-more-text">${t('sidebar_show') || 'Show'} ${hiddenCount} ${t('sidebar_more') || 'more'}</span>
+      </button>
+    `;
+    fragment.appendChild(showMoreLi);
+  }
+
+  listElement.appendChild(fragment);
+
+  // Store full list data for potential future use
+  listElement.dataset.totalCount = items.length.toString();
+}
+
+/**
+ * Toggle visibility of hidden list items
+ * @param {HTMLButtonElement} button - The Show More/Less button
+ */
+function toggleLinkListExpansion(button) {
+  const listId = button.dataset.listId;
+  const isExpanded = button.dataset.expanded === 'true';
+  const listElement = button.closest('.sidebar__list');
+
+  if (!listElement) return;
+
+  const hiddenItems = listElement.querySelectorAll('.sidebar__list-item--hidden');
+  const visibleItems = listElement.querySelectorAll('.sidebar__list-item:not(.sidebar__list-item--hidden)');
+
+  if (isExpanded) {
+    // Collapse: hide items beyond initial count
+    const initialCount = SIDEBAR_CONFIG.initialDisplayCount;
+    const allItems = listElement.querySelectorAll('.sidebar__list-item');
+
+    allItems.forEach((item, index) => {
+      if (index >= initialCount) {
+        item.classList.add('sidebar__list-item--hidden');
+        item.classList.remove('sidebar__list-item--reveal');
+      }
+    });
+
+    // Update button
+    const hiddenCount = allItems.length - initialCount;
+    button.dataset.expanded = 'false';
+    button.setAttribute('aria-expanded', 'false');
+    button.querySelector('.sidebar__show-more-text').textContent =
+      `${t('sidebar_show') || 'Show'} ${hiddenCount} ${t('sidebar_more') || 'more'}`;
+    button.setAttribute('aria-label',
+      `${t('sidebar_show_more') || 'Show'} ${hiddenCount} ${t('sidebar_more_items') || 'more items'}`);
+
+    // Scroll list to top
+    listElement.scrollTop = 0;
+  } else {
+    // Expand: show all hidden items with staggered animation
+    hiddenItems.forEach((item, index) => {
+      item.classList.remove('sidebar__list-item--hidden');
+      item.classList.add('sidebar__list-item--reveal');
+      item.style.animationDelay = `${index * 30}ms`;
+    });
+
+    // Update button
+    button.dataset.expanded = 'true';
+    button.setAttribute('aria-expanded', 'true');
+    button.querySelector('.sidebar__show-more-text').textContent =
+      t('sidebar_show_less') || 'Show less';
+    button.setAttribute('aria-label', t('sidebar_collapse_list') || 'Collapse list');
+  }
+}
+
 function showNodeDetails(node) {
   state.selectedNodeId = node.id;
 
@@ -1211,13 +1621,20 @@ function showNodeDetails(node) {
   backlinksCount.textContent = backlinks.length;
   forwardlinksCount.textContent = forwardlinks.length;
 
-  backlinksList.innerHTML = backlinks.length
-    ? backlinks.map(n => `<li class="sidebar__list-item" data-node-id="${n.id}">${n.title}</li>`).join('')
-    : `<li class="sidebar__list-empty">${t('sidebar_no_backlinks')}</li>`;
+  // Use optimized renderLinkList for performance with many connections
+  renderLinkList(
+    backlinks,
+    backlinksList,
+    t('sidebar_no_backlinks') || 'No backlinks',
+    'backlinks'
+  );
 
-  forwardlinksList.innerHTML = forwardlinks.length
-    ? forwardlinks.map(n => `<li class="sidebar__list-item" data-node-id="${n.id}">${n.title}</li>`).join('')
-    : `<li class="sidebar__list-empty">${t('sidebar_no_forward_links')}</li>`;
+  renderLinkList(
+    forwardlinks,
+    forwardlinksList,
+    t('sidebar_no_forward_links') || 'No forward links',
+    'forwardlinks'
+  );
 
   // Show/hide create note button for dangling nodes
   const createNoteSection = document.getElementById('sidebar-create-note');
@@ -1228,17 +1645,6 @@ function showNodeDetails(node) {
       createNoteSection.hidden = true;
     }
   }
-
-  sidebar.querySelectorAll('.sidebar__list-item[data-node-id]').forEach(item => {
-    item.addEventListener('click', () => {
-      const targetId = item.getAttribute('data-node-id');
-      const targetNode = state.fullGraphData.nodes.find(n => n.id === targetId);
-      if (targetNode) {
-        enterFocusMode(targetId);
-        showNodeDetails(targetNode);
-      }
-    });
-  });
 
   sidebar.hidden = false;
 
@@ -1308,6 +1714,43 @@ function resetView() {
 function updateZoomDisplay() {
   const percent = Math.round(state.currentZoomLevel * 100);
   document.getElementById('zoom-level').textContent = `${percent}%`;
+
+  // Sync zoom slider via controlsAPI
+  if (window.controlsAPI?.updateZoomSlider) {
+    window.controlsAPI.updateZoomSlider(state.currentZoomLevel);
+  }
+}
+
+/**
+ * Set zoom level programmatically
+ * @param {number} level - Target zoom level (0.1 to 5.0)
+ */
+function setZoomLevel(level) {
+  // Clamp to valid range
+  const clampedLevel = Math.max(CONFIG.zoom.min, Math.min(CONFIG.zoom.max, level));
+
+  // Get current center of the view
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+
+  // Calculate new transform preserving the center point
+  const currentTransform = state.currentTransform || d3.zoomIdentity;
+  const cx = width / 2;
+  const cy = height / 2;
+
+  // Calculate the graph coordinates of the current center
+  const graphX = (cx - currentTransform.x) / currentTransform.k;
+  const graphY = (cy - currentTransform.y) / currentTransform.k;
+
+  // Create new transform that keeps the same center but with new scale
+  const newTransform = d3.zoomIdentity
+    .translate(cx - graphX * clampedLevel, cy - graphY * clampedLevel)
+    .scale(clampedLevel);
+
+  // Apply the transform with animation
+  state.svg.transition()
+    .duration(CONFIG.animation.duration)
+    .call(state.zoom.transform, newTransform);
 }
 
 function toggleLabels() {
@@ -1367,8 +1810,8 @@ function getNodeAriaLabel(d) {
   const outbound = state.fullGraphData?.links.filter(l => (l.source.id || l.source) === d.id).length || 0;
 
   const typeLabel = d.type === 'note' ? t('node_type_note') || 'Note' :
-                    d.type === 'orphan' ? t('node_type_orphan') || 'Orphan note' :
-                    t('node_type_dangling') || 'Dangling reference';
+    d.type === 'orphan' ? t('node_type_orphan') || 'Orphan note' :
+      t('node_type_dangling') || 'Dangling reference';
 
   return `${d.title}. ${typeLabel}. ${inbound} ${t('sr_inbound') || 'inbound'}, ${outbound} ${t('sr_outbound') || 'outbound'} ${t('sr_connections') || 'connections'}. ${t('sr_press_enter') || 'Press Enter to focus, Space for details'}`;
 }
@@ -1652,6 +2095,55 @@ function updateStats(stats) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// Empty State
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Check and display empty state UI when there are no nodes
+ * Hides other UI elements and shows a friendly empty state message
+ */
+function checkEmptyState() {
+  const emptyState = document.getElementById('empty-state');
+  if (!emptyState) return;
+
+  const hasNodes = state.fullGraphData?.nodes?.length > 0;
+  emptyState.hidden = hasNodes;
+
+  // Hide other UI elements when in empty state
+  const minimap = document.getElementById('minimap');
+  const shortcutsHint = document.querySelector('.shortcuts-hint');
+  const commandBar = document.querySelector('.command-bar');
+  const headerStats = document.querySelector('.header__stats');
+
+  if (!hasNodes) {
+    if (minimap) minimap.hidden = true;
+    if (shortcutsHint) shortcutsHint.hidden = true;
+    if (commandBar) commandBar.style.display = 'none';
+    if (headerStats) headerStats.style.display = 'none';
+
+    // Announce to screen readers
+    announceToScreenReader(t('empty_sr_announcement') || 'No notes in your knowledge graph yet. Create notes using GigaMind CLI to get started.');
+  } else {
+    if (minimap) minimap.hidden = false;
+    if (shortcutsHint) shortcutsHint.hidden = false;
+    if (commandBar) commandBar.style.display = '';
+    if (headerStats) headerStats.style.display = '';
+  }
+}
+
+/**
+ * Initialize empty state UI event listeners
+ */
+function initEmptyStateUI() {
+  const refreshBtn = document.getElementById('empty-refresh-btn');
+  if (refreshBtn) {
+    refreshBtn.addEventListener('click', () => {
+      location.reload();
+    });
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Event Listeners
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -1666,6 +2158,43 @@ window.addEventListener('resize', () => {
 document.getElementById('graph-canvas').addEventListener('click', (e) => {
   if (e.target.tagName === 'svg') {
     hideNodeDetails();
+  }
+});
+
+// Event delegation for sidebar interactions (list items and show more buttons)
+document.getElementById('node-sidebar').addEventListener('click', (e) => {
+  // Handle "Show More/Less" button clicks
+  const showMoreBtn = e.target.closest('.sidebar__show-more-btn');
+  if (showMoreBtn) {
+    e.preventDefault();
+    toggleLinkListExpansion(showMoreBtn);
+    return;
+  }
+
+  // Handle list item clicks (navigate to node)
+  const listItem = e.target.closest('.sidebar__list-item[data-node-id]');
+  if (listItem) {
+    const targetId = listItem.getAttribute('data-node-id');
+    const targetNode = state.fullGraphData.nodes.find(n => n.id === targetId);
+    if (targetNode) {
+      enterFocusMode(targetId);
+      showNodeDetails(targetNode);
+    }
+    return;
+  }
+});
+
+// Handle keyboard navigation for sidebar list items
+document.getElementById('node-sidebar').addEventListener('keydown', (e) => {
+  const listItem = e.target.closest('.sidebar__list-item[data-node-id]');
+  if (listItem && (e.key === 'Enter' || e.key === ' ')) {
+    e.preventDefault();
+    const targetId = listItem.getAttribute('data-node-id');
+    const targetNode = state.fullGraphData.nodes.find(n => n.id === targetId);
+    if (targetNode) {
+      enterFocusMode(targetId);
+      showNodeDetails(targetNode);
+    }
   }
 });
 
@@ -1737,6 +2266,7 @@ window.graphAPI = {
   zoomIn,
   zoomOut,
   resetView,
+  setZoomLevel,
   searchNodes,
   focusOnNode,
   exitFocusMode,
@@ -1751,6 +2281,7 @@ window.graphAPI = {
   highlightClusterNodes,
   clearClusterHighlight,
   showToast,
+  updateMinimapColors,
   t,
   tFormat,
   // Node pinning
@@ -1758,6 +2289,8 @@ window.graphAPI = {
   isNodePinned,
   // State management
   restoreState,
+  // Empty state
+  checkEmptyState,
   // Accessibility APIs
   announceToScreenReader,
   centerOnNode,
@@ -1766,6 +2299,7 @@ window.graphAPI = {
   getNodes: () => state.fullGraphData?.nodes || [],
   getFocusedNodeId: () => state.focusedNodeId,
   getSelectedNodeId: () => state.selectedNodeId,
+  getZoomLevel: () => state.currentZoomLevel,
   getLoadingState: () => ({
     isLoading: state.loading.isLoading,
     loadedCount: state.loading.loadedNodeIds.size,
@@ -1777,4 +2311,8 @@ window.graphAPI = {
 };
 
 // Initialize on load
-document.addEventListener('DOMContentLoaded', initGraph);
+document.addEventListener('DOMContentLoaded', () => {
+  // Initialize error handlers once before initGraph
+  initErrorHandlers();
+  initGraph();
+});

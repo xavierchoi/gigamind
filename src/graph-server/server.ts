@@ -77,6 +77,7 @@ const graphTranslations: Record<string, Record<string, string>> = {
     shortcuts_similar: "유사",
     shortcuts_exit: "나가기",
     shortcuts_fullscreen: "전체화면",
+    shortcuts_navigate: "노드 이동",
     // Toast messages
     create_note_btn: "이 개념으로 노트 생성",
     create_note_hint: "클릭하면 GigaMind 명령어가 클립보드에 복사됩니다",
@@ -109,6 +110,13 @@ const graphTranslations: Record<string, Record<string, string>> = {
     merge_preserve_alias: "원본 표기를 alias로 보존",
     merge_cancel: "취소",
     merge_confirm: "통합",
+    // Legend
+    legend_title: "범례",
+    legend_collapse_title: "접기",
+    legend_note: "노트",
+    legend_orphan: "고립",
+    legend_dangling: "미해결",
+    legend_size_hint: "크기 = 연결 수",
   },
   en: {
     // Page title
@@ -167,6 +175,7 @@ const graphTranslations: Record<string, Record<string, string>> = {
     shortcuts_similar: "similar",
     shortcuts_exit: "exit",
     shortcuts_fullscreen: "fullscreen",
+    shortcuts_navigate: "navigate nodes",
     // Toast messages
     create_note_btn: "Create note from this concept",
     create_note_hint: "Click to copy GigaMind command to clipboard",
@@ -199,6 +208,13 @@ const graphTranslations: Record<string, Record<string, string>> = {
     merge_preserve_alias: "Preserve original text as alias",
     merge_cancel: "Cancel",
     merge_confirm: "Merge",
+    // Legend
+    legend_title: "Legend",
+    legend_collapse_title: "Collapse",
+    legend_note: "Note",
+    legend_orphan: "Orphan",
+    legend_dangling: "Dangling",
+    legend_size_hint: "Size = connections",
   },
 };
 

@@ -13,9 +13,13 @@ const elements = {
   searchResultsList: document.getElementById('search-results-list'),
   searchCount: document.getElementById('search-count'),
   searchClear: document.getElementById('search-clear'),
+  searchRecent: document.getElementById('search-recent'),
+  searchRecentList: document.getElementById('search-recent-list'),
+  searchRecentClear: document.getElementById('search-recent-clear'),
   zoomIn: document.getElementById('zoom-in'),
   zoomOut: document.getElementById('zoom-out'),
   zoomLevel: document.getElementById('zoom-level'),
+  zoomSlider: document.getElementById('zoom-slider'),
   resetView: document.getElementById('reset-view'),
   toggleLabels: document.getElementById('toggle-labels'),
   exitFocus: document.getElementById('exit-focus'),
@@ -26,11 +30,16 @@ const elements = {
   createNoteBtn: document.getElementById('create-note-btn'),
   minimap: document.getElementById('minimap'),
   minimapToggle: document.getElementById('minimap-toggle'),
+  legend: document.getElementById('legend'),
+  legendToggle: document.getElementById('legend-toggle'),
   filterButtons: document.querySelectorAll('.filter-btn'),
   loadMoreBtn: document.getElementById('load-more-btn'),
   loadAllBtn: document.getElementById('load-all-btn'),
   breadcrumb: document.getElementById('breadcrumb'),
   contextMenu: document.getElementById('context-menu'),
+  shortcutsModal: document.getElementById('shortcuts-modal'),
+  shortcutsModalClose: document.getElementById('shortcuts-modal-close'),
+  themeToggle: document.getElementById('theme-toggle'),
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -42,7 +51,72 @@ let searchState = {
   results: [],
   selectedIndex: -1,
   isOpen: false,
+  recentSelectedIndex: -1,
+  isRecentOpen: false,
+  activeDropdown: null, // 'results' | 'recent' | null
 };
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Recent Searches Management
+// ═══════════════════════════════════════════════════════════════════════════
+
+const RECENT_SEARCHES_KEY = 'gigamind_recent_searches';
+const MAX_RECENT_SEARCHES = 5;
+
+const recentSearches = {
+  items: [],
+
+  load() {
+    try {
+      const stored = localStorage.getItem(RECENT_SEARCHES_KEY);
+      this.items = stored ? JSON.parse(stored) : [];
+    } catch {
+      this.items = [];
+    }
+  },
+
+  save() {
+    try {
+      localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(this.items));
+    } catch {
+      // localStorage not available
+    }
+  },
+
+  add(query) {
+    if (!query || !query.trim()) return;
+
+    const trimmed = query.trim();
+    // Remove if already exists
+    this.items = this.items.filter(item => item.toLowerCase() !== trimmed.toLowerCase());
+    // Add to beginning
+    this.items.unshift(trimmed);
+    // Limit size
+    if (this.items.length > MAX_RECENT_SEARCHES) {
+      this.items = this.items.slice(0, MAX_RECENT_SEARCHES);
+    }
+    this.save();
+  },
+
+  remove(index) {
+    if (index >= 0 && index < this.items.length) {
+      this.items.splice(index, 1);
+      this.save();
+    }
+  },
+
+  clear() {
+    this.items = [];
+    this.save();
+  },
+
+  getAll() {
+    return this.items;
+  }
+};
+
+// Load recent searches on init
+recentSearches.load();
 
 // ═══════════════════════════════════════════════════════════════════════════
 // History Management (Undo/Redo)
@@ -445,6 +519,35 @@ elements.zoomOut.addEventListener('click', () => {
   window.graphAPI?.zoomOut();
 });
 
+// Zoom Slider event handler
+elements.zoomSlider?.addEventListener('input', (e) => {
+  const zoomLevel = parseInt(e.target.value, 10) / 100;
+  window.graphAPI?.setZoomLevel(zoomLevel);
+  // Update aria-valuenow for accessibility
+  e.target.setAttribute('aria-valuenow', e.target.value);
+});
+
+// Zoom level display click handler - reset to 100%
+elements.zoomLevel?.addEventListener('click', () => {
+  window.graphAPI?.setZoomLevel(1.0);
+  if (elements.zoomSlider) {
+    elements.zoomSlider.value = 100;
+    elements.zoomSlider.setAttribute('aria-valuenow', '100');
+  }
+});
+
+// Zoom level keyboard handler for accessibility
+elements.zoomLevel?.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    window.graphAPI?.setZoomLevel(1.0);
+    if (elements.zoomSlider) {
+      elements.zoomSlider.value = 100;
+      elements.zoomSlider.setAttribute('aria-valuenow', '100');
+    }
+  }
+});
+
 elements.resetView.addEventListener('click', () => {
   window.graphAPI?.resetView();
 });
@@ -490,6 +593,39 @@ elements.minimapToggle?.addEventListener('click', () => {
   elements.minimap.classList.toggle('minimap--collapsed');
 });
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Legend Toggle
+// ═══════════════════════════════════════════════════════════════════════════
+
+const LEGEND_STORAGE_KEY = 'gigamind-legend-collapsed';
+
+// Restore legend collapsed state from localStorage
+function restoreLegendState() {
+  const collapsed = localStorage.getItem(LEGEND_STORAGE_KEY) === 'true';
+  if (collapsed && elements.legend) {
+    elements.legend.classList.add('legend--collapsed');
+    if (elements.legendToggle) {
+      elements.legendToggle.setAttribute('aria-expanded', 'false');
+    }
+  }
+}
+
+// Initialize legend state on load
+restoreLegendState();
+
+elements.legendToggle?.addEventListener('click', () => {
+  const legend = elements.legend;
+  if (!legend) return;
+
+  const isCollapsed = legend.classList.toggle('legend--collapsed');
+
+  // Update aria-expanded
+  elements.legendToggle.setAttribute('aria-expanded', String(!isCollapsed));
+
+  // Save state to localStorage
+  localStorage.setItem(LEGEND_STORAGE_KEY, String(isCollapsed));
+});
+
 // Minimap click-to-navigate handler
 const minimapCanvas = document.getElementById('minimap-canvas');
 minimapCanvas?.addEventListener('click', (e) => {
@@ -501,6 +637,66 @@ minimapCanvas?.addEventListener('click', (e) => {
   // Pan the graph to the clicked position
   window.graphAPI?.panToMinimapPosition(x, y);
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Theme Management
+// ═══════════════════════════════════════════════════════════════════════════
+
+const THEME_STORAGE_KEY = 'gigamind-theme';
+
+/**
+ * Initialize theme based on saved preference or system setting
+ */
+function initTheme() {
+  const saved = localStorage.getItem(THEME_STORAGE_KEY);
+  if (saved) {
+    document.documentElement.setAttribute('data-theme', saved);
+  }
+  // If no saved preference, CSS media query will handle system preference
+}
+
+/**
+ * Toggle between light and dark themes
+ */
+function toggleTheme() {
+  const root = document.documentElement;
+  const currentTheme = root.getAttribute('data-theme');
+
+  let newTheme;
+  if (currentTheme === 'light') {
+    newTheme = 'dark';
+  } else if (currentTheme === 'dark') {
+    newTheme = 'light';
+  } else {
+    // No explicit theme set, check system preference and toggle opposite
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    newTheme = prefersDark ? 'light' : 'dark';
+  }
+
+  root.setAttribute('data-theme', newTheme);
+  localStorage.setItem(THEME_STORAGE_KEY, newTheme);
+
+  // Notify graph to update minimap colors
+  window.graphAPI?.updateMinimapColors?.();
+}
+
+/**
+ * Listen for system theme preference changes
+ */
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+  const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
+  if (!savedTheme) {
+    // No manual setting saved, system preference will apply via CSS
+    // But we should update minimap colors
+    window.graphAPI?.updateMinimapColors?.();
+  }
+});
+
+// Theme toggle button handler
+elements.themeToggle?.addEventListener('click', toggleTheme);
+
+// Initialize theme on page load
+initTheme();
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Filter Toggles
@@ -525,6 +721,9 @@ let searchDebounceTimer = null;
 function performSearch(query) {
   searchState.query = query;
 
+  // Close recent searches when typing
+  closeRecentDropdown();
+
   if (!query.trim()) {
     closeSearchDropdown();
     window.graphAPI?.searchNodes('');
@@ -534,9 +733,11 @@ function performSearch(query) {
   const matches = window.graphAPI?.searchNodes(query) || [];
   searchState.results = matches;
   searchState.selectedIndex = -1;
+  searchState.activeDropdown = 'results';
 
   renderSearchResults(matches, query);
   openSearchDropdown();
+  updateAriaAttributes();
 }
 
 function renderSearchResults(results, query) {
@@ -562,7 +763,7 @@ function renderSearchResults(results, query) {
 
   if (results.length === 0) {
     elements.searchResultsList.innerHTML = `
-      <li class="search-results__empty">${t('search_no_results')}</li>
+      <li class="search-results__empty" role="option" aria-disabled="true">${t('search_no_results')}</li>
     `;
     return;
   }
@@ -574,11 +775,17 @@ function renderSearchResults(results, query) {
     const highlightedTitle = highlightMatch(node.title, query);
     const inbound = countInbound(node.id);
     const outbound = countOutbound(node.id);
+    const isSelected = index === searchState.selectedIndex;
+    const itemId = `search-result-${index}`;
 
     return `
-      <li class="search-results__item ${index === searchState.selectedIndex ? 'search-results__item--selected' : ''}"
+      <li class="search-results__item"
+          id="${itemId}"
           data-node-id="${node.id}"
-          data-index="${index}">
+          data-index="${index}"
+          role="option"
+          aria-selected="${isSelected}"
+          tabindex="${isSelected ? '0' : '-1'}">
         <span class="search-results__item-indicator search-results__item-indicator--${node.type}"></span>
         <span class="search-results__item-title">${highlightedTitle}</span>
         <span class="search-results__item-connections">${inbound + outbound}</span>
@@ -637,7 +844,40 @@ function openSearchDropdown() {
 function closeSearchDropdown() {
   searchState.isOpen = false;
   searchState.selectedIndex = -1;
+  searchState.activeDropdown = null;
   elements.searchResults.hidden = true;
+  elements.searchInput.removeAttribute('aria-activedescendant');
+}
+
+function openRecentDropdown() {
+  searchState.isRecentOpen = true;
+  searchState.recentSelectedIndex = -1;
+  searchState.activeDropdown = 'recent';
+  if (elements.searchRecent) {
+    elements.searchRecent.hidden = false;
+  }
+}
+
+function closeRecentDropdown() {
+  searchState.isRecentOpen = false;
+  searchState.recentSelectedIndex = -1;
+  if (searchState.activeDropdown === 'recent') {
+    searchState.activeDropdown = null;
+  }
+  if (elements.searchRecent) {
+    elements.searchRecent.hidden = true;
+  }
+  elements.searchInput.removeAttribute('aria-activedescendant');
+}
+
+function updateAriaAttributes() {
+  // Update aria-activedescendant on the search input
+  if (searchState.selectedIndex >= 0) {
+    const itemId = `search-result-${searchState.selectedIndex}`;
+    elements.searchInput.setAttribute('aria-activedescendant', itemId);
+  } else {
+    elements.searchInput.removeAttribute('aria-activedescendant');
+  }
 }
 
 function navigateResults(direction) {
@@ -646,29 +886,50 @@ function navigateResults(direction) {
   const maxIndex = Math.min(searchState.results.length - 1, 9);
 
   if (direction === 'down') {
-    searchState.selectedIndex = Math.min(searchState.selectedIndex + 1, maxIndex);
+    // If nothing selected, start at first item; otherwise move down
+    if (searchState.selectedIndex < 0) {
+      searchState.selectedIndex = 0;
+    } else {
+      searchState.selectedIndex = Math.min(searchState.selectedIndex + 1, maxIndex);
+    }
   } else {
-    searchState.selectedIndex = Math.max(searchState.selectedIndex - 1, 0);
+    // If nothing selected, start at last item; otherwise move up
+    if (searchState.selectedIndex < 0) {
+      searchState.selectedIndex = maxIndex;
+    } else if (searchState.selectedIndex === 0) {
+      // Wrap around to deselect (allows cycling through)
+      searchState.selectedIndex = -1;
+    } else {
+      searchState.selectedIndex = searchState.selectedIndex - 1;
+    }
   }
 
   updateSelectedResult();
+  updateAriaAttributes();
 }
 
 function updateSelectedResult() {
   elements.searchResultsList.querySelectorAll('.search-results__item').forEach((item, index) => {
-    item.classList.toggle('search-results__item--selected', index === searchState.selectedIndex);
+    const isSelected = index === searchState.selectedIndex;
+    item.classList.toggle('search-results__item--selected', isSelected);
+    item.setAttribute('aria-selected', String(isSelected));
+    item.setAttribute('tabindex', isSelected ? '0' : '-1');
   });
 
-  // Scroll into view
+  // Scroll selected item into view
   const selected = elements.searchResultsList.querySelector('.search-results__item--selected');
   if (selected) {
-    selected.scrollIntoView({ block: 'nearest' });
+    selected.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
 }
 
 function confirmSelection() {
   if (searchState.selectedIndex >= 0 && searchState.selectedIndex < searchState.results.length) {
     const node = searchState.results[searchState.selectedIndex];
+    // Save search query to recent searches
+    if (searchState.query) {
+      recentSearches.add(searchState.query);
+    }
     selectSearchResult(node.id);
   }
 }
@@ -701,7 +962,11 @@ elements.searchInput.addEventListener('keydown', (e) => {
 
     case 'Enter':
       e.preventDefault();
-      if (searchState.isOpen && searchState.selectedIndex >= 0) {
+      if (searchState.isOpen && searchState.results.length > 0) {
+        // If no item is selected, default to first result
+        if (searchState.selectedIndex < 0) {
+          searchState.selectedIndex = 0;
+        }
         confirmSelection();
       }
       break;
@@ -735,11 +1000,62 @@ document.addEventListener('click', (e) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
+// Shortcuts Modal
+// ═══════════════════════════════════════════════════════════════════════════
+
+const shortcutsModal = {
+  isOpen: false,
+
+  open() {
+    if (!elements.shortcutsModal) return;
+    this.isOpen = true;
+    elements.shortcutsModal.hidden = false;
+    // Focus the close button for keyboard accessibility
+    elements.shortcutsModalClose?.focus();
+    // Prevent body scroll when modal is open
+    document.body.style.overflow = 'hidden';
+  },
+
+  close() {
+    if (!elements.shortcutsModal) return;
+    this.isOpen = false;
+    elements.shortcutsModal.hidden = true;
+    // Restore body scroll
+    document.body.style.overflow = '';
+  },
+
+  toggle() {
+    if (this.isOpen) {
+      this.close();
+    } else {
+      this.open();
+    }
+  }
+};
+
+// Shortcuts modal event listeners
+elements.shortcutsModalClose?.addEventListener('click', () => {
+  shortcutsModal.close();
+});
+
+// Close modal when clicking on backdrop
+elements.shortcutsModal?.querySelector('.shortcuts-modal__backdrop')?.addEventListener('click', () => {
+  shortcutsModal.close();
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Keyboard Shortcuts
 // ═══════════════════════════════════════════════════════════════════════════
 
 document.addEventListener('keydown', (e) => {
-  // Don't trigger shortcuts when typing in search
+  // Handle ? key even when in search input
+  if (e.key === '?') {
+    e.preventDefault();
+    shortcutsModal.toggle();
+    return;
+  }
+
+  // Don't trigger other shortcuts when typing in search
   if (document.activeElement === elements.searchInput) {
     return;
   }
@@ -771,7 +1087,10 @@ document.addEventListener('keydown', (e) => {
       break;
 
     case 'Escape':
-      if (!elements.focusIndicator.hidden) {
+      // Close shortcuts modal first if open
+      if (shortcutsModal.isOpen) {
+        shortcutsModal.close();
+      } else if (!elements.focusIndicator.hidden) {
         window.graphAPI?.exitFocusMode();
       } else if (!elements.sidebar.hidden) {
         window.graphAPI?.hideNodeDetails();
@@ -900,9 +1219,27 @@ console.log(
 // Export Control Utilities for graph.js integration
 // ═══════════════════════════════════════════════════════════════════════════
 
+/**
+ * Update the zoom slider and display to reflect the current zoom level
+ * Called from graph.js when zoom changes
+ * @param {number} zoomLevel - Current zoom level (0.1 to 5.0)
+ */
+function updateZoomSlider(zoomLevel) {
+  const sliderValue = Math.round(zoomLevel * 100);
+  if (elements.zoomSlider) {
+    elements.zoomSlider.value = sliderValue;
+    elements.zoomSlider.setAttribute('aria-valuenow', String(sliderValue));
+  }
+  if (elements.zoomLevel) {
+    elements.zoomLevel.textContent = `${sliderValue}%`;
+  }
+}
+
 window.controlsAPI = {
   history,
   focusHistory,
   urlState,
   contextMenu,
+  updateZoomSlider,
+  shortcutsModal,
 };
