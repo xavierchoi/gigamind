@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.5] - 2025-12-26
+
+### Changed
+- Restructured i18n type definitions to match actual JSON structure: CommonTranslations now uses 32 nested sections, ErrorTranslations uses 36 error codes with 3 detail levels (minimal/medium/detailed), OnboardingTranslations uses 11 actual onboarding steps
+- Unified English and Korean commands.json structure: en/commands.json now uses same nested hierarchy as ko/commands.json with all original translations preserved
+- Standardized namespace naming convention from kebab-case to camelCase: 'similar-links' → 'similarLinks' across index.ts and types.ts
+
+### Added
+- Type utilities for enhanced type safety: NestedKeyOf<T> for dot-notation paths in nested objects, PathValue<T, P> for extracting values at specific paths
+- JSON-based type inference support for improved compile-time validation
+
+### Fixed
+- Resolved type mismatch between translation JSON structure and TypeScript type definitions
+- Corrected OnboardingTranslations structure to reflect 11 actual onboarding steps (previously step1/step2/step3)
+- Aligned ErrorTranslations hierarchy with error code organization and detail levels
+
 ## [0.4.4] - 2025-12-26
 
 ### Fixed

@@ -1,7 +1,7 @@
 import i18next from 'i18next';
-import type { SupportedLanguage } from './types.js';
+import type { SupportedLanguage, TranslationNamespace, NestedKeyOf, PathValue } from './types.js';
 
-export type { SupportedLanguage };
+export type { SupportedLanguage, TranslationNamespace, NestedKeyOf, PathValue };
 
 // Import Korean translations
 import koCommon from './locales/ko/common.json' with { type: 'json' };
@@ -18,6 +18,41 @@ import enErrors from './locales/en/errors.json' with { type: 'json' };
 import enPrompts from './locales/en/prompts.json' with { type: 'json' };
 import enOnboarding from './locales/en/onboarding.json' with { type: 'json' };
 import enSimilarLinks from './locales/en/similar-links.json' with { type: 'json' };
+
+// ============================================================================
+// JSON-inferred types for type-safe translation access
+// ============================================================================
+
+/** Type of common.json translations */
+export type CommonTranslations = typeof koCommon;
+/** Type of commands.json translations */
+export type CommandsTranslations = typeof koCommands;
+/** Type of errors.json translations */
+export type ErrorsTranslations = typeof koErrors;
+/** Type of prompts.json translations */
+export type PromptsTranslations = typeof koPrompts;
+/** Type of onboarding.json translations */
+export type OnboardingTranslations = typeof koOnboarding;
+/** Type of similar-links.json translations */
+export type SimilarLinksTranslations = typeof koSimilarLinks;
+
+/**
+ * Type-safe keys for each namespace.
+ *
+ * Usage:
+ *   const key: CommonKey = 'greeting.hello';  // Type-checked!
+ *   t(`common:${key}`);
+ */
+export type CommonKey = NestedKeyOf<CommonTranslations>;
+export type CommandsKey = NestedKeyOf<CommandsTranslations>;
+export type ErrorsKey = NestedKeyOf<ErrorsTranslations>;
+export type PromptsKey = NestedKeyOf<PromptsTranslations>;
+export type OnboardingKey = NestedKeyOf<OnboardingTranslations>;
+export type SimilarLinksKey = NestedKeyOf<SimilarLinksTranslations>;
+
+// ============================================================================
+// i18next initialization
+// ============================================================================
 
 export async function initI18n(language: string = 'ko') {
   await i18next.init({
@@ -47,6 +82,18 @@ export async function initI18n(language: string = 'ko') {
   return i18next;
 }
 
+/**
+ * Translation function.
+ *
+ * Usage examples:
+ *   t('common:greeting.hello')
+ *   t('errors:codes.unknown.minimal')
+ *   t('common:processing.files_matched', { count: 5 })
+ *
+ * For type-safe keys, use the exported key types:
+ *   const key: CommonKey = 'greeting.hello';
+ *   t(`common:${key}`);
+ */
 export const t = i18next.t.bind(i18next);
 
 export function getCurrentLanguage(): SupportedLanguage {
