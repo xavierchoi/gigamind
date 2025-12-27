@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.7] - 2025-12-26
+
+### Added
+- Keyboard shortcuts modal (`?` key) displaying all available shortcuts for improved discoverability
+- Colorblind accessibility with node type differentiation: circles (Agent), hexagons (Note), dashed circles (Edge)
+- Light/dark theme toggle with system preference detection and manual override capability
+- Mobile/tablet touch UX improvements: 44px touch targets, optimized tablet breakpoints
+- Error state UI with retry button for failed graph loads and improved error handling
+
+### Changed
+- Minimap CSS variable support enabling automatic theme-aware color updates during theme transitions
+- Search keyboard navigation: arrow keys to browse results, Enter to select (improved usability)
+
+### Fixed
+- i18n fix for retry button preserving SVG icon during localization
+- Memory leak in initErrorHandlers() preventing event listener cleanup
+- Keyboard shortcuts modal aria-label i18n support for screen reader accessibility
+
 ## [0.4.6] - 2025-12-26
 
 ### Added
