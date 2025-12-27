@@ -19,17 +19,39 @@ export type TranslationNamespace =
 // ============================================================================
 // Type-safe translation key utilities
 // ============================================================================
+//
+// Design notes:
+// - These utilities use TypeScript's recursive conditional types
+// - Tested to work reliably with nesting depths up to 5-6 levels
+// - For very deep nesting (>10 levels), TypeScript may hit recursion limits
+// - Arrays are treated as objects; use with care for array-containing structures
+//
+// Performance considerations:
+// - Large objects (100+ keys) may slow down type inference
+// - Consider splitting large namespaces if IDE responsiveness degrades
+// ============================================================================
 
 /**
  * Recursively generates dot-notation paths for nested objects.
  *
- * Example:
- *   type Keys = NestedKeyOf<{ a: { b: string; c: { d: string } } }>
- *   // Result: "a" | "a.b" | "a.c" | "a.c.d"
+ * @example
+ * ```typescript
+ * type Keys = NestedKeyOf<{ a: { b: string; c: { d: string } } }>
+ * // Result: "a" | "a.b" | "a.c" | "a.c.d"
+ * ```
  *
- * Usage with t() function:
- *   t('common:greeting.hello')  // Access nested key
- *   t('errors:codes.unknown.minimal')  // Deep nested access
+ * @example Usage with t() function
+ * ```typescript
+ * t('common:greeting.hello')  // Access nested key
+ * t('errors:codes.unknown.minimal')  // Deep nested access
+ *
+ * // Type-safe key validation
+ * const key: NestedKeyOf<CommonJSON> = 'greeting.hello';  // ✓ Valid
+ * const bad: NestedKeyOf<CommonJSON> = 'greeting.invalid'; // ✗ Type error
+ * ```
+ *
+ * @typeParam T - Object type to extract keys from
+ * @returns Union of all valid dot-notation paths
  */
 export type NestedKeyOf<T> = T extends object
   ? {
@@ -42,9 +64,18 @@ export type NestedKeyOf<T> = T extends object
 /**
  * Extracts the type at a given dot-notation path.
  *
- * Example:
- *   type Value = PathValue<{ a: { b: string } }, "a.b">
- *   // Result: string
+ * @example
+ * ```typescript
+ * type Value = PathValue<{ a: { b: string } }, "a.b">
+ * // Result: string
+ *
+ * // Use with translation return type validation
+ * type HelloType = PathValue<CommonJSON, 'greeting.hello'>; // string
+ * ```
+ *
+ * @typeParam T - Object type to navigate
+ * @typeParam P - Dot-notation path string
+ * @returns Type at the specified path, or never if path is invalid
  */
 export type PathValue<T, P extends string> = P extends `${infer K}.${infer Rest}`
   ? K extends keyof T
@@ -55,17 +86,33 @@ export type PathValue<T, P extends string> = P extends `${infer K}.${infer Rest}
     : never;
 
 // ============================================================================
-// Namespace type definitions
+// Namespace type definitions (Manual Interfaces)
 // ============================================================================
 //
-// NOTE: These interfaces define the expected structure for each namespace.
-// They may not be 100% in sync with the actual JSON files due to ongoing
-// development. The NestedKeyOf utility above can be used with imported
-// JSON types for true compile-time safety.
+// DESIGN DECISION: Two-tier type system
 //
-// For type-safe access with actual JSON:
-//   import commonJson from './locales/ko/common.json';
-//   type CommonKeys = NestedKeyOf<typeof commonJson>;
+// 1. Manual interfaces (defined here)
+//    - Serve as documentation and specification
+//    - Enable IDE autocompletion when editing JSON files
+//    - May drift from actual JSON during rapid development
+//    - Prefixed with namespace name: CommonTranslations, CommandTranslations, etc.
+//
+// 2. JSON-inferred types (defined in index.ts)
+//    - Always in sync with actual JSON files (source of truth)
+//    - Suffixed with JSON: CommonJSON, CommandsJSON, etc.
+//    - Recommended for runtime type checking
+//
+// USAGE RECOMMENDATIONS:
+//
+//   // For type-safe translation access, use JSON-inferred types:
+//   import { CommonJSON, CommonKey } from './index.js';
+//   const key: CommonKey = 'greeting.hello';  // Compile-time validated
+//
+//   // For documentation/specification, reference manual interfaces:
+//   import type { CommonTranslations } from './types.js';
+//
+// FUTURE: Consider adding compile-time validation that JSON matches interfaces
+// using tools like zod or io-ts for schema generation.
 // ============================================================================
 
 export interface CommonTranslations {
@@ -568,6 +615,40 @@ export interface CommandTranslations {
     capability_clone: string;
   };
 }
+
+// ============================================================================
+// Error Type Definitions
+// ============================================================================
+//
+// STRUCTURE OVERVIEW:
+// - 36 error codes organized by category (api, validation, fs, config, subagent)
+// - 3 verbosity levels per error (minimal, medium, detailed)
+// - Recovery hints for actionable errors
+// - Specific interfaces for common UI error displays
+//
+// DESIGN RATIONALE:
+// The current structure prioritizes type safety and explicit documentation over
+// simplicity. Each error type is fully specified to enable compile-time validation.
+//
+// POTENTIAL SIMPLIFICATIONS (future consideration):
+//
+// 1. Use mapped types to reduce boilerplate:
+//    type ErrorCode = 'unknown' | 'internal' | 'api_invalid_key' | ...;
+//    type ErrorCodes = Record<ErrorCode, ErrorLevelMessages>;
+//
+// 2. Use a single generic error interface:
+//    interface ErrorDisplay<T extends string = string> {
+//      title: string;
+//      message: string;
+//      hints?: string[];
+//      actions?: Record<T, string>;
+//    }
+//
+// 3. Use a registry pattern for runtime extensibility:
+//    const errorRegistry = new Map<ErrorCode, ErrorDefinition>();
+//
+// Current structure is kept for backwards compatibility.
+// ============================================================================
 
 // Error message with three verbosity levels
 export interface ErrorLevelMessages {

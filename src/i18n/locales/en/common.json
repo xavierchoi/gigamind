@@ -263,7 +263,16 @@
     "toast_invalid_node": "Invalid node",
     "toast_clipboard_unavailable": "Clipboard API unavailable. Command: {{command}}",
     "toast_copied": "Command copied to clipboard",
-    "toast_copy_failed": "Copy failed. Please enter manually: {{command}}"
+    "toast_copy_failed": "Copy failed. Please enter manually: {{command}}",
+    "toast_node_pinned": "Node pinned",
+    "toast_node_unpinned": "Node unpinned",
+    "toast_link_copied": "Link copied to clipboard",
+    "breadcrumb_home": "Home",
+    "context_focus": "Focus",
+    "context_pin": "Pin",
+    "context_unpin": "Unpin",
+    "context_details": "Details",
+    "context_copy_link": "Copy Link"
   },
   "time": {
     "just_now": "Just now",

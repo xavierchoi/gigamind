@@ -4,6 +4,10 @@
  */
 
 import { jest } from "@jest/globals";
+import { initI18n } from "../src/i18n/index.js";
+
+// Initialize i18n for tests
+await initI18n("ko");
 
 // Mock environment variables for testing
 process.env.GIGAMIND_DEBUG = "false";

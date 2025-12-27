@@ -75,6 +75,65 @@ export const DEFAULT_CONFIG: GigaMindConfig = {
 };
 
 /**
+ * Check if a value is a plain object (not null, not an array, not a class instance).
+ *
+ * @param value - The value to check
+ * @returns True if the value is a plain object
+ */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== "object") {
+    return false;
+  }
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
+/**
+ * Deep merge two objects, with source values taking precedence over target values.
+ * Arrays are replaced entirely (not merged).
+ * Only plain objects are deeply merged; class instances and other special objects are replaced.
+ *
+ * @param target - The base object with default values
+ * @param source - The object with override values
+ * @returns A new deeply merged object
+ *
+ * @example
+ * deepMerge(
+ *   { a: 1, nested: { x: 1, y: 2 } },
+ *   { nested: { x: 10 } }
+ * );
+ * // Result: { a: 1, nested: { x: 10, y: 2 } }
+ */
+function deepMerge(
+  target: GigaMindConfig,
+  source: Partial<GigaMindConfig>
+): GigaMindConfig {
+  // Build result as a mutable record, then cast back to GigaMindConfig
+  const result: Record<string, unknown> = { ...target };
+
+  // Iterate over source keys and merge appropriately
+  for (const key of Object.keys(source) as Array<keyof GigaMindConfig>) {
+    const sourceValue = source[key];
+    const targetValue = target[key];
+
+    if (sourceValue === undefined) {
+      // Skip undefined values in source - keep target value
+      continue;
+    }
+
+    if (isPlainObject(sourceValue) && isPlainObject(targetValue)) {
+      // Both are plain objects - merge nested objects like 'feedback'
+      result[key] = { ...targetValue, ...sourceValue };
+    } else {
+      // For arrays, primitives, null, or non-plain objects: replace entirely
+      result[key] = sourceValue;
+    }
+  }
+
+  return result as unknown as GigaMindConfig;
+}
+
+/**
  * Get the configuration directory path.
  * In test mode (GIGAMIND_TEST_CONFIG_DIR env var set), uses the test directory.
  * Otherwise uses ~/.gigamind
@@ -193,7 +252,7 @@ export async function loadConfig(): Promise<GigaMindConfig> {
   try {
     const content = await fs.readFile(configPath, "utf-8");
     const parsed = yaml.parse(content) as Partial<GigaMindConfig>;
-    return { ...DEFAULT_CONFIG, ...parsed };
+    return deepMerge(DEFAULT_CONFIG, parsed);
   } catch {
     return { ...DEFAULT_CONFIG };
   }
@@ -225,7 +284,7 @@ export async function updateConfig(
   updates: Partial<GigaMindConfig>
 ): Promise<GigaMindConfig> {
   const current = await loadConfig();
-  const updated = { ...current, ...updates };
+  const updated = deepMerge(current, updates);
   await saveConfig(updated);
   return updated;
 }

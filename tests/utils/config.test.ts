@@ -151,6 +151,25 @@ describe("Config operations", () => {
       expect(config.feedback).toBeDefined();
       expect(["minimal", "medium", "detailed"]).toContain(config.feedback.level);
     });
+
+    it("should deep merge partial nested objects with defaults", async () => {
+      // Create a config file with only partial feedback settings
+      const partialConfig = `notesDir: ~/custom-notes
+feedback:
+  level: detailed
+`;
+      await fs.writeFile(testConfigPath, partialConfig);
+
+      const config = await loadConfig();
+
+      // User-defined values should be used
+      expect(config.notesDir).toBe("~/custom-notes");
+      expect(config.feedback.level).toBe("detailed");
+
+      // Default values for other feedback properties should be preserved
+      expect(config.feedback.showTips).toBe(true);
+      expect(config.feedback.showStats).toBe(true);
+    });
   });
 
   describe("saveConfig and loadConfig", () => {
@@ -236,6 +255,39 @@ describe("Config operations", () => {
       expect(updated.userName).toBe("NewUser");
       expect(updated.notesDir).toBe("./new-notes");
       // Original fields should be preserved
+      expect(updated.model).toBe("claude-sonnet-4-20250514");
+    });
+
+    it("should deep merge partial nested objects", async () => {
+      const initialConfig: GigaMindConfig = {
+        notesDir: "./notes",
+        useCases: [],
+        feedback: {
+          level: "medium",
+          showTips: true,
+          showStats: true,
+        },
+        model: "claude-sonnet-4-20250514",
+        noteDetail: "balanced",
+        language: "ko",
+      };
+
+      await saveConfig(initialConfig);
+
+      // Update only the feedback level, not showTips or showStats
+      const updated = await updateConfig({
+        feedback: {
+          level: "detailed",
+          showTips: true,  // Keep same
+          showStats: false, // Change this
+        },
+      });
+
+      expect(updated.feedback.level).toBe("detailed");
+      expect(updated.feedback.showTips).toBe(true);
+      expect(updated.feedback.showStats).toBe(false);
+      // Other fields should be preserved
+      expect(updated.notesDir).toBe("./notes");
       expect(updated.model).toBe("claude-sonnet-4-20250514");
     });
   });

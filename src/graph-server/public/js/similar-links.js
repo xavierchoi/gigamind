@@ -1,6 +1,7 @@
 /**
  * GigaMind Knowledge Graph - Similar Links Panel
  * Analyzes and displays similar dangling links with merge functionality
+ * Uses Web Worker for background similarity calculations
  */
 
 // ========================================================
@@ -14,6 +15,9 @@ const similarLinksState = {
   threshold: 0.7,
   highlightedClusterId: null,
   pendingMerge: null,
+  worker: null,
+  workerReady: false,
+  analysisProgress: 0,
 };
 
 // Cluster colors for highlighting
@@ -64,6 +68,104 @@ function tFormat(key, values) {
 }
 
 // ========================================================
+// Web Worker Management
+// ========================================================
+
+/**
+ * Initialize the similarity calculation web worker
+ */
+function initWorker() {
+  if (similarLinksState.worker) {
+    return; // Already initialized
+  }
+
+  try {
+    similarLinksState.worker = new Worker('/js/similarity-worker.js');
+
+    similarLinksState.worker.onmessage = function(e) {
+      const { type } = e.data;
+
+      switch (type) {
+        case 'ready':
+          console.log('[Similar Links] Worker ready');
+          similarLinksState.workerReady = true;
+          break;
+
+        case 'progress':
+          handleWorkerProgress(e.data);
+          break;
+
+        case 'result':
+          handleWorkerResult(e.data);
+          break;
+
+        case 'error':
+          handleWorkerError(e.data);
+          break;
+      }
+    };
+
+    similarLinksState.worker.onerror = function(error) {
+      console.error('[Similar Links] Worker error:', error);
+      similarLinksState.workerReady = false;
+      // Fallback to server-side analysis
+      showToast(t('similar_links_worker_error'));
+    };
+
+  } catch (error) {
+    console.warn('[Similar Links] Web Worker not supported, falling back to server-side analysis');
+    similarLinksState.worker = null;
+  }
+}
+
+/**
+ * Handle progress updates from worker
+ */
+function handleWorkerProgress(data) {
+  const { percent, phase, totalLinks } = data;
+  similarLinksState.analysisProgress = percent;
+  updateProgressUI(percent, phase, totalLinks);
+}
+
+/**
+ * Handle final result from worker
+ */
+function handleWorkerResult(data) {
+  const { clusters, totalDanglingLinks } = data;
+  console.log('[Similar Links] Worker result:', {
+    clusters: clusters.length,
+    totalDanglingLinks
+  });
+
+  similarLinksState.clusters = clusters;
+  similarLinksState.isLoading = false;
+  hideLoadingState();
+  renderClusters();
+}
+
+/**
+ * Handle worker error
+ */
+function handleWorkerError(data) {
+  console.error('[Similar Links] Worker error:', data.error);
+  similarLinksState.isLoading = false;
+  hideLoadingState();
+  showToast(t('similar_links_error'));
+  showEmptyState();
+}
+
+/**
+ * Terminate the worker (cleanup)
+ */
+function terminateWorker() {
+  if (similarLinksState.worker) {
+    similarLinksState.worker.terminate();
+    similarLinksState.worker = null;
+    similarLinksState.workerReady = false;
+  }
+}
+
+// ========================================================
 // Panel Toggle
 // ========================================================
 
@@ -80,6 +182,11 @@ function openPanel() {
   }
   if (slElements.toggle) {
     slElements.toggle.classList.add('filter-btn--active');
+  }
+
+  // Initialize worker on first open
+  if (!similarLinksState.worker) {
+    initWorker();
   }
 
   // Auto-analyze on first open if no clusters
@@ -115,6 +222,9 @@ function togglePanel() {
 // API Calls
 // ========================================================
 
+/**
+ * Fetch dangling links from the server and analyze them
+ */
 async function analyzeSimilarLinks() {
   console.log('[Similar Links] analyzeSimilarLinks called');
   if (similarLinksState.isLoading) {
@@ -123,10 +233,43 @@ async function analyzeSimilarLinks() {
   }
 
   similarLinksState.isLoading = true;
+  similarLinksState.analysisProgress = 0;
   showLoadingState();
 
   try {
     const threshold = similarLinksState.threshold;
+
+    // Check if we should use web worker (client-side analysis)
+    if (similarLinksState.worker && similarLinksState.workerReady) {
+      // Fetch raw dangling links data
+      console.log('[Similar Links] Fetching dangling links for worker analysis...');
+      const response = await fetch('/api/dangling-links');
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch dangling links');
+      }
+
+      const data = await response.json();
+      const danglingLinks = data.danglingLinks || [];
+
+      console.log('[Similar Links] Sending', danglingLinks.length, 'dangling links to worker');
+
+      // Send to worker for analysis
+      similarLinksState.worker.postMessage({
+        type: 'analyze',
+        danglingLinks,
+        options: {
+          threshold,
+          minClusterSize: 2,
+          maxResults: 50
+        }
+      });
+
+      // Result will be handled by worker message handler
+      return;
+    }
+
+    // Fallback: server-side analysis
     console.log('[Similar Links] Fetching /api/similar-links?threshold=' + threshold);
     const response = await fetch(`/api/similar-links?threshold=${threshold}`);
     console.log('[Similar Links] Response status:', response.status);
@@ -147,6 +290,17 @@ async function analyzeSimilarLinks() {
     showToast(t('similar_links_error'));
     showEmptyState();
   } finally {
+    similarLinksState.isLoading = false;
+    hideLoadingState();
+  }
+}
+
+/**
+ * Cancel ongoing analysis
+ */
+function cancelAnalysis() {
+  if (similarLinksState.worker && similarLinksState.isLoading) {
+    similarLinksState.worker.postMessage({ type: 'cancel' });
     similarLinksState.isLoading = false;
     hideLoadingState();
   }
@@ -201,6 +355,36 @@ async function mergeClusters(clusterId, targetName, memberTargets, preserveAlias
 // ========================================================
 
 function showLoadingState() {
+  // Create progress bar if it doesn't exist
+  let progressContainer = slElements.loadingState.querySelector('.progress-container');
+  if (!progressContainer) {
+    progressContainer = document.createElement('div');
+    progressContainer.className = 'progress-container';
+    progressContainer.innerHTML = `
+      <div class="progress-bar">
+        <div class="progress-fill" style="width: 0%"></div>
+      </div>
+      <div class="progress-info">
+        <span class="progress-text">0%</span>
+        <span class="progress-phase" data-i18n="similar_links_analyzing">${t('similar_links_analyzing')}</span>
+      </div>
+      <button class="progress-cancel-btn" title="${t('similar_links_cancel')}">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    `;
+
+    // Add cancel button handler
+    const cancelBtn = progressContainer.querySelector('.progress-cancel-btn');
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', cancelAnalysis);
+    }
+
+    slElements.loadingState.appendChild(progressContainer);
+  }
+
   slElements.loadingState.hidden = false;
   slElements.emptyState.hidden = true;
   slElements.clustersContainer.innerHTML = '';
@@ -208,6 +392,41 @@ function showLoadingState() {
 
 function hideLoadingState() {
   slElements.loadingState.hidden = true;
+}
+
+function updateProgressUI(percent, phase, totalLinks) {
+  const progressContainer = slElements.loadingState.querySelector('.progress-container');
+  if (!progressContainer) return;
+
+  const progressFill = progressContainer.querySelector('.progress-fill');
+  const progressText = progressContainer.querySelector('.progress-text');
+  const progressPhase = progressContainer.querySelector('.progress-phase');
+
+  if (progressFill) {
+    progressFill.style.width = `${percent}%`;
+  }
+
+  if (progressText) {
+    progressText.textContent = `${percent}%`;
+  }
+
+  if (progressPhase) {
+    let phaseText = '';
+    switch (phase) {
+      case 'starting':
+        phaseText = tFormat('similar_links_progress_starting', { count: totalLinks || 0 });
+        break;
+      case 'calculating':
+        phaseText = t('similar_links_progress_calculating');
+        break;
+      case 'clustering':
+        phaseText = t('similar_links_progress_clustering');
+        break;
+      default:
+        phaseText = t('similar_links_analyzing');
+    }
+    progressPhase.textContent = phaseText;
+  }
 }
 
 function showEmptyState() {
@@ -516,6 +735,87 @@ function initSimilarLinks() {
       }
     }
   });
+
+  // Add progress bar styles dynamically
+  addProgressStyles();
+}
+
+/**
+ * Add CSS styles for progress bar dynamically
+ */
+function addProgressStyles() {
+  const styleId = 'similar-links-progress-styles';
+  if (document.getElementById(styleId)) return;
+
+  const style = document.createElement('style');
+  style.id = styleId;
+  style.textContent = `
+    /* Progress Container */
+    .progress-container {
+      width: 100%;
+      padding: var(--sp-3) 0;
+    }
+
+    .progress-bar {
+      width: 100%;
+      height: 6px;
+      background: var(--surface-3);
+      border-radius: 3px;
+      overflow: hidden;
+      margin-bottom: var(--sp-2);
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent-primary), #e0b588);
+      border-radius: 3px;
+      transition: width 0.3s ease-out;
+    }
+
+    .progress-info {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+    }
+
+    .progress-text {
+      font-family: var(--font-mono);
+      color: var(--accent-primary);
+      font-weight: 500;
+    }
+
+    .progress-phase {
+      color: var(--text-muted);
+    }
+
+    .progress-cancel-btn {
+      position: absolute;
+      top: var(--sp-2);
+      right: var(--sp-2);
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+      border: none;
+      border-radius: 4px;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all var(--duration-fast) var(--ease);
+    }
+
+    .progress-cancel-btn:hover {
+      background: var(--surface-3);
+      color: var(--text-primary);
+    }
+
+    .similar-links-panel__loading {
+      position: relative;
+    }
+  `;
+  document.head.appendChild(style);
 }
 
 // Initialize when DOM is ready
@@ -524,6 +824,11 @@ if (document.readyState === 'loading') {
 } else {
   initSimilarLinks();
 }
+
+// Cleanup on page unload
+window.addEventListener('beforeunload', () => {
+  terminateWorker();
+});
 
 // ========================================================
 // Public API
@@ -534,6 +839,7 @@ window.similarLinksAPI = {
   openPanel,
   closePanel,
   analyzeSimilarLinks,
+  cancelAnalysis,
   getState: () => ({ ...similarLinksState }),
   getClusterColors: () => CLUSTER_COLORS,
 };

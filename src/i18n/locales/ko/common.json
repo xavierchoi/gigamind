@@ -263,7 +263,16 @@
     "toast_invalid_node": "유효하지 않은 노드입니다",
     "toast_clipboard_unavailable": "클립보드 API를 사용할 수 없습니다. 명령어: {{command}}",
     "toast_copied": "명령어가 클립보드에 복사되었습니다",
-    "toast_copy_failed": "복사 실패. 수동으로 입력해주세요: {{command}}"
+    "toast_copy_failed": "복사 실패. 수동으로 입력해주세요: {{command}}",
+    "toast_node_pinned": "노드 고정됨",
+    "toast_node_unpinned": "노드 고정 해제됨",
+    "toast_link_copied": "링크가 클립보드에 복사되었습니다",
+    "breadcrumb_home": "홈",
+    "context_focus": "포커스",
+    "context_pin": "고정",
+    "context_unpin": "고정 해제",
+    "context_details": "상세 정보",
+    "context_copy_link": "링크 복사"
   },
   "time": {
     "just_now": "방금 전",

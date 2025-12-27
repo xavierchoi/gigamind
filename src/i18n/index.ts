@@ -22,19 +22,27 @@ import enSimilarLinks from './locales/en/similar-links.json' with { type: 'json'
 // ============================================================================
 // JSON-inferred types for type-safe translation access
 // ============================================================================
+//
+// These types are inferred directly from the Korean JSON files (source of truth).
+// They provide compile-time validation and ensure type safety for translation keys.
+//
+// Note: Manual interfaces in types.ts (CommonTranslations, CommandTranslations, etc.)
+// serve as documentation and may not be 100% in sync. Prefer these JSON-inferred
+// types for actual usage.
+// ============================================================================
 
-/** Type of common.json translations */
-export type CommonTranslations = typeof koCommon;
-/** Type of commands.json translations */
-export type CommandsTranslations = typeof koCommands;
-/** Type of errors.json translations */
-export type ErrorsTranslations = typeof koErrors;
-/** Type of prompts.json translations */
-export type PromptsTranslations = typeof koPrompts;
-/** Type of onboarding.json translations */
-export type OnboardingTranslations = typeof koOnboarding;
-/** Type of similar-links.json translations */
-export type SimilarLinksTranslations = typeof koSimilarLinks;
+/** JSON-inferred type for common.json translations */
+export type CommonJSON = typeof koCommon;
+/** JSON-inferred type for commands.json translations */
+export type CommandsJSON = typeof koCommands;
+/** JSON-inferred type for errors.json translations */
+export type ErrorsJSON = typeof koErrors;
+/** JSON-inferred type for prompts.json translations */
+export type PromptsJSON = typeof koPrompts;
+/** JSON-inferred type for onboarding.json translations */
+export type OnboardingJSON = typeof koOnboarding;
+/** JSON-inferred type for similar-links.json translations */
+export type SimilarLinksJSON = typeof koSimilarLinks;
 
 /**
  * Type-safe keys for each namespace.
@@ -43,12 +51,12 @@ export type SimilarLinksTranslations = typeof koSimilarLinks;
  *   const key: CommonKey = 'greeting.hello';  // Type-checked!
  *   t(`common:${key}`);
  */
-export type CommonKey = NestedKeyOf<CommonTranslations>;
-export type CommandsKey = NestedKeyOf<CommandsTranslations>;
-export type ErrorsKey = NestedKeyOf<ErrorsTranslations>;
-export type PromptsKey = NestedKeyOf<PromptsTranslations>;
-export type OnboardingKey = NestedKeyOf<OnboardingTranslations>;
-export type SimilarLinksKey = NestedKeyOf<SimilarLinksTranslations>;
+export type CommonKey = NestedKeyOf<CommonJSON>;
+export type CommandsKey = NestedKeyOf<CommandsJSON>;
+export type ErrorsKey = NestedKeyOf<ErrorsJSON>;
+export type PromptsKey = NestedKeyOf<PromptsJSON>;
+export type OnboardingKey = NestedKeyOf<OnboardingJSON>;
+export type SimilarLinksKey = NestedKeyOf<SimilarLinksJSON>;
 
 // ============================================================================
 // i18next initialization

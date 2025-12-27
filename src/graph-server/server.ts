@@ -99,6 +99,12 @@ const graphTranslations: Record<string, Record<string, string>> = {
     similar_links_merge_success: "{{files}}개 파일에서 {{links}}개 링크가 통합되었습니다",
     similar_links_merge_error: "병합 중 오류가 발생했습니다",
     similar_links_error: "유사 링크 분석 실패",
+    similar_links_cancel: "취소",
+    similar_links_analyzing: "분석 중...",
+    similar_links_progress_starting: "{{count}}개 링크 분석 시작...",
+    similar_links_progress_calculating: "유사도 계산 중...",
+    similar_links_progress_clustering: "클러스터링 중...",
+    similar_links_worker_error: "백그라운드 분석 실패, 서버 분석으로 전환...",
     merge_confirm_title: "통합 확인",
     merge_preserve_alias: "원본 표기를 alias로 보존",
     merge_cancel: "취소",
@@ -183,6 +189,12 @@ const graphTranslations: Record<string, Record<string, string>> = {
     similar_links_merge_success: "{{links}} links merged in {{files}} files",
     similar_links_merge_error: "Error occurred during merge",
     similar_links_error: "Failed to analyze similar links",
+    similar_links_cancel: "Cancel",
+    similar_links_analyzing: "Analyzing...",
+    similar_links_progress_starting: "Starting analysis of {{count}} links...",
+    similar_links_progress_calculating: "Calculating similarity...",
+    similar_links_progress_clustering: "Clustering...",
+    similar_links_worker_error: "Background analysis failed, switching to server analysis...",
     merge_confirm_title: "Confirm Merge",
     merge_preserve_alias: "Preserve original text as alias",
     merge_cancel: "Cancel",
@@ -241,6 +253,24 @@ export function createGraphServer(options: GraphServerOptions): GraphServer {
     next();
   });
 
+  // Activity tracking for auto-shutdown
+  // IMPORTANT: This middleware must be registered BEFORE API routes to track activity
+  let lastActivity = Date.now();
+  let shutdownTimer: NodeJS.Timeout | null = null;
+  let server: ReturnType<typeof app.listen> | null = null;
+
+  const updateActivity = () => {
+    lastActivity = Date.now();
+  };
+
+  // Track activity on API requests (must be before route handlers)
+  app.use((req: Request, _res: Response, next) => {
+    if (req.path.startsWith("/api")) {
+      updateActivity();
+    }
+    next();
+  });
+
   // API routes
   app.use("/api", createGraphRouter(notesDir));
 
@@ -257,23 +287,6 @@ export function createGraphServer(options: GraphServerOptions): GraphServer {
   // Fallback to index.html for SPA
   app.get("*", (_req: Request, res: Response) => {
     res.sendFile(path.join(publicPath, "index.html"));
-  });
-
-  // Activity tracking for auto-shutdown
-  let lastActivity = Date.now();
-  let shutdownTimer: NodeJS.Timeout | null = null;
-  let server: ReturnType<typeof app.listen> | null = null;
-
-  const updateActivity = () => {
-    lastActivity = Date.now();
-  };
-
-  // Track activity on API requests
-  app.use((req: Request, _res: Response, next) => {
-    if (req.path.startsWith("/api")) {
-      updateActivity();
-    }
-    next();
   });
 
   const shutdown = () => {

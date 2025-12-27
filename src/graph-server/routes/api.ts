@@ -414,6 +414,24 @@ export function createGraphRouter(notesDir: string): Router {
     }
   });
 
+  // GET /api/dangling-links - Get raw dangling links for client-side analysis
+  router.get("/dangling-links", async (_req: Request, res: Response) => {
+    try {
+      const stats = await analyzeNoteGraph(notesDir, { includeContext: false });
+
+      console.log(`[Dangling Links API] Found ${stats.danglingLinks.length} dangling links`);
+
+      res.json({
+        danglingLinks: stats.danglingLinks,
+        totalCount: stats.danglingLinks.length,
+        fetchedAt: Date.now(),
+      });
+    } catch (error) {
+      console.error("Error fetching dangling links:", error);
+      res.status(500).json({ error: "Failed to fetch dangling links" });
+    }
+  });
+
   // GET /api/similar-links - Get similar dangling link clusters
   router.get("/similar-links", async (req: Request, res: Response) => {
     try {

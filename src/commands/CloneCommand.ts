@@ -13,7 +13,7 @@ import { t } from "../i18n/index.js";
 export class CloneCommand extends BaseCommand {
   name = "clone";
   aliases = ["me"];
-  description = t('commands:clone.description');
+  get description() { return t('commands:clone.description'); }
   usage = "/clone <질문>";
   requiresArgs = true;
   category = "ai" as const;

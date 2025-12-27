@@ -9,7 +9,7 @@ import { t } from "../i18n/index.js";
  */
 export class HelpCommand extends BaseCommand {
   readonly name = "help";
-  readonly description = t('commands:help.description');
+  get description() { return t('commands:help.description'); }
   readonly usage = "/help";
 
   async execute(_args: string[], context: CommandContext): Promise<CommandResult> {

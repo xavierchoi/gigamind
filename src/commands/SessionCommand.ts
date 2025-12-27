@@ -17,7 +17,7 @@ import { t } from "../i18n/index.js";
 
 export class SessionCommand extends BaseCommand {
   readonly name = "session";
-  readonly description = t('commands:session.description');
+  get description() { return t('commands:session.description'); }
   readonly usage = "/session [list|export|load|search|delete]";
   readonly category = "session" as const;
 
