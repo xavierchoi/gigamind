@@ -376,9 +376,6 @@ async function initGraph() {
     // Load i18n translations first
     await loadI18n();
 
-    // Initialize error handlers (only once on first load)
-    initErrorHandlers();
-
     // Fetch initial page with most connected nodes (hubs) first
     const response = await fetch(`/api/graph?limit=${state.loading.pageSize}&sort=connections`);
 
@@ -2314,4 +2311,8 @@ window.graphAPI = {
 };
 
 // Initialize on load
-document.addEventListener('DOMContentLoaded', initGraph);
+document.addEventListener('DOMContentLoaded', () => {
+  // Initialize error handlers once before initGraph
+  initErrorHandlers();
+  initGraph();
+});
