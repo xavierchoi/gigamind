@@ -20,7 +20,8 @@ import {
   hasApiKey,
   type GigaMindConfig,
 } from "./utils/config.js";
-import { getQuickStats } from "./utils/graph/index.js";
+import { getQuickStats, invalidateGraphCache, invalidateRemoteGraphCache } from "./utils/graph/index.js";
+import { RAGService } from "./rag/service.js";
 import { getCurrentTime, formatTimeDisplay } from "./utils/time.js";
 import { initI18n, changeLanguage, t } from "./i18n/index.js";
 // CommandRegistry imports
@@ -282,6 +283,13 @@ export function App() {
         });
         setClient(newClient);
 
+        // Initialize RAG Service (background, non-blocking)
+        RAGService.getInstance().initialize({
+          notesDir: loadedConfig.notesDir,
+        }).catch(err => {
+          console.warn("[App] RAG Service initialization failed:", err);
+        });
+
         const newSessionManager = new SessionManager({
           sessionsDir: getSessionsDir(),
         });
@@ -374,6 +382,13 @@ export function App() {
         noteDetail: newConfig.noteDetail,
       });
       setClient(newClient);
+
+      // Initialize RAG Service (background, non-blocking)
+      RAGService.getInstance().initialize({
+        notesDir: newConfig.notesDir,
+      }).catch(err => {
+        console.warn("[App] RAG Service initialization failed:", err);
+      });
 
       const newSessionManager = new SessionManager({
         sessionsDir: getSessionsDir(),
@@ -913,6 +928,10 @@ export function App() {
   const handleImportComplete = useCallback(async (result: ImportResult) => {
     // Update note stats after import
     if (config) {
+      // Invalidate local cache first to ensure fresh data is fetched
+      invalidateGraphCache(config.notesDir);
+      // Also invalidate remote Graph Server cache (fire-and-forget)
+      invalidateRemoteGraphCache().catch(() => {});
       const stats = await getQuickStats(config.notesDir);
       setNoteCount(stats.noteCount);
       setConnectionCount(stats.connectionCount);

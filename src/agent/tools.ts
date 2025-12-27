@@ -53,6 +53,12 @@ export interface AskUserQuestionToolInput {
   }>;
 }
 
+export interface RAGSearchToolInput {
+  query: string;
+  mode?: "semantic" | "hybrid" | "keyword";
+  topK?: number;
+}
+
 // Legacy alias for backward compatibility
 export type BashToolInput = ShellToolInput;
 
@@ -65,7 +71,8 @@ export type ToolInput =
   | ShellToolInput
   | WebSearchToolInput
   | WebFetchToolInput
-  | AskUserQuestionToolInput;
+  | AskUserQuestionToolInput
+  | RAGSearchToolInput;
 
 // Tool definitions for Claude API
 export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
@@ -266,6 +273,30 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
         },
       },
       required: ["questions"],
+    },
+  },
+  {
+    name: "RAGSearch",
+    description:
+      "노트에서 시맨틱(의미 기반) 검색을 수행합니다. 사용자의 질문과 의미적으로 유사한 노트를 찾아 반환합니다. 단순 키워드 매칭이 아닌 문맥과 의미를 이해하여 검색합니다. 사용 시점: 사용자가 특정 주제에 대해 질문할 때, '~에 대해 찾아줘', '~관련 노트' 요청 시, 개념이나 아이디어 검색 시",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        query: {
+          type: "string",
+          description: "검색 쿼리 (자연어)",
+        },
+        mode: {
+          type: "string",
+          enum: ["semantic", "hybrid", "keyword"],
+          description: "검색 모드. semantic: 의미 기반, hybrid: 시맨틱+키워드 조합 (권장), keyword: 키워드 기반",
+        },
+        topK: {
+          type: "number",
+          description: "반환할 최대 결과 수 (기본값: 10)",
+        },
+      },
+      required: ["query"],
     },
   },
 ];

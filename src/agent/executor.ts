@@ -17,6 +17,7 @@ import {
   ErrorCode,
   formatErrorForUser,
 } from "../utils/errors.js";
+import { RAGService } from "../rag/service.js";
 import type {
   GlobToolInput,
   GrepToolInput,
@@ -26,6 +27,7 @@ import type {
   ShellToolInput,
   WebSearchToolInput,
   WebFetchToolInput,
+  RAGSearchToolInput,
 } from "./tools.js";
 
 const execAsync = promisify(exec);
@@ -811,6 +813,63 @@ export async function executeWebFetch(
   }
 }
 
+/**
+ * RAG 시맨틱 검색 실행
+ */
+export async function executeRAGSearch(
+  input: RAGSearchToolInput
+): Promise<ToolResult> {
+  try {
+    const { query, mode = "hybrid", topK = 10 } = input;
+
+    if (!query || query.trim().length === 0) {
+      return {
+        success: false,
+        output: "",
+        error: "검색 쿼리가 비어있습니다.",
+      };
+    }
+
+    const ragService = RAGService.getInstance();
+
+    if (!ragService.isInitialized()) {
+      return {
+        success: false,
+        output: "",
+        error: "RAG 서비스가 초기화되지 않았습니다. 잠시 후 다시 시도해주세요.",
+      };
+    }
+
+    const results = await ragService.search(query, { mode, topK });
+
+    if (results.length === 0) {
+      return {
+        success: true,
+        output: `"${query}"와 관련된 노트를 찾지 못했습니다.`,
+      };
+    }
+
+    // 결과 포맷팅
+    const formatted = results.map((r, i) => {
+      const scorePercent = (r.score * 100).toFixed(1);
+      const preview = r.content.slice(0, 200).replace(/\n/g, " ");
+      return `${i + 1}. **${r.title}** (관련도: ${scorePercent}%)\n   경로: ${r.notePath}\n   ${preview}...`;
+    }).join("\n\n");
+
+    return {
+      success: true,
+      output: `"${query}" 검색 결과 (${results.length}개):\n\n${formatted}`,
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return {
+      success: false,
+      output: "",
+      error: `RAG 검색 실패: ${errorMessage}`,
+    };
+  }
+}
+
 // Main executor function
 export async function executeTool(
   toolName: string,
@@ -834,6 +893,8 @@ export async function executeTool(
       return executeWebSearch(toolInput as WebSearchToolInput);
     case "WebFetch":
       return executeWebFetch(toolInput as WebFetchToolInput);
+    case "RAGSearch":
+      return executeRAGSearch(toolInput as RAGSearchToolInput);
     default:
       return {
         success: false,
