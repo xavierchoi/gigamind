@@ -1,14 +1,18 @@
 <!DOCTYPE html>
 <html lang="ko">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title data-i18n="page_title">GigaMind — Knowledge Graph</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@300;400;500&display=swap"
+    rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
+
 <body>
   <!-- Skip to main content link for keyboard users -->
   <a href="#graph-canvas" class="skip-link" data-i18n="skip_to_graph">Skip to graph</a>
@@ -31,14 +35,63 @@
   <!-- Main graph canvas -->
   <svg id="graph-canvas" role="img" aria-label="Knowledge graph visualization showing connections between notes"></svg>
 
+
+  <!-- Empty state UI -->
+  <div class="empty-state" id="empty-state" role="status" aria-live="polite" hidden>
+    <div class="empty-state__content">
+      <div class="empty-state__icon" aria-hidden="true">
+        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <!-- Graph/node icon (connected dots) -->
+          <circle cx="12" cy="12" r="2"/>
+          <circle cx="6" cy="6" r="1.5"/>
+          <circle cx="18" cy="6" r="1.5"/>
+          <circle cx="6" cy="18" r="1.5"/>
+          <circle cx="18" cy="18" r="1.5"/>
+          <line x1="12" y1="10" x2="7" y2="7"/>
+          <line x1="12" y1="10" x2="17" y2="7"/>
+          <line x1="12" y1="14" x2="7" y2="17"/>
+          <line x1="12" y1="14" x2="17" y2="17"/>
+        </svg>
+      </div>
+
+      <h2 class="empty-state__title" data-i18n="empty_title">No notes yet</h2>
+
+      <p class="empty-state__description" data-i18n="empty_description">
+        Start building your knowledge graph by creating notes with [[wikilinks]].
+      </p>
+
+      <div class="empty-state__hints">
+        <div class="empty-state__hint">
+          <span class="empty-state__hint-icon" aria-hidden="true">📝</span>
+          <span data-i18n="empty_hint_create">Create notes using GigaMind CLI</span>
+        </div>
+        <div class="empty-state__hint">
+          <span class="empty-state__hint-icon" aria-hidden="true">🔗</span>
+          <span data-i18n="empty_hint_link">Link notes with [[note name]] syntax</span>
+        </div>
+        <div class="empty-state__hint">
+          <span class="empty-state__hint-icon" aria-hidden="true">🔄</span>
+          <span data-i18n="empty_hint_refresh">Refresh to see your graph</span>
+        </div>
+      </div>
+
+      <button class="empty-state__action" id="empty-refresh-btn" type="button">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+          <path d="M3 3v5h5"/>
+        </svg>
+        <span data-i18n="empty_refresh_btn">Refresh Graph</span>
+      </button>
+    </div>
+  </div>
   <!-- Header bar -->
   <header class="header">
     <div class="header__brand">
       <div class="header__logo">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-          <circle cx="12" cy="12" r="3" fill="currentColor"/>
-          <circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.5" opacity="0.5"/>
-          <circle cx="12" cy="12" r="11" stroke="currentColor" stroke-width="1" opacity="0.25"/>
+          <circle cx="12" cy="12" r="3" fill="currentColor" />
+          <circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.5" opacity="0.5" />
+          <circle cx="12" cy="12" r="11" stroke="currentColor" stroke-width="1" opacity="0.25" />
         </svg>
       </div>
       <span class="header__title">GigaMind</span>
@@ -72,55 +125,62 @@
     <div class="search-wrapper">
       <div class="search-icon">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="11" cy="11" r="8"/>
-          <path d="M21 21l-4.35-4.35"/>
+          <circle cx="11" cy="11" r="8" />
+          <path d="M21 21l-4.35-4.35" />
         </svg>
       </div>
-      <input
-        type="text"
-        id="search-input"
-        class="search-input"
-        data-i18n-placeholder="search_placeholder"
-        placeholder="Search nodes..."
-        autocomplete="off"
-        spellcheck="false"
-      >
+      <input type="text" id="search-input" class="search-input" data-i18n-placeholder="search_placeholder"
+        placeholder="Search nodes..." autocomplete="off" spellcheck="false"
+        role="combobox" aria-autocomplete="list" aria-expanded="false"
+        aria-controls="search-results search-recent" aria-haspopup="listbox">
       <kbd class="search-shortcut">/</kbd>
+      <!-- Recent searches dropdown -->
+      <div class="search-recent" id="search-recent" hidden role="listbox" aria-label="Recent searches">
+        <div class="search-recent__header">
+          <span class="search-recent__title" data-i18n="search_recent_title">Recent</span>
+          <button class="search-recent__clear" id="search-recent-clear" data-i18n="search_recent_clear">Clear</button>
+        </div>
+        <ul class="search-recent__list" id="search-recent-list" role="group"></ul>
+      </div>
       <!-- Search results dropdown -->
-      <div class="search-results" id="search-results" hidden>
+      <div class="search-results" id="search-results" hidden role="listbox" aria-label="Search results">
         <div class="search-results__header">
           <span class="search-results__count" id="search-count">0 results</span>
           <button class="search-results__clear" id="search-clear" data-i18n="search_clear">Clear</button>
         </div>
-        <ul class="search-results__list" id="search-results-list"></ul>
+        <ul class="search-results__list" id="search-results-list" role="group"></ul>
       </div>
     </div>
 
     <!-- Filter toggles -->
     <div class="filter-group">
-      <button class="filter-btn filter-btn--active" data-filter="note" data-i18n-title="filter_notes_title" title="Notes">
+      <button class="filter-btn filter-btn--active" data-filter="note" data-i18n-title="filter_notes_title"
+        title="Notes">
         <span class="filter-indicator filter-indicator--note"></span>
         <span class="filter-label" data-i18n="filter_notes">Notes</span>
       </button>
-      <button class="filter-btn filter-btn--active" data-filter="orphan" data-i18n-title="filter_orphan_title" title="Orphan nodes">
+      <button class="filter-btn filter-btn--active" data-filter="orphan" data-i18n-title="filter_orphan_title"
+        title="Orphan nodes">
         <span class="filter-indicator filter-indicator--orphan"></span>
         <span class="filter-label" data-i18n="filter_orphan">Orphan</span>
       </button>
-      <button class="filter-btn filter-btn--active" data-filter="dangling" data-i18n-title="filter_dangling_title" title="Dangling references">
+      <button class="filter-btn filter-btn--active" data-filter="dangling" data-i18n-title="filter_dangling_title"
+        title="Dangling references">
         <span class="filter-indicator filter-indicator--dangling"></span>
         <span class="filter-label" data-i18n="filter_dangling">Dangling</span>
       </button>
     </div>
 
     <!-- Similar Links toggle -->
-    <button class="filter-btn" id="similar-links-toggle" data-i18n-title="similar_links_toggle_title" title="Similar Links">
+    <button class="filter-btn" id="similar-links-toggle" data-i18n-title="similar_links_toggle_title"
+      title="Similar Links">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="6" cy="6" r="3"/>
-        <circle cx="18" cy="6" r="3"/>
-        <circle cx="12" cy="18" r="3"/>
-        <line x1="9" y1="6" x2="15" y2="6"/>
-        <line x1="7.5" y1="8.5" x2="10.5" y2="15.5"/>
-        <line x1="16.5" y1="8.5" x2="13.5" y2="15.5"/>
+        <circle cx="6" cy="6" r="3" />
+        <circle cx="18" cy="6" r="3" />
+        <circle cx="12" cy="18" r="3" />
+        <line x1="9" y1="6" x2="15" y2="6" />
+        <line x1="7.5" y1="8.5" x2="10.5" y2="15.5" />
+        <line x1="16.5" y1="8.5" x2="13.5" y2="15.5" />
       </svg>
       <span class="filter-label" data-i18n="similar_links_label">Similar</span>
     </button>
@@ -129,28 +189,64 @@
     <div class="control-group">
       <button class="control-btn" id="zoom-out" data-i18n-title="zoom_out_title" title="Zoom out (-)">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="5" y1="12" x2="19" y2="12"/>
+          <line x1="5" y1="12" x2="19" y2="12" />
         </svg>
       </button>
-      <span class="zoom-level" id="zoom-level">100%</span>
+
+      <div class="zoom-slider-wrapper">
+        <input type="range"
+               id="zoom-slider"
+               class="zoom-slider"
+               min="10"
+               max="500"
+               value="80"
+               step="10"
+               aria-label="Zoom level"
+               aria-valuemin="10"
+               aria-valuemax="500"
+               aria-valuenow="80"
+               data-i18n-aria-label="zoom_slider_label">
+        <span class="zoom-level" id="zoom-level" role="button" tabindex="0"
+              data-i18n-title="zoom_reset_title" title="Click to reset zoom to 100%">80%</span>
+      </div>
+
       <button class="control-btn" id="zoom-in" data-i18n-title="zoom_in_title" title="Zoom in (+)">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="12" y1="5" x2="12" y2="19"/>
-          <line x1="5" y1="12" x2="19" y2="12"/>
+          <line x1="12" y1="5" x2="12" y2="19" />
+          <line x1="5" y1="12" x2="19" y2="12" />
         </svg>
       </button>
       <div class="control-divider"></div>
       <button class="control-btn" id="reset-view" data-i18n-title="reset_view_title" title="Reset view (0)">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
-          <path d="M3 3v5h5"/>
+          <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+          <path d="M3 3v5h5" />
         </svg>
       </button>
       <button class="control-btn" id="toggle-labels" data-i18n-title="toggle_labels_title" title="Toggle labels">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M4 7V4h16v3"/>
-          <path d="M9 20h6"/>
-          <path d="M12 4v16"/>
+          <path d="M4 7V4h16v3" />
+          <path d="M9 20h6" />
+          <path d="M12 4v16" />
+        </svg>
+      </button>
+      <div class="control-divider"></div>
+      <button class="control-btn theme-toggle" id="theme-toggle" data-i18n-title="theme_toggle_title" title="Toggle theme">
+        <!-- Sun icon (shown in dark mode) -->
+        <svg class="theme-icon theme-icon--light" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="5" />
+          <line x1="12" y1="1" x2="12" y2="3" />
+          <line x1="12" y1="21" x2="12" y2="23" />
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+          <line x1="1" y1="12" x2="3" y2="12" />
+          <line x1="21" y1="12" x2="23" y2="12" />
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+        </svg>
+        <!-- Moon icon (shown in light mode) -->
+        <svg class="theme-icon theme-icon--dark" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
         </svg>
       </button>
     </div>
@@ -167,7 +263,7 @@
       <span class="minimap__title" data-i18n="minimap_title">Overview</span>
       <button class="minimap__toggle" id="minimap-toggle" data-i18n-title="minimap_collapse_title" title="Collapse">
         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="6 9 12 15 18 9"/>
+          <polyline points="6 9 12 15 18 9" />
         </svg>
       </button>
     </div>
@@ -175,14 +271,48 @@
     <div class="minimap__viewport" id="minimap-viewport"></div>
   </div>
 
+  <!-- Legend -->
+  <div class="legend" id="legend" role="region" aria-labelledby="legend-title">
+    <div class="legend__header">
+      <span class="legend__title" id="legend-title" data-i18n="legend_title">Legend</span>
+      <button class="legend__toggle" id="legend-toggle" aria-expanded="true" data-i18n-title="legend_collapse_title" title="Collapse">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+    </div>
+    <div class="legend__content" id="legend-content">
+      <!-- Node types -->
+      <div class="legend__section">
+        <div class="legend__item">
+          <span class="legend__indicator legend__indicator--note" aria-hidden="true"></span>
+          <span data-i18n="legend_note">Note</span>
+        </div>
+        <div class="legend__item">
+          <span class="legend__indicator legend__indicator--orphan" aria-hidden="true"></span>
+          <span data-i18n="legend_orphan">Orphan</span>
+        </div>
+        <div class="legend__item">
+          <span class="legend__indicator legend__indicator--dangling" aria-hidden="true"></span>
+          <span data-i18n="legend_dangling">Dangling</span>
+        </div>
+      </div>
+      <!-- Size explanation -->
+      <div class="legend__section legend__section--size">
+        <span class="legend__size-hint" data-i18n="legend_size_hint">Size = connections</span>
+      </div>
+    </div>
+  </div>
+
   <!-- Similar Links Panel -->
   <aside class="similar-links-panel" id="similar-links-panel" hidden>
     <header class="similar-links-panel__header">
       <h2 class="similar-links-panel__title" data-i18n="similar_links_title">Similar Links</h2>
-      <button class="similar-links-panel__close" id="close-similar-links" data-i18n-aria-label="sidebar_close" aria-label="Close">
+      <button class="similar-links-panel__close" id="close-similar-links" data-i18n-aria-label="sidebar_close"
+        aria-label="Close">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="18" y1="6" x2="6" y2="18"/>
-          <line x1="6" y1="6" x2="18" y2="18"/>
+          <line x1="18" y1="6" x2="6" y2="18" />
+          <line x1="6" y1="6" x2="18" y2="18" />
         </svg>
       </button>
     </header>
@@ -196,8 +326,8 @@
       </div>
       <button class="similar-links-panel__analyze-btn" id="analyze-similar-links">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="23 4 23 10 17 10"/>
-          <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+          <polyline points="23 4 23 10 17 10" />
+          <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
         </svg>
         <span data-i18n="similar_links_analyze">Analyze</span>
       </button>
@@ -212,10 +342,10 @@
     <!-- Empty state -->
     <div class="similar-links-panel__empty" id="similar-links-empty" hidden role="status" aria-live="polite">
       <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-        <circle cx="12" cy="12" r="10"/>
-        <path d="M8 15s1.5 2 4 2 4-2 4-2"/>
-        <line x1="9" y1="9" x2="9.01" y2="9"/>
-        <line x1="15" y1="9" x2="15.01" y2="9"/>
+        <circle cx="12" cy="12" r="10" />
+        <path d="M8 15s1.5 2 4 2 4-2 4-2" />
+        <line x1="9" y1="9" x2="9.01" y2="9" />
+        <line x1="15" y1="9" x2="15.01" y2="9" />
       </svg>
       <p data-i18n="similar_links_no_results">No similar dangling links found</p>
     </div>
@@ -251,10 +381,13 @@
 
   <!-- Node detail sidebar -->
   <aside class="sidebar" id="node-sidebar" hidden>
+    <!-- Touch swipe hint (hidden by default, shown on touch devices) -->
+    <span class="touch-swipe-hint" aria-hidden="true" style="display: none;" data-i18n="swipe_to_close">Swipe right to close</span>
+
     <button class="sidebar__close" id="close-sidebar" data-i18n-aria-label="sidebar_close" aria-label="Close">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <line x1="18" y1="6" x2="6" y2="18"/>
-        <line x1="6" y1="6" x2="18" y2="18"/>
+        <line x1="18" y1="6" x2="6" y2="18" />
+        <line x1="6" y1="6" x2="18" y2="18" />
       </svg>
     </button>
 
@@ -286,7 +419,7 @@
     <div class="sidebar__section">
       <h3 class="sidebar__section-title">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="15 18 9 12 15 6"/>
+          <polyline points="15 18 9 12 15 6" />
         </svg>
         <span data-i18n="sidebar_backlinks">Backlinks</span>
       </h3>
@@ -296,7 +429,7 @@
     <div class="sidebar__section">
       <h3 class="sidebar__section-title">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="9 18 15 12 9 6"/>
+          <polyline points="9 18 15 12 9 6" />
         </svg>
         <span data-i18n="sidebar_forward_links">Forward Links</span>
       </h3>
@@ -307,7 +440,7 @@
     <div class="sidebar__action" id="sidebar-create-note" hidden>
       <button class="sidebar__create-btn" id="create-note-btn">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M12 5v14M5 12h14"/>
+          <path d="M12 5v14M5 12h14" />
         </svg>
         <span data-i18n="create_note_btn">Create note from this concept</span>
       </button>
@@ -320,8 +453,8 @@
     <div class="focus-bar__content">
       <span class="focus-bar__icon">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10"/>
-          <circle cx="12" cy="12" r="3"/>
+          <circle cx="12" cy="12" r="10" />
+          <circle cx="12" cy="12" r="3" />
         </svg>
       </span>
       <span class="focus-bar__label" data-i18n="focus_mode_label">Focus Mode</span>
@@ -334,19 +467,20 @@
 
   <!-- Load More bar for progressive loading -->
   <div class="load-more-bar" id="load-more-bar" hidden>
-    <span class="load-more-bar__progress" id="load-progress-text" data-i18n-template="load_progress">Showing 0 of 0 nodes</span>
+    <span class="load-more-bar__progress" id="load-progress-text" data-i18n-template="load_progress">Showing 0 of 0
+      nodes</span>
     <div class="load-more-bar__actions">
       <button class="load-more-bar__btn load-more-bar__btn--secondary" id="load-more-btn">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="6 9 12 15 18 9"/>
+          <polyline points="6 9 12 15 18 9" />
         </svg>
         <span data-i18n="load_more">Load More</span>
       </button>
       <button class="load-more-bar__btn load-more-bar__btn--primary" id="load-all-btn">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10"/>
-          <line x1="12" y1="8" x2="12" y2="16"/>
-          <line x1="8" y1="12" x2="16" y2="12"/>
+          <circle cx="12" cy="12" r="10" />
+          <line x1="12" y1="8" x2="12" y2="16" />
+          <line x1="8" y1="12" x2="16" y2="12" />
         </svg>
         <span data-i18n="load_full_graph">Load Full Graph</span>
       </button>
@@ -361,13 +495,40 @@
 
   <!-- Loading state -->
   <div class="loading" id="loading">
-    <div class="loading__content">
+    <!-- Normal loading state -->
+    <div class="loading__content" id="loading-content">
       <div class="loading__rings">
         <div class="loading__ring loading__ring--1"></div>
         <div class="loading__ring loading__ring--2"></div>
         <div class="loading__ring loading__ring--3"></div>
       </div>
       <span class="loading__text" data-i18n="loading_text">Initializing neural graph...</span>
+    </div>
+
+    <!-- Error state (hidden by default) -->
+    <div class="loading__error" id="loading-error" hidden role="alert" aria-live="assertive">
+      <div class="loading__error-icon" aria-hidden="true">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="12" cy="12" r="10" />
+          <line x1="12" y1="8" x2="12" y2="12" />
+          <circle cx="12" cy="16" r="0.5" fill="currentColor" />
+        </svg>
+      </div>
+      <h3 class="loading__error-title" data-i18n="error_title">Failed to load graph</h3>
+      <p class="loading__error-message" id="error-message" data-i18n="error_network">Unable to connect to server</p>
+      <div class="loading__error-actions">
+        <button class="loading__retry-btn" id="retry-btn" data-i18n="error_retry">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+            <path d="M3 3v5h5" />
+          </svg>
+          Retry
+        </button>
+        <button class="loading__details-btn" id="error-details-btn" data-i18n="error_show_details">
+          Show Details
+        </button>
+      </div>
+      <pre class="loading__error-details" id="error-details" hidden aria-label="Error details"></pre>
     </div>
   </div>
 
@@ -379,7 +540,129 @@
     <kbd>S</kbd> <span data-i18n="shortcuts_similar">similar</span>
     <kbd>ESC</kbd> <span data-i18n="shortcuts_exit">exit</span>
     <kbd>F</kbd> <span data-i18n="shortcuts_fullscreen">fullscreen</span>
-    <kbd>Tab</kbd> <span data-i18n="shortcuts_navigate">navigate nodes</span>
+    <kbd>?</kbd> <span data-i18n="shortcuts_help">help</span>
+  </div>
+
+  <!-- Keyboard Shortcuts Modal -->
+  <div class="shortcuts-modal" id="shortcuts-modal" hidden aria-modal="true" role="dialog" aria-labelledby="shortcuts-modal-title">
+    <div class="shortcuts-modal__backdrop"></div>
+    <div class="shortcuts-modal__content">
+      <header class="shortcuts-modal__header">
+        <h2 class="shortcuts-modal__title" id="shortcuts-modal-title" data-i18n="shortcuts_modal_title">Keyboard Shortcuts</h2>
+        <button class="shortcuts-modal__close" id="shortcuts-modal-close" aria-label="Close">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </header>
+
+      <div class="shortcuts-modal__body">
+        <!-- Navigation Group -->
+        <section class="shortcuts-modal__group">
+          <h3 class="shortcuts-modal__group-title" data-i18n="shortcuts_group_navigation">Navigation</h3>
+          <div class="shortcuts-modal__grid">
+            <div class="shortcuts-modal__item">
+              <kbd>/</kbd>
+              <span data-i18n="shortcuts_desc_search">Focus search input</span>
+            </div>
+            <div class="shortcuts-modal__item">
+              <kbd>Tab</kbd>
+              <span data-i18n="shortcuts_desc_navigate">Navigate between nodes</span>
+            </div>
+            <div class="shortcuts-modal__item">
+              <kbd>Enter</kbd>
+              <span data-i18n="shortcuts_desc_focus">Focus on selected node</span>
+            </div>
+            <div class="shortcuts-modal__item">
+              <div class="shortcuts-modal__keys">
+                <kbd>Arrow</kbd>
+              </div>
+              <span data-i18n="shortcuts_desc_arrows">Navigate connections</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- View Group -->
+        <section class="shortcuts-modal__group">
+          <h3 class="shortcuts-modal__group-title" data-i18n="shortcuts_group_view">View</h3>
+          <div class="shortcuts-modal__grid">
+            <div class="shortcuts-modal__item">
+              <div class="shortcuts-modal__keys">
+                <kbd>+</kbd>
+                <kbd>-</kbd>
+              </div>
+              <span data-i18n="shortcuts_desc_zoom">Zoom in / out</span>
+            </div>
+            <div class="shortcuts-modal__item">
+              <kbd>0</kbd>
+              <span data-i18n="shortcuts_desc_reset">Reset view</span>
+            </div>
+            <div class="shortcuts-modal__item">
+              <kbd>F</kbd>
+              <span data-i18n="shortcuts_desc_fullscreen">Toggle fullscreen</span>
+            </div>
+            <div class="shortcuts-modal__item">
+              <kbd>L</kbd>
+              <span data-i18n="shortcuts_desc_labels">Toggle labels</span>
+            </div>
+            <div class="shortcuts-modal__item">
+              <kbd>M</kbd>
+              <span data-i18n="shortcuts_desc_minimap">Toggle minimap</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- Actions Group -->
+        <section class="shortcuts-modal__group">
+          <h3 class="shortcuts-modal__group-title" data-i18n="shortcuts_group_actions">Actions</h3>
+          <div class="shortcuts-modal__grid">
+            <div class="shortcuts-modal__item">
+              <kbd>S</kbd>
+              <span data-i18n="shortcuts_desc_similar">Toggle similar links panel</span>
+            </div>
+            <div class="shortcuts-modal__item">
+              <kbd>P</kbd>
+              <span data-i18n="shortcuts_desc_pin">Pin / unpin node</span>
+            </div>
+            <div class="shortcuts-modal__item">
+              <kbd>Space</kbd>
+              <span data-i18n="shortcuts_desc_details">Show node details</span>
+            </div>
+            <div class="shortcuts-modal__item">
+              <kbd>ESC</kbd>
+              <span data-i18n="shortcuts_desc_escape">Exit focus / Close panel</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- History Group -->
+        <section class="shortcuts-modal__group">
+          <h3 class="shortcuts-modal__group-title" data-i18n="shortcuts_group_history">History</h3>
+          <div class="shortcuts-modal__grid">
+            <div class="shortcuts-modal__item">
+              <div class="shortcuts-modal__keys">
+                <kbd>Ctrl</kbd>
+                <kbd>Z</kbd>
+              </div>
+              <span data-i18n="shortcuts_desc_undo">Undo</span>
+            </div>
+            <div class="shortcuts-modal__item">
+              <div class="shortcuts-modal__keys">
+                <kbd>Ctrl</kbd>
+                <kbd>Shift</kbd>
+                <kbd>Z</kbd>
+              </div>
+              <span data-i18n="shortcuts_desc_redo">Redo</span>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <footer class="shortcuts-modal__footer">
+        <span class="shortcuts-modal__hint" data-i18n="shortcuts_modal_hint">Press <kbd>?</kbd> or <kbd>ESC</kbd> to close</span>
+      </footer>
+    </div>
   </div>
 
   <!-- Toast notification -->
@@ -392,4 +675,5 @@
   <script src="js/controls.js"></script>
   <script src="js/similar-links.js"></script>
 </body>
+
 </html>
