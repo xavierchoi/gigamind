@@ -3,6 +3,8 @@ export type {
   VectorDocument,
   SearchResult,
   RetrievalResult,
+  IVectorStore,
+  VectorStoreSearchResult,
 } from "./types.js";
 
 export {
@@ -35,3 +37,14 @@ export {
   type ChunkMetadata,
   type FrontmatterResult,
 } from "./chunker.js";
+
+// Service
+export { RAGService, getRAGService } from "./service.js";
+export type {
+  RAGSearchOptions,
+  RAGSearchResult,
+  RAGServiceConfig,
+} from "./service.js";
+
+// VectorStore
+export { LanceDBVectorStore, InMemoryVectorStore } from "./vectorStore.js";

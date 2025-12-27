@@ -188,3 +188,56 @@ export interface RetrievalResult {
   confidence: number;
   graphCentrality: number;
 }
+
+// ============================================================================
+// VectorStore Interface
+// ============================================================================
+
+/**
+ * VectorStore 검색 결과
+ */
+export interface VectorStoreSearchResult {
+  id: string;
+  score: number;
+  metadata: {
+    noteId: string;
+    notePath: string;
+    chunkIndex: number;
+    content: string;
+    title: string;
+    type: string;
+    tags: string[];
+    created: string;
+    modified: string;
+    connectionCount: number;
+  };
+}
+
+/**
+ * VectorStore 인터페이스 - 벡터 저장소 추상화
+ */
+export interface IVectorStore {
+  /** 초기화 */
+  initialize(): Promise<void>;
+
+  /** 문서 추가 */
+  add(documents: VectorDocument[]): Promise<void>;
+
+  /** 벡터 검색 */
+  search(queryVector: number[], topK: number): Promise<VectorStoreSearchResult[]>;
+
+  /** ID로 삭제 */
+  delete(ids: string[]): Promise<void>;
+
+  /** 노트 경로로 삭제 */
+  deleteByNotePath(notePath: string): Promise<void>;
+
+  /** 전체 삭제 */
+  clear(): Promise<void>;
+
+  /** 문서 수 반환 */
+  count(): Promise<number>;
+
+  /** 모든 문서 반환 */
+  getAllDocuments(): Promise<VectorDocument[]>;
+}

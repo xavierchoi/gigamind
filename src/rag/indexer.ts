@@ -14,7 +14,8 @@ import crypto from "node:crypto";
 import { expandPath } from "../utils/config.js";
 import { parseNote } from "../utils/frontmatter.js";
 import { analyzeNoteGraph } from "../utils/graph/analyzer.js";
-import type { VectorDocument } from "./types.js";
+import type { VectorDocument, IVectorStore } from "./types.js";
+import { InMemoryVectorStore } from "./vectorStore.js";
 import { EmbeddingService as ActualEmbeddingService } from "./embeddings.js";
 import { DocumentChunker as ActualDocumentChunker, type Chunk } from "./chunker.js";
 
@@ -107,83 +108,19 @@ class EmbeddingServiceAdapter implements EmbeddingServiceInterface {
 }
 
 /**
- * In-memory vector store for development
- * TODO: Replace with persistent SQLite + vector extension or external vector DB
- */
-class InMemoryVectorStore {
-  private documents: Map<string, VectorDocument> = new Map();
-  private noteMetadata: Map<string, IndexedNoteMetadata> = new Map();
-
-  async store(documents: VectorDocument[]): Promise<void> {
-    for (const doc of documents) {
-      this.documents.set(doc.id, doc);
-    }
-  }
-
-  async remove(noteId: string): Promise<number> {
-    let removed = 0;
-    for (const [id, doc] of this.documents) {
-      if (doc.noteId === noteId) {
-        this.documents.delete(id);
-        removed++;
-      }
-    }
-    this.noteMetadata.delete(noteId);
-    return removed;
-  }
-
-  async removeByPath(notePath: string): Promise<number> {
-    let removed = 0;
-    for (const [id, doc] of this.documents) {
-      if (doc.notePath === notePath) {
-        this.documents.delete(id);
-        removed++;
-      }
-    }
-    // Remove metadata by path
-    for (const [noteId, meta] of this.noteMetadata) {
-      if (meta.notePath === notePath) {
-        this.noteMetadata.delete(noteId);
-        break;
-      }
-    }
-    return removed;
-  }
-
-  async clear(): Promise<void> {
-    this.documents.clear();
-    this.noteMetadata.clear();
-  }
-
-  async getIndexedNotes(): Promise<Map<string, IndexedNoteMetadata>> {
-    return new Map(this.noteMetadata);
-  }
-
-  async setNoteMetadata(noteId: string, metadata: IndexedNoteMetadata): Promise<void> {
-    this.noteMetadata.set(noteId, metadata);
-  }
-
-  async getAllDocuments(): Promise<VectorDocument[]> {
-    return Array.from(this.documents.values());
-  }
-
-  getSize(): number {
-    return this.documents.size;
-  }
-}
-
-/**
  * Configuration for RAGIndexer
  */
 export interface RAGIndexerConfig {
   /** Directory containing notes to index */
   notesDir: string;
-  /** Path to store the vector database (future use for persistence) */
-  dbPath: string;
+  /** Path to store the vector database (optional, used when vectorStore not provided) */
+  dbPath?: string;
   /** Custom embedding service (optional, uses OpenAI by default) */
   embeddingService?: EmbeddingServiceInterface;
   /** Custom document chunker (optional, uses default Korean/English chunker) */
   chunker?: DocumentChunkerInterface;
+  /** Custom vector store (optional, uses InMemoryVectorStore by default) */
+  vectorStore?: IVectorStore;
 }
 
 /**
@@ -217,14 +154,15 @@ export class RAGIndexer {
   private chunker: DocumentChunkerInterface;
   private notesDir: string;
   private dbPath: string;
-  private vectorStore: InMemoryVectorStore;
+  private vectorStore: IVectorStore;
+  private noteMetadata: Map<string, IndexedNoteMetadata> = new Map();
 
   constructor(config: RAGIndexerConfig) {
     this.notesDir = expandPath(config.notesDir);
-    this.dbPath = config.dbPath;
+    this.dbPath = config.dbPath || "";
     this.embeddingService = config.embeddingService || new EmbeddingServiceAdapter();
     this.chunker = config.chunker || new ActualDocumentChunker();
-    this.vectorStore = new InMemoryVectorStore();
+    this.vectorStore = config.vectorStore || new InMemoryVectorStore();
   }
 
   /**
@@ -242,6 +180,7 @@ export class RAGIndexer {
     try {
       // Clear existing index
       await this.vectorStore.clear();
+      this.noteMetadata.clear();
 
       // Collect all markdown files
       const files = await this.collectMarkdownFiles(this.notesDir);
@@ -289,12 +228,12 @@ export class RAGIndexer {
             });
 
             // Store documents
-            await this.vectorStore.store(documents);
+            await this.vectorStore.add(documents);
 
             // Store note metadata for incremental indexing
             const content = await fs.readFile(filePath, "utf-8");
             const stat = await fs.stat(filePath);
-            await this.vectorStore.setNoteMetadata(documents[0].noteId, {
+            this.noteMetadata.set(documents[0].noteId, {
               notePath: filePath,
               contentHash: this.hashContent(content),
               modifiedTime: stat.mtimeMs,
@@ -352,8 +291,8 @@ export class RAGIndexer {
       const currentFiles = await this.collectMarkdownFiles(this.notesDir);
       const currentFilesSet = new Set(currentFiles);
 
-      // Get indexed notes
-      const indexedNotes = await this.vectorStore.getIndexedNotes();
+      // Get indexed notes (use internal noteMetadata)
+      const indexedNotes = this.noteMetadata;
 
       // Get graph data for connection counts
       const graphStats = await analyzeNoteGraph(this.notesDir, { useCache: false });
@@ -362,7 +301,7 @@ export class RAGIndexer {
       let processed = 0;
 
       // Check for removed files
-      for (const [_noteId, metadata] of indexedNotes) {
+      for (const [noteId, metadata] of indexedNotes) {
         if (!currentFilesSet.has(metadata.notePath)) {
           onProgress?.({
             total,
@@ -371,7 +310,8 @@ export class RAGIndexer {
             status: "indexing",
           });
 
-          await this.vectorStore.removeByPath(metadata.notePath);
+          await this.vectorStore.deleteByNotePath(metadata.notePath);
+          this.noteMetadata.delete(noteId);
           removed++;
           processed++;
         }
@@ -411,8 +351,9 @@ export class RAGIndexer {
 
           if (needsReindex) {
             // Remove old documents if they exist
-            if (existingNoteId) {
-              await this.vectorStore.remove(existingNoteId);
+            if (existingNoteId && existingMetadata) {
+              await this.vectorStore.deleteByNotePath(existingMetadata.notePath);
+              this.noteMetadata.delete(existingNoteId);
             }
 
             onProgress?.({
@@ -440,8 +381,8 @@ export class RAGIndexer {
                 status: "storing",
               });
 
-              await this.vectorStore.store(documents);
-              await this.vectorStore.setNoteMetadata(documents[0].noteId, {
+              await this.vectorStore.add(documents);
+              this.noteMetadata.set(documents[0].noteId, {
                 notePath: filePath,
                 contentHash: currentHash,
                 modifiedTime: stat.mtimeMs,
@@ -498,8 +439,15 @@ export class RAGIndexer {
     // Get graph data for connection counts
     const graphStats = await analyzeNoteGraph(this.notesDir, { useCache: false });
 
-    // Remove existing documents for this note
-    await this.vectorStore.removeByPath(expandedPath);
+    // Remove existing documents for this note and update metadata
+    await this.vectorStore.deleteByNotePath(expandedPath);
+    // Remove metadata by path
+    for (const [noteId, meta] of this.noteMetadata) {
+      if (meta.notePath === expandedPath) {
+        this.noteMetadata.delete(noteId);
+        break;
+      }
+    }
 
     // Process the note
     const documents = await this.processNote(expandedPath, graphStats);
@@ -514,12 +462,12 @@ export class RAGIndexer {
       }
 
       // Store documents
-      await this.vectorStore.store(documents);
+      await this.vectorStore.add(documents);
 
       // Update metadata
       const content = await fs.readFile(expandedPath, "utf-8");
       const stat = await fs.stat(expandedPath);
-      await this.vectorStore.setNoteMetadata(documents[0].noteId, {
+      this.noteMetadata.set(documents[0].noteId, {
         notePath: expandedPath,
         contentHash: this.hashContent(content),
         modifiedTime: stat.mtimeMs,
@@ -534,14 +482,19 @@ export class RAGIndexer {
    * @param noteId - ID of the note to remove
    */
   async removeNote(noteId: string): Promise<void> {
-    await this.vectorStore.remove(noteId);
+    // Find the notePath from metadata
+    const metadata = this.noteMetadata.get(noteId);
+    if (metadata) {
+      await this.vectorStore.deleteByNotePath(metadata.notePath);
+      this.noteMetadata.delete(noteId);
+    }
   }
 
   /**
    * Get the current index size (number of chunks)
    */
-  getIndexSize(): number {
-    return this.vectorStore.getSize();
+  async getIndexSize(): Promise<number> {
+    return await this.vectorStore.count();
   }
 
   /**
@@ -571,7 +524,7 @@ export class RAGIndexer {
     let dimensionMismatches = 0;
 
     const documents = await this.vectorStore.getAllDocuments();
-    const metadata = await this.vectorStore.getIndexedNotes();
+    const metadata = this.noteMetadata;
 
     const totalDocuments = documents.length;
     const totalMetadata = metadata.size;
