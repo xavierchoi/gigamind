@@ -116,13 +116,14 @@ export class LanceDBVectorStore implements IVectorStore {
 
   async delete(ids: string[]): Promise<void> {
     if (!this.table || ids.length === 0) return;
-    const idList = ids.map(id => `'${id}'`).join(", ");
+    const idList = ids.map(id => `'${id.replace(/'/g, "''")}'`).join(", ");
     await this.table.delete(`id IN (${idList})`);
   }
 
   async deleteByNotePath(notePath: string): Promise<void> {
     if (!this.table) return;
-    await this.table.delete(`notePath = '${notePath}'`);
+    const sanitizedPath = notePath.replace(/'/g, "''");
+    await this.table.delete(`notePath = '${sanitizedPath}'`);
   }
 
   async clear(): Promise<void> {

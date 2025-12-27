@@ -113,8 +113,8 @@ class EmbeddingServiceAdapter implements EmbeddingServiceInterface {
 export interface RAGIndexerConfig {
   /** Directory containing notes to index */
   notesDir: string;
-  /** Path to store the vector database (future use for persistence) */
-  dbPath: string;
+  /** Path to store the vector database (optional, used when vectorStore not provided) */
+  dbPath?: string;
   /** Custom embedding service (optional, uses OpenAI by default) */
   embeddingService?: EmbeddingServiceInterface;
   /** Custom document chunker (optional, uses default Korean/English chunker) */
@@ -159,7 +159,7 @@ export class RAGIndexer {
 
   constructor(config: RAGIndexerConfig) {
     this.notesDir = expandPath(config.notesDir);
-    this.dbPath = config.dbPath;
+    this.dbPath = config.dbPath || "";
     this.embeddingService = config.embeddingService || new EmbeddingServiceAdapter();
     this.chunker = config.chunker || new ActualDocumentChunker();
     this.vectorStore = config.vectorStore || new InMemoryVectorStore();

@@ -49,7 +49,7 @@ export interface RAGServiceConfig {
   notesDir: string;
   /** OpenAI API 키 (optional, 환경변수 사용 가능) */
   apiKey?: string;
-  /** 영구 저장소 사용 여부 (기본: true) - 현재는 메모리 저장소만 지원 */
+  /** 영구 저장소 사용 여부 (기본: true, LanceDB 사용) */
   usePersistentStorage?: boolean;
 }
 

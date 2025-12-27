@@ -20,7 +20,7 @@ import {
   hasApiKey,
   type GigaMindConfig,
 } from "./utils/config.js";
-import { getQuickStats, invalidateGraphCache, invalidateRemoteGraphCache } from "./utils/graph/index.js";
+import { getQuickStats, invalidateGraphCache } from "./utils/graph/index.js";
 import { RAGService } from "./rag/service.js";
 import { getCurrentTime, formatTimeDisplay } from "./utils/time.js";
 import { initI18n, changeLanguage, t } from "./i18n/index.js";
@@ -930,8 +930,10 @@ export function App() {
     if (config) {
       // Invalidate local cache first to ensure fresh data is fetched
       invalidateGraphCache(config.notesDir);
-      // Also invalidate remote Graph Server cache (fire-and-forget)
-      invalidateRemoteGraphCache().catch(() => {});
+      // Re-index RAG for semantic search (fire-and-forget)
+      RAGService.getInstance().reindex().catch(err => {
+        console.warn("[App] RAG re-indexing after import failed:", err);
+      });
       const stats = await getQuickStats(config.notesDir);
       setNoteCount(stats.noteCount);
       setConnectionCount(stats.connectionCount);
