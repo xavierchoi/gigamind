@@ -366,15 +366,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.4.5] - 2025-12-26
-
-### Changed
-- JSON inference type names now use *JSON suffix (e.g., CommonJSON) to prevent collisions with manual types.ts interfaces
-- NestedKeyOf and PathValue utility types documented with JSDoc, usage examples, and performance considerations
-- Two-tier type system (manual interfaces vs JSON inference types) design pattern documented for type safety and maintainability
-- Error type structure design rationale and future simplification strategy documented
-- Fixed inaccurate changelog claim about kebab-case to camelCase conversion (was not actually performed in earlier versions)
-
 ## Future Releases
 
 See [ROADMAP.md](./ROADMAP.md) for planned features and improvements.

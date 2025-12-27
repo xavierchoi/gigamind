@@ -80,6 +80,8 @@ const CONFIG = {
   accessibility: {
     // Index of currently focused node for keyboard navigation
     focusedNodeIndex: -1,
+    // ID of the last navigated node for connection traversal
+    lastNavigatedNodeId: null,
     // Whether reduced motion is preferred
     prefersReducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
   },

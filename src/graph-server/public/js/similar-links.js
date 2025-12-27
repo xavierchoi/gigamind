@@ -18,6 +18,7 @@ const similarLinksState = {
   worker: null,
   workerReady: false,
   analysisProgress: 0,
+  abortController: null, // AbortController for cancelling fetch requests
 };
 
 // Cluster colors for highlighting
@@ -234,16 +235,18 @@ async function analyzeSimilarLinks() {
 
   similarLinksState.isLoading = true;
   similarLinksState.analysisProgress = 0;
+  similarLinksState.abortController = new AbortController();
   showLoadingState();
 
   try {
     const threshold = similarLinksState.threshold;
+    const signal = similarLinksState.abortController.signal;
 
     // Check if we should use web worker (client-side analysis)
     if (similarLinksState.worker && similarLinksState.workerReady) {
       // Fetch raw dangling links data
       console.log('[Similar Links] Fetching dangling links for worker analysis...');
-      const response = await fetch('/api/dangling-links');
+      const response = await fetch('/api/dangling-links', { signal });
 
       if (!response.ok) {
         throw new Error('Failed to fetch dangling links');
@@ -271,7 +274,7 @@ async function analyzeSimilarLinks() {
 
     // Fallback: server-side analysis
     console.log('[Similar Links] Fetching /api/similar-links?threshold=' + threshold);
-    const response = await fetch(`/api/similar-links?threshold=${threshold}`);
+    const response = await fetch(`/api/similar-links?threshold=${threshold}`, { signal });
     console.log('[Similar Links] Response status:', response.status);
 
     if (!response.ok) {
@@ -296,14 +299,24 @@ async function analyzeSimilarLinks() {
 }
 
 /**
- * Cancel ongoing analysis
+ * Cancel ongoing analysis (both worker and server-side fetch)
  */
 function cancelAnalysis() {
-  if (similarLinksState.worker && similarLinksState.isLoading) {
+  if (!similarLinksState.isLoading) return;
+
+  // Cancel worker-based analysis
+  if (similarLinksState.worker) {
     similarLinksState.worker.postMessage({ type: 'cancel' });
-    similarLinksState.isLoading = false;
-    hideLoadingState();
   }
+
+  // Cancel server-side fetch via AbortController
+  if (similarLinksState.abortController) {
+    similarLinksState.abortController.abort();
+    similarLinksState.abortController = null;
+  }
+
+  similarLinksState.isLoading = false;
+  hideLoadingState();
 }
 
 async function mergeClusters(clusterId, targetName, memberTargets, preserveAlias) {

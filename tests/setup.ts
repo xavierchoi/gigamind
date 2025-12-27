@@ -3,11 +3,13 @@
  * Configures the test environment and provides common utilities
  */
 
-import { jest } from "@jest/globals";
+import { jest, beforeAll } from "@jest/globals";
 import { initI18n } from "../src/i18n/index.js";
 
-// Initialize i18n for tests
-await initI18n("ko");
+// Initialize i18n for tests (wrapped in beforeAll for Jest ESM compatibility)
+beforeAll(async () => {
+  await initI18n("ko");
+});
 
 // Mock environment variables for testing
 process.env.GIGAMIND_DEBUG = "false";
