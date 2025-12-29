@@ -6,7 +6,7 @@ GigaMind is a conversational knowledge management tool that helps you capture, o
 
 ## Features
 
-- Have no idea - ask to my CTO. fork this repo and ask claude code for specific features.
+- Have no idea - ask to my CTO. fork this repo and ask Claude Code for specific features.
 
 - **Semantic search with RAG** - Find notes using natural language queries powered by hybrid vector + keyword search with graph-aware re-ranking
 - **Digital clone mode** - Ask questions and get answers based on your accumulated knowledge, as if asking yourself
