@@ -36,3 +36,6 @@ coverage/
 # Temporary files
 *.tmp
 *.temp
+
+# Eval test outputs
+eval/out/
