@@ -107,7 +107,36 @@ const PERFORMANCE_THRESHOLDS = {
  */
 export async function loadSnapshot(snapshotPath: string): Promise<EvalSnapshot> {
   const content = await fs.readFile(snapshotPath, "utf-8");
-  const snapshot = JSON.parse(content) as EvalSnapshot;
+  const parsed = JSON.parse(content) as unknown;
+
+  // Basic type validation before type assertion
+  if (typeof parsed !== "object" || parsed === null) {
+    throw new Error("Invalid snapshot: expected JSON object");
+  }
+
+  const obj = parsed as Record<string, unknown>;
+
+  // Validate required fields
+  const requiredFields = [
+    "version",
+    "created_at",
+    "run_id",
+    "dataset_hash",
+    "notes_hash",
+    "notes_hash_mode",
+    "environment",
+    "config",
+    "metrics",
+  ];
+
+  const missingFields = requiredFields.filter((field) => !(field in obj));
+  if (missingFields.length > 0) {
+    throw new Error(
+      `Invalid snapshot structure: missing required fields (${missingFields.join(", ")})`
+    );
+  }
+
+  const snapshot = parsed as unknown as EvalSnapshot;
 
   if (snapshot.version !== "1.0") {
     throw new Error(`Unsupported snapshot version: ${snapshot.version}`);
@@ -286,7 +315,7 @@ export async function compareSnapshots(options: CompareOptions): Promise<Regress
   try {
     baseline = await loadSnapshot(baselineSnapshot);
   } catch (error) {
-    result.errors.push(`Failed to load baseline snapshot: ${error}`);
+    result.errors.push(`Failed to load baseline snapshot: ${error instanceof Error ? error.message : String(error)}`);
     result.preconditionsMet = false;
     return result;
   }

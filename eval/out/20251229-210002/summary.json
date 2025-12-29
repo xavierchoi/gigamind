@@ -1,0 +1,26 @@
+{
+  "overall": {
+    "search": {
+      "hit_at_1": 0,
+      "mrr": 0,
+      "ndcg_at_10": 0,
+      "recall_at_10": 0,
+      "latency_p50_ms": 59.73008299999998,
+      "latency_p95_ms": 59.74414549999993
+    },
+    "unanswerable": {
+      "precision": 0.5,
+      "recall": 1,
+      "f1": 0.6666666666666666,
+      "far": 0
+    }
+  },
+  "performance": {
+    "eval_runtime_ms": 882.503
+  },
+  "counts": {
+    "queries_total": 2,
+    "queries_answerable": 1,
+    "queries_unanswerable": 1
+  }
+}

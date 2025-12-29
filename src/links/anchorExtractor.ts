@@ -325,7 +325,8 @@ function extractCJKPhrases(
       text.length <= config.maxLength &&
       !STOPWORDS_KO.has(text)
     ) {
-      const range = { start: match.index, end: match.index + match[0].length };
+      const trimStart = match[0].length - match[0].trimStart().length;
+      const range = { start: match.index + trimStart, end: match.index + trimStart + text.length };
       if (!isOverlapping(range, excludedRanges)) {
         candidates.push({ text, range, type: "noun_phrase" });
       }

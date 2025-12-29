@@ -12,6 +12,7 @@
 
 import * as fs from "fs/promises";
 import * as path from "path";
+import { fileURLToPath } from "node:url";
 import { createHash } from "crypto";
 import { exec } from "child_process";
 import { promisify } from "util";
@@ -218,7 +219,7 @@ async function getAppVersion(): Promise<string> {
   try {
     // Navigate up from src/eval/snapshot to find package.json
     const packageJsonPath = path.resolve(
-      path.dirname(new URL(import.meta.url).pathname),
+      path.dirname(fileURLToPath(import.meta.url)),
       "../../../..",
       "package.json"
     );

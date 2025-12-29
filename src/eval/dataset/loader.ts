@@ -183,7 +183,6 @@ export async function loadDataset(
 ): Promise<DatasetLoadResult> {
   const queries: SearchQuery[] = [];
   const errors: ValidationError[] = [];
-  let totalLines = 0;
 
   const loaderOptions: LoaderOptions<SearchQuery> = {
     ...options,
@@ -203,7 +202,6 @@ export async function loadDataset(
       loaderOptions
     )) {
       queries.push(data);
-      totalLines++;
     }
   } catch (error) {
     // strict 모드에서 에러 발생 시 그대로 throw
@@ -212,19 +210,19 @@ export async function loadDataset(
     }
     // non-strict 모드에서는 에러를 기록하고 계속
     errors.push({
-      line: totalLines + 1,
+      line: queries.length + errors.length + 1,
       message: error instanceof Error ? error.message : String(error),
     });
   }
 
   // 전체 라인 수 계산 (성공 + 실패)
-  const processedLines = queries.length + errors.length;
+  const totalLines = queries.length + errors.length;
 
   return {
     queries,
     errors,
-    totalLines: processedLines,
-    successRate: processedLines > 0 ? queries.length / processedLines : 0,
+    totalLines,
+    successRate: totalLines > 0 ? queries.length / totalLines : 0,
   };
 }
 

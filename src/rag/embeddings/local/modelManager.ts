@@ -168,7 +168,7 @@ export class ModelManager {
     }
     // Transformers.js는 모델 ID를 디렉토리 구조로 사용
     // 예: Xenova/bge-m3 -> Xenova--bge-m3
-    const modelDirName = model.id.replace("/", "--");
+    const modelDirName = model.id.replaceAll("/", "--");
     return join(this.cacheDir, modelDirName);
   }
 

@@ -191,17 +191,20 @@ async function executeQuery(
 ): Promise<PerItemResult> {
   const startTime = performance.now();
 
-  try {
-    // Create timeout promise
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error("Query timeout")), timeoutMs);
-    });
+  // Create timeout promise with cleanup to prevent memory leak
+  // Using definite assignment assertion since Promise executor runs synchronously
+  let timeoutId!: NodeJS.Timeout;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error("Query timeout")), timeoutMs);
+  });
 
+  try {
     // Execute search with timeout
     const results = await Promise.race([
       ragService.search(query.query, options),
       timeoutPromise,
     ]);
+    clearTimeout(timeoutId);
 
     const latencyMs = performance.now() - startTime;
 
@@ -249,6 +252,7 @@ async function executeQuery(
       predictedAnswerable,
     };
   } catch (e) {
+    clearTimeout(timeoutId);
     const latencyMs = performance.now() - startTime;
     const errorMessage = e instanceof Error ? e.message : String(e);
 

@@ -45,11 +45,17 @@ export interface NotesHashOptions {
 
 /**
  * Check if a file/directory should be excluded
+ *
+ * @param name - File or directory name (single path segment, not a full path)
+ * @param additionalExcludes - Additional patterns to exclude
+ * @returns true if the entry should be excluded
  */
 function shouldExclude(name: string, additionalExcludes: string[] = []): boolean {
-  // Check against exclude patterns
+  // Check against exclude patterns - use exact match only to avoid
+  // incorrectly excluding files with similar prefixes (e.g., 'evaluation.md'
+  // should not be excluded by the 'eval' pattern)
   const allExcludes = [...EXCLUDE_PATTERNS, ...additionalExcludes];
-  if (allExcludes.some((pattern) => name === pattern || name.startsWith(pattern + "/"))) {
+  if (allExcludes.includes(name)) {
     return true;
   }
 
