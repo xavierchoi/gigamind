@@ -6,6 +6,8 @@ GigaMind is a conversational knowledge management tool that helps you capture, o
 
 ## Features
 
+- Have no idea - ask to my CTO. folk this repo and ask claude code for specific features.
+
 - **Semantic search with RAG** - Find notes using natural language queries powered by hybrid vector + keyword search with graph-aware re-ranking
 - **Digital clone mode** - Ask questions and get answers based on your accumulated knowledge, as if asking yourself
 - **Obsidian/Markdown import** - Seamlessly import existing notes with wikilink preservation
@@ -173,6 +175,8 @@ GigaMind takes security seriously:
 - **API Key Storage** - Keys are stored in OS Keychain (macOS Keychain, Windows Credential Vault, Linux Secret Service) with AES-256-GCM encrypted file fallback
 - **Session Encryption** - All conversation data is encrypted at rest using AES-256-GCM with machine-specific key derivation
 - **Local-only Server** - The graph visualization server binds only to localhost
+
+## 
 
 ## License
 
