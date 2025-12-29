@@ -55,27 +55,28 @@ export class SuggestLinksCommand extends BaseCommand {
       return { handled: true };
     }
 
-    const resolvedPath = await this.resolveNotePath(
-      notePathInput,
-      context.config.notesDir
-    );
-    if ("error" in resolvedPath) {
-      this.addMessages(context, userInput, resolvedPath.error);
-      return { handled: true };
-    }
-
-    const { notePath, notesDir } = resolvedPath;
-    const minConfidence = minConfidenceResult.value;
-
-    // Add user message to display
-    this.addUserMessage(context, userInput);
-
-    // Start loading state
-    const controller = this.startLoading(context);
-    context.setStreamingText(t("commands:suggest_links.analyzing"));
-    const currentGeneration = this.getCurrentGeneration(context);
-
+    // Wrap all async operations in try-catch to handle unexpected errors
     try {
+      const resolvedPath = await this.resolveNotePath(
+        notePathInput,
+        context.config.notesDir
+      );
+      if ("error" in resolvedPath) {
+        this.addMessages(context, userInput, resolvedPath.error);
+        return { handled: true };
+      }
+
+      const { notePath, notesDir } = resolvedPath;
+      const minConfidence = minConfidenceResult.value;
+
+      // Add user message to display
+      this.addUserMessage(context, userInput);
+
+      // Start loading state
+      const controller = this.startLoading(context);
+      context.setStreamingText(t("commands:suggest_links.analyzing"));
+      const currentGeneration = this.getCurrentGeneration(context);
+
       // Get suggestions
       const suggestions = await suggestLinks(notePath, notesDir, {
         minConfidence,
@@ -177,10 +178,14 @@ export class SuggestLinksCommand extends BaseCommand {
           error: t("commands:suggest_links.not_found", { notePath: cleanedPath }),
         };
       }
-    } catch {
-      return {
-        error: t("commands:suggest_links.not_found", { notePath: cleanedPath }),
-      };
+    } catch (err) {
+      // Only treat ENOENT as "not found", re-throw other errors (e.g., permission denied)
+      if (err instanceof Error && (err as NodeJS.ErrnoException).code === "ENOENT") {
+        return {
+          error: t("commands:suggest_links.not_found", { notePath: cleanedPath }),
+        };
+      }
+      throw err;
     }
 
     return { notePath: relativeNotePath, notesDir: absoluteNotesDir };
@@ -196,23 +201,28 @@ export class SuggestLinksCommand extends BaseCommand {
       return t("commands:suggest_links.no_suggestions", { notePath: noteBasename });
     }
 
-    let output = `## ${t("commands:suggest_links.title", { notePath: noteBasename })}\n\n`;
-    output += `| # | ${t("commands:suggest_links.table.anchor")} | ${t("commands:suggest_links.table.target")} | ${t("commands:suggest_links.table.confidence")} | ${t("commands:suggest_links.table.reason")} |\n`;
-    output += `|---|--------|--------|------------|--------|\n`;
+    const header = `| # | ${t("commands:suggest_links.table.anchor")} | ${t("commands:suggest_links.table.target")} | ${t("commands:suggest_links.table.confidence")} | ${t("commands:suggest_links.table.reason")} |`;
+    const separator = `|---|--------|--------|------------|--------|`;
 
-    suggestions.forEach((s, i) => {
+    const rows = suggestions.map((s, i) => {
       const targetBasename = path.basename(s.suggestedTarget, ".md");
       const confidencePercent = `${(s.confidence * 100).toFixed(0)}%`;
       const reason = this.formatReason(s);
       const anchorText = this.escapeTableCell(s.anchor);
       const targetText = this.escapeTableCell(targetBasename);
       const reasonText = this.escapeTableCell(reason);
-      output += `| ${i + 1} | "${anchorText}" | ${targetText} | ${confidencePercent} | ${reasonText} |\n`;
+      return `| ${i + 1} | "${anchorText}" | ${targetText} | ${confidencePercent} | ${reasonText} |`;
     });
 
-    output += `\n${t("commands:suggest_links.total", { count: suggestions.length })}`;
-
-    return output;
+    return [
+      `## ${t("commands:suggest_links.title", { notePath: noteBasename })}`,
+      "",
+      header,
+      separator,
+      ...rows,
+      "",
+      t("commands:suggest_links.total", { count: suggestions.length }),
+    ].join("\n");
   }
 
   private escapeTableCell(value: string): string {
