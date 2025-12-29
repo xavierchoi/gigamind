@@ -1,0 +1,2 @@
+{"id":"q-001","query":"What is RAG System?","expected_notes":["rag-system.md"],"retrieved_notes":[],"hit_at_1":false,"reciprocal_rank":0,"latency_ms":59.714458000000036,"base_score":null,"predicted_answerable":false,"ground_truth_answerable":true}
+{"id":"q-002","query":"What is the lunch menu?","expected_notes":[],"retrieved_notes":[],"hit_at_1":false,"reciprocal_rank":0,"latency_ms":59.74570799999992,"base_score":null,"predicted_answerable":false,"ground_truth_answerable":false}

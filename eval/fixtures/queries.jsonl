@@ -1,0 +1,2 @@
+{"id":"q-001","query":"What is RAG System?","answerable":true,"expected_notes":["rag-system.md"],"expected_spans":[{"note_path":"rag-system.md","start":13,"end":51,"text":"RAG combines retrieval and generation."}]}
+{"id":"q-002","query":"What is the lunch menu?","answerable":false,"expected_notes":[]}

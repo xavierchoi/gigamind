@@ -7,12 +7,18 @@ export type {
   VectorStoreSearchResult,
 } from "./types.js";
 
+// 새 임베딩 모듈에서 export
 export {
   EmbeddingService,
-  EmbeddingError,
   createEmbeddingService,
+  createEmbeddingProvider,
+  EmbeddingError,
   type EmbeddingResult,
-} from "./embeddings.js";
+  type IEmbeddingProvider,
+  type LocalEmbeddingConfig,
+  type ModelDownloadProgress,
+  type ProviderOptions,
+} from "./embeddings/index.js";
 
 export {
   RAGRetriever,

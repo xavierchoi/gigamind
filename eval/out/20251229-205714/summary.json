@@ -1,0 +1,16 @@
+{
+  "overall": {
+    "links": {
+      "precision_at_5": 0,
+      "recall_at_5": 0,
+      "novelty_at_5": 0
+    }
+  },
+  "performance": {
+    "eval_runtime_ms": 2227.664875
+  },
+  "counts": {
+    "queries_total": 1,
+    "links_total": 1
+  }
+}

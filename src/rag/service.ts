@@ -6,7 +6,7 @@
 import path from "node:path";
 import { RAGIndexer } from "./indexer.js";
 import { RAGRetriever } from "./retriever.js";
-import { EmbeddingService } from "./embeddings.js";
+import { EmbeddingService, type ProviderOptions } from "./embeddings/index.js";
 import type { RetrievalResult, VectorDocument, IVectorStore } from "./types.js";
 import { LanceDBVectorStore, InMemoryVectorStore } from "./vectorStore.js";
 import { expandPath } from "../utils/config.js";
@@ -35,8 +35,12 @@ export interface RAGSearchResult {
   title: string;
   /** 관련 내용 발췌 */
   content: string;
-  /** 관련도 점수 (0-1) */
-  score: number;
+  /** 리랭킹 전 점수 (0-1, unanswerable 판정용) */
+  baseScore: number;
+  /** 리랭킹 후 점수 (순위 결정용, 1.0 초과 가능) */
+  finalScore: number;
+  /** Deprecated alias of finalScore (backward compatibility) */
+  score?: number;
   /** 하이라이트된 텍스트 (optional) */
   highlights?: string[];
 }
@@ -47,8 +51,8 @@ export interface RAGSearchResult {
 export interface RAGServiceConfig {
   /** 노트 디렉토리 경로 */
   notesDir: string;
-  /** OpenAI API 키 (optional, 환경변수 사용 가능) */
-  apiKey?: string;
+  /** 임베딩 프로바이더 옵션 (기본값: 로컬 BGE-M3 모델) */
+  embeddingOptions?: ProviderOptions;
   /** 영구 저장소 사용 여부 (기본: true, LanceDB 사용) */
   usePersistentStorage?: boolean;
 }
@@ -111,11 +115,6 @@ export class RAGService {
     try {
       this.notesDir = expandPath(config.notesDir);
 
-      // API 키 설정
-      if (config.apiKey) {
-        process.env.OPENAI_API_KEY = config.apiKey;
-      }
-
       // VectorStore 초기화
       const usePersistent = config.usePersistentStorage !== false;
       const dbPath = path.join(this.notesDir, ".gigamind", "vectors");
@@ -127,8 +126,10 @@ export class RAGService {
       }
       await this.vectorStore.initialize();
 
-      // EmbeddingService 초기화
-      this.embeddingService = new EmbeddingService();
+      // EmbeddingService 초기화 (로컬 모델 로드)
+      this.embeddingService = new EmbeddingService(config.embeddingOptions);
+      await this.embeddingService.initialize();
+      console.log(`[RAGService] 임베딩 서비스 초기화 완료 (모델: ${this.embeddingService.modelId})`);
 
       // RAGIndexer 초기화 - vectorStore 주입
       this.indexer = new RAGIndexer({
@@ -149,11 +150,27 @@ export class RAGService {
         console.log("[RAGService] 인덱스가 비어있음, 전체 인덱싱 시작...");
         await this.reindex();
       } else {
-        console.log(
-          `[RAGService] 기존 인덱스 로드: ${existingDocs.length}개 문서`
-        );
-        this.documents = existingDocs;
-        await this.retriever.loadIndex(existingDocs);
+        // 차원 변경 감지: 기존 인덱스의 차원과 새 임베딩 서비스의 차원 비교
+        const existingDimension = existingDocs[0].embedding?.length || 0;
+        const newDimension = this.embeddingService.dimensions;
+
+        if (existingDimension > 0 && existingDimension !== newDimension) {
+          console.log(
+            `[RAGService] 임베딩 차원 변경 감지: ${existingDimension} → ${newDimension}`
+          );
+          console.log(
+            `[RAGService] 임베딩 모델 변경으로 인한 자동 재인덱싱 시작...`
+          );
+          // 기존 인덱스 삭제 후 재인덱싱
+          await this.vectorStore.clear();
+          await this.reindex();
+        } else {
+          console.log(
+            `[RAGService] 기존 인덱스 로드: ${existingDocs.length}개 문서 (차원: ${existingDimension})`
+          );
+          this.documents = existingDocs;
+          await this.retriever.loadIndex(existingDocs);
+        }
       }
 
       this.initialized = true;
@@ -177,11 +194,14 @@ export class RAGService {
     }
 
     const opts = {
-      mode: options?.mode || "hybrid",
-      topK: options?.topK || 10,
-      minScore: options?.minScore || 0.3,
+      mode: options?.mode ?? "hybrid",
+      topK: options?.topK ?? 10,
+      minScore: options?.minScore ?? 0.3,
       useGraphReranking: options?.useGraphReranking !== false,
     };
+
+    const keywordWeight =
+      opts.mode === "keyword" ? 1.0 : opts.mode === "semantic" ? 0 : 0.3;
 
     // Retriever 설정에 맞게 변환
     const retrievalConfig = {
@@ -189,7 +209,7 @@ export class RAGService {
       minScore: opts.minScore,
       useGraphReranking: opts.useGraphReranking,
       hybridSearch: opts.mode === "hybrid",
-      keywordWeight: opts.mode === "keyword" ? 1.0 : 0.3,
+      keywordWeight,
     };
 
     const results = await this.retriever!.retrieve(query, retrievalConfig);
@@ -269,6 +289,13 @@ export class RAGService {
   }
 
   /**
+   * 현재 임베딩 모델 ID 반환
+   */
+  getEmbeddingModelId(): string {
+    return this.embeddingService?.modelId ?? "unknown";
+  }
+
+  /**
    * RetrievalResult를 RAGSearchResult로 변환
    */
   private toSearchResult(result: RetrievalResult): RAGSearchResult {
@@ -278,6 +305,8 @@ export class RAGService {
       notePath: result.notePath,
       title: result.noteTitle,
       content: bestChunk?.content || "",
+      baseScore: result.baseScore,    // 리랭킹 전 점수
+      finalScore: result.finalScore,  // 리랭킹 후 점수
       score: result.finalScore,
       highlights: result.chunks.slice(0, 3).map((c) => c.content.slice(0, 200)),
     };

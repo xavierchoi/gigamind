@@ -1,0 +1,1 @@
+{"id":"l-001","source_note":"project-alpha.md","expected_links":["RAG System"],"suggested_links":["rag-system.md"],"precision":1,"recall":1,"hit_at_k":true,"latency_ms":47.794625000000224}

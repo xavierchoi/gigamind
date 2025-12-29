@@ -98,7 +98,7 @@ export class LanceDBVectorStore implements IVectorStore {
 
     return results.map((row: LanceDBSearchRow) => ({
       id: row.id,
-      score: 1 - row._distance, // distance를 similarity로 변환
+      score: Math.max(0, 1 - row._distance), // distance를 similarity로 변환
       metadata: {
         noteId: row.noteId,
         notePath: row.notePath,
@@ -151,7 +151,9 @@ export class LanceDBVectorStore implements IVectorStore {
       notePath: row.notePath,
       chunkIndex: row.chunkIndex,
       content: row.content,
-      embedding: row.vector,
+      // LanceDB returns Vector objects that don't support direct indexing [i]
+      // Convert to regular array for compatibility with cosine similarity
+      embedding: Array.from(row.vector as unknown as Iterable<number>),
       metadata: {
         title: row.title,
         type: row.type,
@@ -238,6 +240,6 @@ export class InMemoryVectorStore implements IVectorStore {
       normB += b[i] * b[i];
     }
     const mag = Math.sqrt(normA) * Math.sqrt(normB);
-    return mag === 0 ? 0 : dot / mag;
+    return mag === 0 ? 0 : Math.max(0, dot / mag);
   }
 }

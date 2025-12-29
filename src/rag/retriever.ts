@@ -159,12 +159,16 @@ export class RAGRetriever {
     const config = { ...DEFAULT_CONFIG, ...options };
 
     let results: RetrievalResult[];
+    const fetchLimit = config.topK * 3;
 
     if (config.hybridSearch) {
       results = await this.hybridSearch(query, config);
+    } else if (config.keywordWeight >= 1) {
+      const keywordResults = await this.keywordSearch(query, fetchLimit);
+      results = this.aggregateResults([], keywordResults, config);
     } else {
       const queryVector = await this.embeddingService.embedQuery(query);
-      const vectorResults = await this.vectorSearch(queryVector, config.topK * 2);
+      const vectorResults = await this.vectorSearch(queryVector, fetchLimit);
       results = this.aggregateResults(vectorResults, [], config);
     }
 
@@ -182,7 +186,7 @@ export class RAGRetriever {
 
     // Filter by minimum score and limit to topK
     results = results
-      .filter((r) => r.finalScore >= config.minScore)
+      .filter((r) => r.baseScore >= config.minScore)
       .sort((a, b) => b.finalScore - a.finalScore)
       .slice(0, config.topK);
 
@@ -297,7 +301,8 @@ export class RAGRetriever {
       notePath: agg.notePath,
       noteTitle: agg.noteTitle,
       chunks: agg.chunks.sort((a, b) => b.score - a.score),
-      finalScore: agg.keywordScore,
+      baseScore: agg.keywordScore,    // 키워드 검색 시 baseScore = keywordScore
+      finalScore: agg.keywordScore,   // 초기값은 동일
       confidence: this.calculateConfidence(0, agg.keywordScore, agg.graphCentrality),
       graphCentrality: agg.graphCentrality,
     }));
@@ -337,12 +342,9 @@ export class RAGRetriever {
   ): RetrievalResult[] {
     const noteAggregates = new Map<string, NoteResultAggregate>();
 
-    // Normalize vector scores to 0-1 range
-    const maxVectorScore = Math.max(1, ...vectorResults.map((r) => r.score));
-
     // Process vector results
     for (const result of vectorResults) {
-      const normalizedScore = result.score / maxVectorScore;
+      const normalizedScore = Math.min(1, Math.max(0, result.score));
       const existing = noteAggregates.get(result.document.noteId);
 
       if (existing) {
@@ -372,11 +374,16 @@ export class RAGRetriever {
     }
 
     // Normalize keyword scores to 0-1 range
-    const maxKeywordScore = Math.max(1, ...keywordResults.map((r) => r.finalScore));
+    const maxKeywordScore =
+      keywordResults.length > 0
+        ? Math.max(...keywordResults.map((r) => r.finalScore))
+        : 0;
+    const normalizeKeywordScore = (score: number): number =>
+      maxKeywordScore > 0 ? score / maxKeywordScore : 0;
 
     // Process keyword results
     for (const result of keywordResults) {
-      const normalizedScore = result.finalScore / maxKeywordScore;
+      const normalizedScore = normalizeKeywordScore(result.finalScore);
       const existing = noteAggregates.get(result.noteId);
 
       if (existing) {
@@ -389,7 +396,7 @@ export class RAGRetriever {
           if (!chunkExists) {
             existing.chunks.push({
               content: chunk.content,
-              score: chunk.score / maxKeywordScore,
+              score: normalizeKeywordScore(chunk.score),
               chunkIndex: chunk.chunkIndex,
             });
           }
@@ -401,7 +408,7 @@ export class RAGRetriever {
           noteTitle: result.noteTitle,
           chunks: result.chunks.map((c) => ({
             ...c,
-            score: c.score / maxKeywordScore,
+            score: normalizeKeywordScore(c.score),
           })),
           vectorScore: 0,
           keywordScore: normalizedScore,
@@ -415,7 +422,7 @@ export class RAGRetriever {
     const results: RetrievalResult[] = [];
 
     for (const agg of noteAggregates.values()) {
-      const finalScore =
+      const baseScore =
         vectorWeight * agg.vectorScore + config.keywordWeight * agg.keywordScore;
 
       results.push({
@@ -423,7 +430,8 @@ export class RAGRetriever {
         notePath: agg.notePath,
         noteTitle: agg.noteTitle,
         chunks: agg.chunks.sort((a, b) => b.score - a.score),
-        finalScore,
+        baseScore,              // 리랭킹 전 점수
+        finalScore: baseScore,  // 초기값은 baseScore와 동일
         confidence: this.calculateConfidence(
           agg.vectorScore,
           agg.keywordScore,
@@ -438,6 +446,7 @@ export class RAGRetriever {
 
   /**
    * Re-rank results using graph structure (centrality boost)
+   * baseScore는 유지하고 finalScore만 업데이트
    */
   private async reRankWithGraph(
     results: RetrievalResult[],
@@ -449,13 +458,14 @@ export class RAGRetriever {
 
     return results.map((result) => {
       const centralityBoost = result.graphCentrality * boostFactor;
-      const boostedScore = result.finalScore * (1 + centralityBoost);
+      const boostedScore = result.baseScore * (1 + centralityBoost);
 
       return {
         ...result,
-        finalScore: boostedScore,
+        // baseScore는 유지 (spread 연산자로 이미 복사됨)
+        finalScore: boostedScore,  // finalScore만 업데이트
         confidence: this.calculateConfidence(
-          result.finalScore,
+          result.baseScore,
           0,
           result.graphCentrality
         ),
@@ -554,7 +564,7 @@ export class RAGRetriever {
       return 0;
     }
 
-    return dotProduct / magnitude;
+    return Math.max(0, dotProduct / magnitude);
   }
 
   /**

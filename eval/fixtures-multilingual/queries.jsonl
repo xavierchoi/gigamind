@@ -1,0 +1,5 @@
+{"id":"mq-001","query":"What is RAG System?","answerable":true,"expected_notes":["rag-system.md"],"expected_spans":[{"note_path":"rag-system.md","start":13,"end":51,"text":"RAG combines retrieval and generation."}],"language":"en"}
+{"id":"mq-002","query":"한국어 RAG는 무엇인가요?","answerable":true,"expected_notes":["ko-rag.md"],"expected_spans":[{"note_path":"ko-rag.md","start":10,"end":28,"text":"RAG는 검색과 생성을 결합한다."}],"language":"ko"}
+{"id":"mq-003","query":"中文 RAG是什么？","answerable":true,"expected_notes":["zh-rag.md"],"expected_spans":[{"note_path":"zh-rag.md","start":9,"end":20,"text":"RAG结合检索与生成。"}],"language":"zh"}
+{"id":"mq-004","query":"日本語 RAGとは何ですか？","answerable":true,"expected_notes":["ja-rag.md"],"expected_spans":[{"note_path":"ja-rag.md","start":10,"end":27,"text":"RAGは検索と生成を組み合わせる。"}],"language":"ja"}
+{"id":"mq-005","query":"What is the lunch menu?","answerable":false,"expected_notes":[],"language":"en"}
