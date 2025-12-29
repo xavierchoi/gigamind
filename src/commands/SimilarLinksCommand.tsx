@@ -18,7 +18,7 @@ const DEFAULT_THRESHOLD = 0.7;
 
 export class SimilarLinksCommand extends BaseCommand {
   readonly name = "similar-links";
-  readonly aliases = ["sl"];
+  readonly aliases = ["sim-links"];
   readonly description = "유사한 dangling link들을 분석하고 통합합니다";
   readonly usage = "/similar-links [analyze|merge]";
   readonly category = "notes" as const;

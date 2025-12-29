@@ -35,6 +35,7 @@ import {
   noteCommand,
   sessionCommand,
   similarLinksCommand,
+  suggestLinksCommand,
   type CommandContext,
   type AppState,
 } from "./commands/index.js";
@@ -192,6 +193,7 @@ export function App() {
       noteCommand,
       sessionCommand,
       similarLinksCommand,
+      suggestLinksCommand,
     ]);
     return registry;
   }, []);
