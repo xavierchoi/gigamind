@@ -2,7 +2,7 @@
 
 > 이 문서는 eval 도구와 로컬 임베딩 구현 이후의 다음 단계를 정의합니다.
 > **저장 위치**: `docs/ROADMAP.md`
-> **다음 구현 대상**: `/suggest-links` 명령어 (Phase 1.1)
+> **다음 구현 대상**: Real Vault Benchmarking (Phase 2.1)
 
 ---
 
@@ -30,7 +30,7 @@ async function suggestLinks(
 
 ### Phase 1: Link Suggestion UI (🔥 높음)
 
-#### 1.1 `/suggest-links` 명령어 추가
+#### 1.1 `/suggest-links` 명령어 추가 ✅
 **목표**: 터미널 UI에서 링크 제안 기능 사용
 
 **구현 파일**:
@@ -67,7 +67,7 @@ Apply suggestions? [y/N/select]
 3. 결과 포맷팅 (MarkdownText 사용)
 4. 선택적 적용 기능 (인터랙티브)
 
-#### 1.2 Graph Server REST API
+#### 1.2 Graph Server REST API ✅
 **목표**: 웹 UI에서 링크 제안 접근
 
 **구현 파일**:
@@ -76,9 +76,45 @@ Apply suggestions? [y/N/select]
 **API 스펙**:
 ```
 POST /api/suggest-links
-Body: { notePath: string, options?: SuggestLinksOptions }
-Response: { suggestions: LinkSuggestion[] }
+Content-Type: application/json
+
+Request Body:
+{
+  "notePath": "project-alpha.md",
+  "options": {
+    "minConfidence": 0.3,    // optional, 0.0-1.0
+    "maxSuggestions": 10     // optional, 1-100
+  }
+}
+
+Response (Success):
+{
+  "success": true,
+  "suggestions": [
+    {
+      "anchor": "RAG System",
+      "anchorRange": { "start": 120, "end": 130 },
+      "suggestedTarget": "rag-system.md",
+      "targetTitle": "RAG System",
+      "confidence": 0.92,
+      "reason": "Exact match with note title",
+      "reasonCode": "exact_title"
+    }
+  ],
+  "count": 1
+}
+
+Response (Error):
+{
+  "success": false,
+  "error": "Note not found: invalid.md"
+}
 ```
+
+**보안**:
+- Path traversal 공격 방지 (`../`, 절대 경로 차단)
+- `fs.realpath`로 symlink를 통한 vault 외부 접근 차단
+- `expandPath`로 `~` 경로 확장
 
 ---
 

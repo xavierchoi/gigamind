@@ -9,6 +9,7 @@ import { normalizeNoteTitle } from "../../utils/graph/wikilinks.js";
 import { clusterDanglingLinks } from "../../utils/graph/clusterAnalyzer.js";
 import { mergeSimilarLinks } from "../../utils/graph/linkMerger.js";
 import { suggestLinks } from "../../links/index.js";
+import { expandPath } from "../../utils/config.js";
 import type { NoteGraphStats, BacklinkEntry, SimilarLinkCluster, MergeLinkResult } from "../../utils/graph/types.js";
 import type { LinkSuggestion } from "../../links/types.js";
 import path from "node:path";
@@ -111,9 +112,15 @@ interface SuggestLinksAPIResponse {
   success: true;
   suggestions: Array<{
     anchor: string;
+    anchorRange: {
+      start: number;
+      end: number;
+    };
     suggestedTarget: string;
+    targetTitle: string;
     confidence: number;
     reason: string;
+    reasonCode: string;
   }>;
   count: number;
 }
@@ -580,11 +587,18 @@ export function createGraphRouter(notesDir: string): Router {
         } as SuggestLinksAPIErrorResponse);
       }
 
-      // Validate options if provided
+      // Validate options is a plain object if provided
       let minConfidence = 0.3;
       let maxSuggestions = 10;
 
-      if (options) {
+      if (options !== undefined) {
+        if (options === null || typeof options !== "object" || Array.isArray(options)) {
+          return res.status(400).json({
+            success: false,
+            error: "options must be a plain object",
+          } as SuggestLinksAPIErrorResponse);
+        }
+
         if (options.minConfidence !== undefined) {
           const conf = options.minConfidence;
           if (typeof conf !== "number" || !Number.isFinite(conf) || conf < 0 || conf > 1) {
@@ -608,12 +622,13 @@ export function createGraphRouter(notesDir: string): Router {
         }
       }
 
-      // Security: Prevent path traversal attacks
-      const absoluteNotesDir = path.resolve(notesDir);
+      // Security: Expand ~ and resolve paths
+      const expandedNotesDir = expandPath(notesDir);
+      const absoluteNotesDir = path.resolve(expandedNotesDir);
       const absoluteNotePath = path.resolve(absoluteNotesDir, trimmedPath);
-      const relativeNotePath = path.relative(absoluteNotesDir, absoluteNotePath);
 
-      // Check if the path escapes notesDir
+      // Check if the path escapes notesDir (string-based check first)
+      const relativeNotePath = path.relative(absoluteNotesDir, absoluteNotePath);
       if (relativeNotePath.startsWith("..") || path.isAbsolute(relativeNotePath)) {
         return res.status(400).json({
           success: false,
@@ -621,13 +636,23 @@ export function createGraphRouter(notesDir: string): Router {
         } as SuggestLinksAPIErrorResponse);
       }
 
-      // Check if the note exists
+      // Check if the note exists and resolve symlinks for security
       try {
         const stat = await fs.stat(absoluteNotePath);
         if (!stat.isFile()) {
           return res.status(404).json({
             success: false,
             error: `Note not found: ${trimmedPath}`,
+          } as SuggestLinksAPIErrorResponse);
+        }
+
+        // Security: Resolve symlinks and verify real path is still within notesDir
+        const realNotePath = await fs.realpath(absoluteNotePath);
+        const realNotesDir = await fs.realpath(absoluteNotesDir);
+        if (!realNotePath.startsWith(realNotesDir + path.sep) && realNotePath !== realNotesDir) {
+          return res.status(400).json({
+            success: false,
+            error: "Note path must be inside the notes directory",
           } as SuggestLinksAPIErrorResponse);
         }
       } catch (err) {
@@ -641,19 +666,22 @@ export function createGraphRouter(notesDir: string): Router {
       }
 
       // Get link suggestions
-      const suggestions = await suggestLinks(relativeNotePath, notesDir, {
+      const suggestions = await suggestLinks(relativeNotePath, expandedNotesDir, {
         minConfidence,
         maxSuggestions,
       });
 
-      // Transform to API response format
+      // Transform to API response format (full LinkSuggestion schema)
       const response: SuggestLinksAPIResponse = {
         success: true,
         suggestions: suggestions.map((s: LinkSuggestion) => ({
           anchor: s.anchor,
+          anchorRange: s.anchorRange,
           suggestedTarget: s.suggestedTarget,
+          targetTitle: s.targetTitle || path.basename(s.suggestedTarget, ".md"),
           confidence: s.confidence,
           reason: s.reason || "",
+          reasonCode: s.reasonCode || "related",
         })),
         count: suggestions.length,
       };
