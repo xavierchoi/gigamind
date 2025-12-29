@@ -28,11 +28,17 @@ export interface LinkSuggestion {
   /** 제안된 링크 대상 노트 경로 */
   suggestedTarget: string;
 
+  /** 대상 노트 제목 (frontmatter title 또는 파일명) */
+  targetTitle?: string;
+
   /** 제안 신뢰도 (0~1) */
   confidence: number;
 
   /** 제안 이유 (선택) */
   reason?: string;
+
+  /** 제안 이유 코드 (UI용) */
+  reasonCode?: MatchType | "related";
 }
 
 /**

@@ -219,8 +219,10 @@ export async function suggestLinks(
           anchor: anchor.text,
           anchorRange: anchor.range,
           suggestedTarget: target.notePath,
+          targetTitle: target.noteTitle,
           confidence,
           reason: getReasonText(target.matchType, target.noteTitle),
+          reasonCode: target.matchType,
         });
 
         // 각 앵커당 하나의 제안만 추가

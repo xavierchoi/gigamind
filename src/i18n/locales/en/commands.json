@@ -105,6 +105,39 @@
   "ambiguous_command": {
     "message": "Multiple commands match /{{command}}: {{matches}}\nPlease be more specific."
   },
+  "suggest_links": {
+    "description": "Suggest links for a note",
+    "title": "Link suggestions for {{notePath}}",
+    "no_suggestions": "No suggestions for {{notePath}}.",
+    "no_config": "Notes directory not configured.",
+    "analyzing": "Analyzing note...",
+    "error": "Error during link suggestion: {{error}}",
+    "enter_path": "Please enter a note path.",
+    "invalid_path": "Note path must be inside your notes directory.",
+    "not_found": "Note not found: {{notePath}}",
+    "min_confidence_missing": "--min-confidence requires a value between 0 and 1.",
+    "min_confidence_invalid": "Invalid --min-confidence value: {{value}}. Use a number between 0 and 1.",
+    "usage_title": "Usage",
+    "examples": {
+      "title": "Examples:"
+    },
+    "help_text": "I'll find text in your note that could be linked to other notes!",
+    "total": "Total {{count}} link suggestions",
+    "table": {
+      "anchor": "Anchor",
+      "target": "Target",
+      "confidence": "Confidence",
+      "reason": "Reason"
+    },
+    "reasons": {
+      "exact_title": "Exact match with note title \"{{noteTitle}}\"",
+      "alias_match": "Matches alias of \"{{noteTitle}}\"",
+      "partial_title": "Partial match with \"{{noteTitle}}\"",
+      "header_match": "Matches header in \"{{noteTitle}}\"",
+      "semantic": "Semantically related to \"{{noteTitle}}\"",
+      "related": "Related to \"{{noteTitle}}\""
+    }
+  },
   "welcome_message": {
     "setup_complete": "Setup complete!",
     "setup_complete_with_name": "Setup complete, {{name}}!",

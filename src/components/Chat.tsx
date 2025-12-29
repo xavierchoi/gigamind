@@ -26,6 +26,7 @@ function getSlashCommands() {
     { command: "/session export", description: t("commands:session.export_description") },
     { command: "/graph", description: t("commands:graph.description") },
     { command: "/sync", description: t("commands:sync.description") },
+    { command: "/suggest-links", description: t("commands:suggest_links.description") },
   ];
 }
 
