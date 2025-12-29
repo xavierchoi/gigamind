@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2025-12-29
+
+### Added
+
+#### Eval Tool (Phase 1-4)
+- Search evaluation with IR metrics: Hit@K, MRR, NDCG, Recall
+- Unanswerable query detection with precision/recall/F1 metrics
+- Link suggestion evaluation (Precision@K, Recall@K, Novelty)
+- Dataset generators: `generate-queries` and `generate-links`
+- Snapshot comparison for regression testing
+- Multi-format output: JSON and Markdown reports
+
+#### Local Embeddings
+- Transformers.js integration for offline embedding
+- Support for bge-m3 (multilingual, 1024d) and MiniLM models
+- Automatic model download and caching
+- EmbeddingProvider abstraction layer
+
+#### Link Suggestion System
+- Anchor candidate extraction from note content
+- RAG-based target note matching
+- `suggestLinks()` API for programmatic access
+
+### Fixed
+- LanceDB Vector to Array conversion for cosine similarity
+- Math.floor issue in links generator for small datasets
+- baseScore/finalScore separation in RAGSearchResult
+
 ## [0.4.7] - 2025-12-26
 
 ### Added
