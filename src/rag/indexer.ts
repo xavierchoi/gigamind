@@ -3,7 +3,7 @@
  * Handles full reindexing, incremental updates, and progress tracking.
  *
  * Integrates with:
- * - EmbeddingService: OpenAI text-embedding-3-small embeddings
+ * - EmbeddingService: Local embedding model (via Ollama/llama.cpp)
  * - DocumentChunker: Korean/English sentence-aware chunking
  * - Graph Analyzer: Connection count for centrality scoring
  */
@@ -16,7 +16,7 @@ import { parseNote } from "../utils/frontmatter.js";
 import { analyzeNoteGraph } from "../utils/graph/analyzer.js";
 import type { VectorDocument, IVectorStore } from "./types.js";
 import { InMemoryVectorStore } from "./vectorStore.js";
-import { EmbeddingService as ActualEmbeddingService } from "./embeddings.js";
+import { EmbeddingService as ActualEmbeddingService } from "./embeddings/index.js";
 import { DocumentChunker as ActualDocumentChunker, type Chunk } from "./chunker.js";
 
 /**
@@ -97,12 +97,21 @@ export interface DocumentChunkerInterface {
  */
 class EmbeddingServiceAdapter implements EmbeddingServiceInterface {
   private service: ActualEmbeddingService;
+  private initialized = false;
 
   constructor() {
     this.service = new ActualEmbeddingService();
   }
 
+  private async ensureInitialized(): Promise<void> {
+    if (!this.initialized) {
+      await this.service.initialize();
+      this.initialized = true;
+    }
+  }
+
   async embedBatch(texts: string[]): Promise<Array<{ vector: number[] }>> {
+    await this.ensureInitialized();
     return this.service.embedBatch(texts);
   }
 }
@@ -115,7 +124,7 @@ export interface RAGIndexerConfig {
   notesDir: string;
   /** Path to store the vector database (optional, used when vectorStore not provided) */
   dbPath?: string;
-  /** Custom embedding service (optional, uses OpenAI by default) */
+  /** Custom embedding service (optional, uses local model by default) */
   embeddingService?: EmbeddingServiceInterface;
   /** Custom document chunker (optional, uses default Korean/English chunker) */
   chunker?: DocumentChunkerInterface;
@@ -513,7 +522,7 @@ export class RAGIndexer {
    * - Metadata count vs document count consistency
    * - Orphaned chunks (documents without corresponding metadata)
    * - Missing chunks (metadata entries without corresponding documents)
-   * - Embedding dimension consistency (all should be 1536)
+   * - Embedding dimension consistency (all embeddings should have the same dimension)
    *
    * @returns Validation result object with details about any issues found
    */
@@ -562,11 +571,15 @@ export class RAGIndexer {
       }
     }
 
-    // Check embedding dimension consistency (OpenAI text-embedding-3-small uses 1536 dimensions)
-    const expectedDimension = 1536;
+    // Check embedding dimension consistency dynamically
+    // The expected dimension is determined from the first valid embedding
+    let expectedDimension: number | null = null;
     for (const doc of documents) {
       if (doc.embedding && doc.embedding.length > 0) {
-        if (doc.embedding.length !== expectedDimension) {
+        if (expectedDimension === null) {
+          // Set expected dimension from first valid embedding
+          expectedDimension = doc.embedding.length;
+        } else if (doc.embedding.length !== expectedDimension) {
           dimensionMismatches++;
           if (dimensionMismatches <= 5) {
             // Only log first 5 mismatches to avoid spam

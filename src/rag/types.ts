@@ -20,9 +20,10 @@ export const RAG_SCHEMA_VERSION = 1;
  * 임베딩 설정 스키마
  */
 export const EmbeddingConfigSchema = z.object({
-  model: z.enum(["text-embedding-3-small", "voyage-3-lite"]),
+  modelKey: z.string().default("bge-m3"),
   dimensions: z.number().positive(),
-  batchSize: z.number().positive(),
+  batchSize: z.number().positive().default(32),
+  cacheDir: z.string().optional(),
 });
 
 /**
@@ -76,7 +77,8 @@ export const RetrievalResultSchema = z.object({
   notePath: z.string(),
   noteTitle: z.string(),
   chunks: z.array(ChunkResultSchema),
-  finalScore: z.number(),
+  baseScore: z.number(), // 리랭킹 전 점수 (0-1, unanswerable 판정용)
+  finalScore: z.number(), // 리랭킹 후 점수 (순위 결정용, 1.0 초과 가능)
   confidence: z.number().min(0).max(1),
   graphCentrality: z.number().nonnegative(),
 });
@@ -151,9 +153,10 @@ export function isRagSchemaVersionCompatible(version: number): boolean {
 // ============================================================================
 
 export interface EmbeddingConfig {
-  model: "text-embedding-3-small" | "voyage-3-lite";
+  modelKey: string; // 예: 'bge-m3', 'all-MiniLM-L6-v2'
   dimensions: number;
   batchSize: number;
+  cacheDir?: string;
 }
 
 export interface VectorDocument {
@@ -184,6 +187,9 @@ export interface RetrievalResult {
   notePath: string;
   noteTitle: string;
   chunks: Array<{ content: string; score: number; chunkIndex: number }>;
+  /** 리랭킹 전 점수 (0-1, unanswerable 판정용) */
+  baseScore: number;
+  /** 리랭킹 후 점수 (순위 결정용, 1.0 초과 가능) */
   finalScore: number;
   confidence: number;
   graphCentrality: number;

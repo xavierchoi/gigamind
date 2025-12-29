@@ -851,7 +851,7 @@ export async function executeRAGSearch(
 
     // 결과 포맷팅
     const formatted = results.map((r, i) => {
-      const scorePercent = (r.score * 100).toFixed(1);
+      const scorePercent = (r.finalScore * 100).toFixed(1);
       const preview = r.content.slice(0, 200).replace(/\n/g, " ");
       return `${i + 1}. **${r.title}** (관련도: ${scorePercent}%)\n   경로: ${r.notePath}\n   ${preview}...`;
     }).join("\n\n");
