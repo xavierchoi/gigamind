@@ -1,7 +1,7 @@
 /**
  * Local Embedding Provider
  *
- * Transformers.js를 사용한 로컬 임베딩 프로바이더 구현
+ * Local embedding provider implementation using Transformers.js
  */
 
 import type { IEmbeddingProvider } from "../provider.js";
@@ -25,15 +25,15 @@ import {
 // ============================================================================
 
 interface LocalProviderOptions {
-  /** 캐시 디렉토리 경로 */
+  /** Cache directory path */
   cacheDir?: string;
-  /** 배치 크기 */
+  /** Batch size */
   batchSize?: number;
-  /** 진행률 콜백 */
+  /** Progress callback */
   onProgress?: ProgressCallback;
 }
 
-// Transformers.js 타입 (동적 import를 위한 선언)
+// Transformers.js type (declaration for dynamic import)
 type Pipeline = (input: string | string[], options?: { pooling?: string; normalize?: boolean }) => Promise<{ data: Float32Array; dims: number[] }>;
 
 // ============================================================================
@@ -41,10 +41,10 @@ type Pipeline = (input: string | string[], options?: { pooling?: string; normali
 // ============================================================================
 
 /**
- * 로컬 임베딩 프로바이더
+ * Local Embedding Provider
  *
- * Transformers.js를 사용하여 브라우저/Node.js 환경에서
- * 로컬로 텍스트 임베딩을 생성합니다.
+ * Generates text embeddings locally in browser/Node.js environments
+ * using Transformers.js.
  */
 export class LocalEmbeddingProvider implements IEmbeddingProvider {
   public readonly name = "local-transformers";
@@ -63,7 +63,7 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
     if (!isValidModelKey(modelKey)) {
       const validKeys = Object.keys(SUPPORTED_MODELS).join(', ');
       throw new EmbeddingError(
-        `지원하지 않는 모델: ${modelKey}. 사용 가능한 모델: ${validKeys}`,
+        `Unsupported model: ${modelKey}. Available models: ${validKeys}`,
         'unsupported_model'
       );
     }
@@ -79,13 +79,13 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
   }
 
   /**
-   * 프로바이더 초기화
-   * Transformers.js 파이프라인을 로드합니다.
+   * Initialize the provider
+   * Loads the Transformers.js pipeline.
    *
-   * @param onProgress - 진행 상황 콜백 (선택사항, 생성자에서 전달된 콜백보다 우선)
+   * @param onProgress - Progress callback (optional, takes priority over callback passed in constructor)
    */
   async initialize(onProgress?: ProgressCallback): Promise<void> {
-    // 매개변수로 전달된 콜백이 있으면 우선 사용
+    // Use callback from parameter if provided, otherwise use the constructor callback
     const progressCallback = onProgress ?? this.onProgress;
 
     if (this.initialized && this.pipeline) {
@@ -95,11 +95,11 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
     progressCallback?.({ status: "loading", progress: 0 });
 
     try {
-      // 동적 import로 transformers.js 로드
-      // @huggingface/transformers는 @xenova/transformers의 공식 후속 패키지
+      // Load transformers.js via dynamic import
+      // @huggingface/transformers is the official successor to @xenova/transformers
       const { pipeline } = await import("@huggingface/transformers");
 
-      // Feature extraction 파이프라인 생성
+      // Create feature extraction pipeline
       this.pipeline = (await pipeline(
         "feature-extraction",
         this.modelConfig.id,
@@ -131,39 +131,39 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
         error instanceof Error ? error.message : String(error);
       progressCallback?.({ status: "error", progress: 0, error: errorMessage });
       throw new EmbeddingError(
-        `모델 로드 실패: ${errorMessage}`,
+        `Failed to load model: ${errorMessage}`,
         "model_load_failed"
       );
     }
   }
 
   /**
-   * 초기화 상태 확인
+   * Check initialization status
    */
   isReady(): boolean {
     return this.initialized && this.pipeline !== null;
   }
 
   /**
-   * 단일 텍스트 임베딩
+   * Single text embedding
    */
   async embed(text: string): Promise<number[]> {
     if (!this.isReady()) {
       throw new EmbeddingError(
-        '프로바이더가 초기화되지 않았습니다. initialize()를 먼저 호출하세요.',
+        'Provider is not initialized. Call initialize() first.',
         'not_initialized'
       );
     }
 
     if (!text || typeof text !== 'string') {
       throw new EmbeddingError(
-        '유효하지 않은 입력: 텍스트는 비어있지 않은 문자열이어야 합니다.',
+        'Invalid input: text must be a non-empty string.',
         'invalid_input'
       );
     }
 
     try {
-      // E5 모델은 "query: " 또는 "passage: " 접두사 권장
+      // E5 models recommend "query: " or "passage: " prefixes
       const formattedText = this.formatTextForModel(text);
       const output = await this.pipeline!(formattedText, {
         pooling: this.modelConfig.pooling,
@@ -173,19 +173,19 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       throw new EmbeddingError(
-        `임베딩 생성 실패: ${errorMessage}`,
+        `Failed to generate embedding: ${errorMessage}`,
         'inference_failed'
       );
     }
   }
 
   /**
-   * 배치 텍스트 임베딩
+   * Batch text embedding
    */
   async embedBatch(texts: string[]): Promise<number[][]> {
     if (!this.isReady()) {
       throw new EmbeddingError(
-        '프로바이더가 초기화되지 않았습니다. initialize()를 먼저 호출하세요.',
+        'Provider is not initialized. Call initialize() first.',
         'not_initialized'
       );
     }
@@ -194,11 +194,11 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
       return [];
     }
 
-    // 유효하지 않은 텍스트 확인
+    // Validate input texts
     for (let i = 0; i < texts.length; i++) {
       if (!texts[i] || typeof texts[i] !== 'string') {
         throw new EmbeddingError(
-          `유효하지 않은 입력 at index ${i}: 텍스트는 비어있지 않은 문자열이어야 합니다.`,
+          `Invalid input at index ${i}: text must be a non-empty string.`,
           'invalid_input'
         );
       }
@@ -206,7 +206,7 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
 
     const results: number[][] = [];
 
-    // 배치 처리
+    // Process batches
     for (let i = 0; i < texts.length; i += this.batchSize) {
       const batch = texts.slice(i, i + this.batchSize);
       const formattedBatch = batch.map((t) => this.formatTextForModel(t));
@@ -217,13 +217,13 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
           normalize: this.modelConfig.normalize,
         });
 
-        // 배치 결과 분리
+        // Extract individual vectors from batch results
         const batchResults = this.extractBatchResults(output.data, batch.length, this.dimensions);
         results.push(...batchResults);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         throw new EmbeddingError(
-          `배치 임베딩 생성 실패 (batch ${Math.floor(i / this.batchSize)}): ${errorMessage}`,
+          `Failed to generate batch embeddings (batch ${Math.floor(i / this.batchSize)}): ${errorMessage}`,
           'inference_failed'
         );
       }
@@ -233,7 +233,7 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
   }
 
   /**
-   * 상세 임베딩 결과 생성
+   * Generate detailed embedding result with metadata
    */
   async embedWithMetadata(text: string): Promise<EmbeddingResult> {
     const vector = await this.embed(text);
@@ -245,7 +245,7 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
   }
 
   /**
-   * 프로바이더 상태 조회
+   * Get provider status
    */
   getStatus(): EmbeddingProviderStatus {
     return {
@@ -257,7 +257,7 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
   }
 
   /**
-   * 리소스 정리
+   * Clean up resources
    */
   async dispose(): Promise<void> {
     this.pipeline = null;
@@ -269,27 +269,27 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
   // ============================================================================
 
   /**
-   * 토큰 수 추정 (대략적인 계산)
+   * Estimate token count (approximate calculation)
    */
   private estimateTokens(text: string): number {
-    // 대략 4자당 1토큰으로 추정
+    // Estimate approximately 1 token per 4 characters
     return Math.ceil(text.length / 4);
   }
 
   /**
-   * E5 모델을 위한 텍스트 포맷팅
-   * E5 모델은 "query: " 또는 "passage: " 접두사를 사용할 때 최적의 성능을 발휘합니다.
+   * Text formatting for E5 models
+   * E5 models perform optimally when using "query: " or "passage: " prefixes.
    */
   private formatTextForModel(text: string): string {
-    // E5 모델의 경우 접두사 추가
-    if (this.modelId.includes('e5')) {
+    // Add prefix for E5 models
+    if (/\be5[-_]/i.test(this.modelId)) {
       return `passage: ${text}`;
     }
     return text;
   }
 
   /**
-   * 배치 결과에서 개별 벡터 추출
+   * Extract individual vectors from batch results
    */
   private extractBatchResults(
     data: Float32Array,
@@ -313,11 +313,11 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
 // ============================================================================
 
 /**
- * 로컬 임베딩 프로바이더 생성 헬퍼 함수
+ * Factory function to create a local embedding provider
  *
- * @param modelKey - 사용할 모델 키 (기본값: 'bge-m3')
- * @param options - 프로바이더 옵션
- * @returns LocalEmbeddingProvider 인스턴스
+ * @param modelKey - Model key to use (default: 'bge-m3')
+ * @param options - Provider options
+ * @returns LocalEmbeddingProvider instance
  */
 export function createLocalEmbeddingProvider(
   modelKey: string = DEFAULT_MODEL_KEY,

@@ -171,9 +171,6 @@ function removeLinksByIndices(
     newRange: { start: number; end: number };
   }> = [];
 
-  // Track cumulative offset adjustment
-  let cumulativeOffset = 0;
-
   for (const { link, index } of sortedLinks) {
     if (!indicesToRemove.has(index)) {
       continue;
@@ -200,9 +197,6 @@ function removeLinksByIndices(
       link,
       newRange: { start: newStart, end: newEnd },
     });
-
-    // Update cumulative offset for earlier links
-    cumulativeOffset += originalLength - newLength;
   }
 
   // Reverse to get chronological order
