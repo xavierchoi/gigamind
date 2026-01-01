@@ -12,7 +12,7 @@
 | 평가 유형 | 필수 기능 | 상태 |
 |-----------|-----------|------|
 | 검색 평가 (search) | RAG 시스템 (임베딩 + 벡터 검색) | ✅ 구현 완료 |
-| 링크 평가 (links) | 자동 링크 제안 기능 | ❌ 미구현 (Section 10 참조) |
+| 링크 평가 (links) | 자동 링크 제안 기능 | ✅ 구현 완료 |
 
 > **참고**: 링크 평가를 실행하려면 먼저 Section 10의 Link Suggestion Feature를 구현해야 합니다.
 
@@ -644,6 +644,8 @@ interface EvalSnapshot {
 ---
 
 ## 10. 링크 제안 기능 요구사항 (Link Suggestion Feature)
+
+> **Status**: Implementation completed as of v0.5.0. See `src/links/suggester.ts` for the `suggestLinks()` API.
 
 > **중요**: 이 섹션은 링크 평가(eval links)를 수행하기 위해 선행 구현이 필요한 기능입니다.
 

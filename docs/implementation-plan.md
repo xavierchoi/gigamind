@@ -1,5 +1,7 @@
 # GigaMind Eval Tool 구현 계획
 
+> **Status**: All phases completed as of v0.5.0
+
 ## Overview
 
 - **목표**: `eval-spec.md` 기반 검색/링크 평가 도구 구현
@@ -15,19 +17,19 @@
 
 ### Tasks
 
-- [ ] **Task 1.1**: EvalCommand 기본 구조
+- [x] **Task 1.1**: EvalCommand 기본 구조
   - 복잡도: 낮음
-- [ ] **Task 1.2**: queries.jsonl 스키마 정의 (Zod)
+- [x] **Task 1.2**: queries.jsonl 스키마 정의 (Zod)
   - 복잡도: 낮음
-- [ ] **Task 1.3**: 데이터셋 로더/검증기
+- [x] **Task 1.3**: 데이터셋 로더/검증기
   - 복잡도: 낮음
-- [ ] **Task 1.4**: RAGService 연동 평가 러너
+- [x] **Task 1.4**: RAGService 연동 평가 러너
   - 복잡도: 중간
-- [ ] **Task 1.5**: Hit@K, MRR, Recall@K 메트릭 구현
+- [x] **Task 1.5**: Hit@K, MRR, Recall@K 메트릭 구현
   - 복잡도: 중간
-- [ ] **Task 1.6**: 기본 리포트 생성 (JSON + MD)
+- [x] **Task 1.6**: 기본 리포트 생성 (JSON + MD)
   - 복잡도: 중간
-- [ ] **Task 1.7**: CLI 옵션 파싱 (--dataset, --notes, --out, --topk, --mode)
+- [x] **Task 1.7**: CLI 옵션 파싱 (--dataset, --notes, --out, --topk, --mode)
   - 복잡도: 낮음
 
 ---
@@ -39,21 +41,21 @@
 
 ### Tasks
 
-- [ ] **Task 2.1**: NDCG@K 메트릭 구현
+- [x] **Task 2.1**: NDCG@K 메트릭 구현
   - 복잡도: 중간
-- [ ] **Task 2.2**: Unanswerable 판정 로직
+- [x] **Task 2.2**: Unanswerable 판정 로직
   - 복잡도: 중간
-- [ ] **Task 2.3**: Latency 측정 (p50/p95)
+- [x] **Task 2.3**: Latency 측정 (p50/p95)
   - 복잡도: 낮음
-- [ ] **Task 2.4**: --warmup, --cold-start 옵션
+- [x] **Task 2.4**: --warmup, --cold-start 옵션
   - 복잡도: 낮음
-- [ ] **Task 2.5**: --save-snapshot, --compare 회귀 비교
+- [x] **Task 2.5**: --save-snapshot, --compare 회귀 비교
   - 복잡도: 중간
-- [ ] **Task 2.6**: --fail-on-regression exit code
+- [x] **Task 2.6**: --fail-on-regression exit code
   - 복잡도: 낮음
-- [ ] **Task 2.7**: 데이터셋 자동 생성 (generate-queries)
+- [x] **Task 2.7**: 데이터셋 자동 생성 (generate-queries)
   - 복잡도: 중간
-- [ ] **Task 2.8**: Span-level 메트릭 (optional)
+- [x] **Task 2.8**: Span-level 메트릭 (optional)
   - 복잡도: 높음
 
 ---
@@ -65,17 +67,17 @@
 
 ### Tasks
 
-- [ ] **Task 3.1**: LinkSuggestion 타입 정의
+- [x] **Task 3.1**: LinkSuggestion 타입 정의
   - 복잡도: 낮음
-- [ ] **Task 3.2**: RAG 기반 링크 후보 검색
+- [x] **Task 3.2**: RAG 기반 링크 후보 검색
   - 복잡도: 중간
-- [ ] **Task 3.3**: 앵커 위치 식별 알고리즘
+- [x] **Task 3.3**: 앵커 위치 식별 알고리즘
   - 복잡도: 높음
-- [ ] **Task 3.4**: 신뢰도 점수 계산
+- [x] **Task 3.4**: 신뢰도 점수 계산
   - 복잡도: 중간
-- [ ] **Task 3.5**: suggestLinks() API 구현
+- [x] **Task 3.5**: suggestLinks() API 구현
   - 복잡도: 중간
-- [ ] **Task 3.6**: /suggest-links 커맨드 (optional)
+- [x] **Task 3.6**: /suggest-links 커맨드 (optional)
   - 복잡도: 낮음
 
 ---
@@ -87,17 +89,17 @@
 
 ### Tasks
 
-- [ ] **Task 4.1**: links.jsonl 스키마 정의 (Zod)
+- [x] **Task 4.1**: links.jsonl 스키마 정의 (Zod)
   - 복잡도: 낮음
-- [ ] **Task 4.2**: 링크 평가 러너
+- [x] **Task 4.2**: 링크 평가 러너
   - 복잡도: 중간
-- [ ] **Task 4.3**: Precision@K, Recall@K 메트릭
+- [x] **Task 4.3**: Precision@K, Recall@K 메트릭
   - 복잡도: 중간
-- [ ] **Task 4.4**: Novelty 메트릭
+- [x] **Task 4.4**: Novelty 메트릭
   - 복잡도: 낮음
-- [ ] **Task 4.5**: 데이터셋 자동 생성 (generate-links)
+- [x] **Task 4.5**: 데이터셋 자동 생성 (generate-links)
   - 복잡도: 중간
-- [ ] **Task 4.6**: 통합 리포트
+- [x] **Task 4.6**: 통합 리포트
   - 복잡도: 중간
 
 ---

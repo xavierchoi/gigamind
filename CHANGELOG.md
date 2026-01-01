@@ -28,6 +28,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - RAG-based target note matching
 - `suggestLinks()` API for programmatic access
 
+#### Link Suggestion UI
+- `/suggest-links` command with aliases `/sl`, `/links`
+- REST API endpoint `POST /api/suggest-links`
+
 ### Fixed
 - LanceDB Vector to Array conversion for cosine similarity
 - Math.floor issue in links generator for small datasets
