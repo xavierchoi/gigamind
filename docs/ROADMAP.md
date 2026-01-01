@@ -41,31 +41,27 @@ async function suggestLinks(
 
 **명령어 스펙**:
 ```bash
-/suggest-links <note-path>           # 특정 노트에 대한 링크 제안
-/suggest-links --all                 # 전체 노트 스캔
-/suggest-links --min-confidence 0.5  # 최소 신뢰도 필터
+/suggest-links <note-path>                      # 특정 노트에 대한 링크 제안
+/suggest-links <note-path> --min-confidence 0.5 # 최소 신뢰도 필터
 ```
+Aliases: `/sl`, `/links`
 
 **출력 예시**:
 ```
-📎 Link Suggestions for "project-alpha.md"
+## Link suggestions for project-alpha.md
 
-1. "RAG System" (confidence: 0.92)
-   → Link to: rag-system.md
-   Reason: Exact title match
+| # | Anchor | Target | Confidence | Reason |
+|---|--------|--------|------------|--------|
+| 1 | "RAG System" | rag-system | 92% | Exact match with note title "RAG System" |
+| 2 | "embedding model" | local-embeddings | 78% | Semantically related to "Local Embeddings" |
 
-2. "embedding model" (confidence: 0.78)
-   → Link to: local-embeddings.md
-   Reason: Semantic similarity
-
-Apply suggestions? [y/N/select]
+Total 2 link suggestions
 ```
 
-**구현 단계**:
-1. `SuggestLinksCommand` 클래스 생성 (BaseCommand 확장)
-2. `suggestLinks()` API 호출
-3. 결과 포맷팅 (MarkdownText 사용)
-4. 선택적 적용 기능 (인터랙티브)
+**구현 상태**:
+- ✅ `SuggestLinksCommand` 구현 및 등록
+- ✅ i18n/출력 포맷 적용 (Markdown table)
+- ⏳ 선택적 적용 기능 (인터랙티브) - 미구현
 
 #### 1.2 Graph Server REST API ✅
 **목표**: 웹 UI에서 링크 제안 접근
@@ -93,12 +89,9 @@ Response (Success):
   "suggestions": [
     {
       "anchor": "RAG System",
-      "anchorRange": { "start": 120, "end": 130 },
       "suggestedTarget": "rag-system.md",
-      "targetTitle": "RAG System",
       "confidence": 0.92,
-      "reason": "Exact match with note title",
-      "reasonCode": "exact_title"
+      "reason": "Exact match with note title"
     }
   ],
   "count": 1
@@ -112,9 +105,8 @@ Response (Error):
 ```
 
 **보안**:
-- Path traversal 공격 방지 (`../`, 절대 경로 차단)
-- `fs.realpath`로 symlink를 통한 vault 외부 접근 차단
-- `expandPath`로 `~` 경로 확장
+- `path.resolve`/`path.relative` 기반 notesDir 외부 경로 차단
+- 절대 경로 및 `../` 경로 차단
 
 ---
 
@@ -217,16 +209,14 @@ gigamind eval search --dataset benchmark/queries.jsonl \
 ## 권장 구현 순서
 
 ```
-Phase 1.1 → Phase 2.1 → Phase 1.2 → Phase 3.1 → Phase 3.2
-    ↓           ↓           ↓           ↓
- /suggest   벤치마크     REST API    튜닝
-  명령어     검증        웹 연동     최적화
+Phase 2.1 → Phase 2.2 → Phase 3.1 → Phase 3.2
+    ↓           ↓           ↓
+벤치마크    다국어      튜닝/청킹
 ```
 
-**1주차**: Phase 1.1 (Link Suggestion UI 명령어)
-**2주차**: Phase 2.1 (Real Vault 벤치마크)
-**3주차**: Phase 1.2 + 3.1 (REST API + 튜닝)
-**4주차**: Phase 3.2 (청킹 개선)
+**완료**: Phase 1.1, Phase 1.2  
+**다음**: Phase 2.1 (Real Vault 벤치마크)  
+**이후**: Phase 2.2 → Phase 3.1 → Phase 3.2
 
 ---
 
@@ -256,141 +246,6 @@ Phase 1.1 → Phase 2.1 → Phase 1.2 → Phase 3.1 → Phase 3.2
 ---
 
 ## 세션 시작 프롬프트 예시
-
-### Phase 1.1 시작용 (🎯 다음 구현 대상)
-```
-GigaMind에 `/suggest-links` 명령어를 추가해주세요.
-
-참조:
-- @src/links/suggester.ts - suggestLinks() API
-- @src/commands/BaseCommand.ts - 명령어 패턴
-- @src/commands/SearchCommand.ts - 유사 명령어 예시
-
-요구사항:
-1. `/suggest-links <note-path>` 형식
-2. 결과를 마크다운 테이블로 출력
-3. confidence 기준 정렬
-4. i18n 지원 (한국어/영어)
-```
-
----
-
-## 🎯 Phase 1.1 상세 구현 가이드
-
-### 생성할 파일
-```
-src/commands/SuggestLinksCommand.ts  (신규)
-src/i18n/locales/ko/commands.json    (수정 - 번역 추가)
-src/i18n/locales/en/commands.json    (수정 - 번역 추가)
-```
-
-### 수정할 파일
-```
-src/commands/index.ts                (export 추가)
-src/app.tsx                          (registry 등록, ~line 184-197)
-src/components/Chat.tsx              (command hint 추가, ~line 14-30)
-```
-
-### SuggestLinksCommand 구현 템플릿
-
-```typescript
-// src/commands/SuggestLinksCommand.ts
-import { BaseCommand } from "./BaseCommand.js";
-import type { CommandContext, CommandResult } from "./types.js";
-import { suggestLinks, type SuggestLinksOptions } from "../links/index.js";
-import { t } from "../i18n/index.js";
-
-export class SuggestLinksCommand extends BaseCommand {
-  name = "suggest-links";
-  aliases = ["sl", "links"];
-  description = "Suggest links for a note";
-  usage = "/suggest-links <note-path> [--min-confidence <0.0-1.0>]";
-  requiresArgs = true;
-  category = "notes" as const;
-
-  async execute(args: string[], context: CommandContext): Promise<CommandResult> {
-    if (!context.config?.notesDir) {
-      return this.error(t("commands:suggest_links.no_config"));
-    }
-
-    // Parse args
-    const notePath = args[0];
-    const minConfidence = this.parseMinConfidence(args);
-
-    // Get suggestions
-    const suggestions = await suggestLinks(notePath, context.config.notesDir, {
-      minConfidence,
-      maxSuggestions: 10,
-    });
-
-    // Format output
-    const output = this.formatSuggestions(suggestions, notePath);
-    return this.success(output);
-  }
-
-  private parseMinConfidence(args: string[]): number {
-    const idx = args.indexOf("--min-confidence");
-    if (idx !== -1 && args[idx + 1]) {
-      return parseFloat(args[idx + 1]);
-    }
-    return 0.3; // default
-  }
-
-  private formatSuggestions(suggestions: LinkSuggestion[], notePath: string): string {
-    if (suggestions.length === 0) {
-      return t("commands:suggest_links.no_suggestions", { notePath });
-    }
-
-    let output = `## 📎 ${t("commands:suggest_links.title", { notePath })}\n\n`;
-    output += `| # | Anchor | Target | Confidence | Reason |\n`;
-    output += `|---|--------|--------|------------|--------|\n`;
-
-    suggestions.forEach((s, i) => {
-      output += `| ${i + 1} | "${s.anchor}" | ${s.suggestedTarget} | ${(s.confidence * 100).toFixed(0)}% | ${s.reason || "-"} |\n`;
-    });
-
-    return output;
-  }
-}
-
-export const suggestLinksCommand = new SuggestLinksCommand();
-```
-
-### i18n 키 추가
-
-```json
-// ko/commands.json
-{
-  "suggest_links": {
-    "description": "노트에 대한 링크 제안",
-    "title": "{{notePath}}의 링크 제안",
-    "no_suggestions": "{{notePath}}에 대한 제안이 없습니다",
-    "no_config": "노트 디렉토리가 설정되지 않았습니다"
-  }
-}
-
-// en/commands.json
-{
-  "suggest_links": {
-    "description": "Suggest links for a note",
-    "title": "Link suggestions for {{notePath}}",
-    "no_suggestions": "No suggestions for {{notePath}}",
-    "no_config": "Notes directory not configured"
-  }
-}
-```
-
-### 테스트 방법
-
-```bash
-# 빌드
-npm run build
-
-# 실행 (GigaMind 내에서)
-/suggest-links project-alpha.md
-/suggest-links project-alpha.md --min-confidence 0.5
-/sl rag-system.md
-```
 
 ### Phase 2.1 시작용
 ```
