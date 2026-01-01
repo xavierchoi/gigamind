@@ -8,8 +8,12 @@ import { analyzeNoteGraph, getQuickStats } from "../../utils/graph/analyzer.js";
 import { normalizeNoteTitle } from "../../utils/graph/wikilinks.js";
 import { clusterDanglingLinks } from "../../utils/graph/clusterAnalyzer.js";
 import { mergeSimilarLinks } from "../../utils/graph/linkMerger.js";
+import { suggestLinks } from "../../links/index.js";
+import { expandPath } from "../../utils/config.js";
 import type { NoteGraphStats, BacklinkEntry, SimilarLinkCluster, MergeLinkResult } from "../../utils/graph/types.js";
+import type { LinkSuggestion } from "../../links/types.js";
 import path from "node:path";
+import fs from "node:fs/promises";
 
 /**
  * Graph node for API response
@@ -88,6 +92,45 @@ interface MergeSimilarLinksAPIResponse {
   linksReplaced: number;
   modifiedFiles: string[];
   errors: Record<string, string>;
+}
+
+/**
+ * Suggest links request body
+ */
+interface SuggestLinksAPIRequest {
+  notePath: string;
+  options?: {
+    minConfidence?: number;
+    maxSuggestions?: number;
+  };
+}
+
+/**
+ * Suggest links API response (success)
+ */
+interface SuggestLinksAPIResponse {
+  success: true;
+  suggestions: Array<{
+    anchor: string;
+    anchorRange: {
+      start: number;
+      end: number;
+    };
+    suggestedTarget: string;
+    targetTitle: string;
+    confidence: number;
+    reason: string;
+    reasonCode: string;
+  }>;
+  count: number;
+}
+
+/**
+ * Suggest links API error response
+ */
+interface SuggestLinksAPIErrorResponse {
+  success: false;
+  error: string;
 }
 
 /**
@@ -519,6 +562,137 @@ export function createGraphRouter(notesDir: string): Router {
     } catch (error) {
       console.error("Error merging similar links:", error);
       res.status(500).json({ error: "Failed to merge similar links" });
+    }
+  });
+
+  // POST /api/suggest-links - Suggest links for a note
+  router.post("/suggest-links", async (req: Request, res: Response) => {
+    try {
+      const { notePath, options } = req.body as SuggestLinksAPIRequest;
+
+      // Validate notePath is provided
+      if (!notePath || typeof notePath !== "string") {
+        return res.status(400).json({
+          success: false,
+          error: "notePath is required and must be a string",
+        } as SuggestLinksAPIErrorResponse);
+      }
+
+      // Validate notePath is not empty
+      const trimmedPath = notePath.trim();
+      if (!trimmedPath) {
+        return res.status(400).json({
+          success: false,
+          error: "notePath cannot be empty",
+        } as SuggestLinksAPIErrorResponse);
+      }
+
+      // Validate options is a plain object if provided
+      let minConfidence = 0.3;
+      let maxSuggestions = 10;
+
+      if (options !== undefined) {
+        if (options === null || typeof options !== "object" || Array.isArray(options)) {
+          return res.status(400).json({
+            success: false,
+            error: "options must be a plain object",
+          } as SuggestLinksAPIErrorResponse);
+        }
+
+        if (options.minConfidence !== undefined) {
+          const conf = options.minConfidence;
+          if (typeof conf !== "number" || !Number.isFinite(conf) || conf < 0 || conf > 1) {
+            return res.status(400).json({
+              success: false,
+              error: "minConfidence must be a number between 0 and 1",
+            } as SuggestLinksAPIErrorResponse);
+          }
+          minConfidence = conf;
+        }
+
+        if (options.maxSuggestions !== undefined) {
+          const max = options.maxSuggestions;
+          if (typeof max !== "number" || !Number.isInteger(max) || max < 1 || max > 100) {
+            return res.status(400).json({
+              success: false,
+              error: "maxSuggestions must be a positive integer between 1 and 100",
+            } as SuggestLinksAPIErrorResponse);
+          }
+          maxSuggestions = max;
+        }
+      }
+
+      // Security: Expand ~ and resolve paths
+      const expandedNotesDir = expandPath(notesDir);
+      const absoluteNotesDir = path.resolve(expandedNotesDir);
+      const absoluteNotePath = path.resolve(absoluteNotesDir, trimmedPath);
+
+      // Check if the path escapes notesDir (string-based check first)
+      const relativeNotePath = path.relative(absoluteNotesDir, absoluteNotePath);
+      if (relativeNotePath.startsWith("..") || path.isAbsolute(relativeNotePath)) {
+        return res.status(400).json({
+          success: false,
+          error: "Note path must be inside the notes directory",
+        } as SuggestLinksAPIErrorResponse);
+      }
+
+      // Check if the note exists and resolve symlinks for security
+      try {
+        const stat = await fs.stat(absoluteNotePath);
+        if (!stat.isFile()) {
+          return res.status(404).json({
+            success: false,
+            error: `Note not found: ${trimmedPath}`,
+          } as SuggestLinksAPIErrorResponse);
+        }
+
+        // Security: Resolve symlinks and verify real path is still within notesDir
+        const realNotePath = await fs.realpath(absoluteNotePath);
+        const realNotesDir = await fs.realpath(absoluteNotesDir);
+        if (!realNotePath.startsWith(realNotesDir + path.sep) && realNotePath !== realNotesDir) {
+          return res.status(400).json({
+            success: false,
+            error: "Note path must be inside the notes directory",
+          } as SuggestLinksAPIErrorResponse);
+        }
+      } catch (err) {
+        if (err instanceof Error && (err as NodeJS.ErrnoException).code === "ENOENT") {
+          return res.status(404).json({
+            success: false,
+            error: `Note not found: ${trimmedPath}`,
+          } as SuggestLinksAPIErrorResponse);
+        }
+        throw err;
+      }
+
+      // Get link suggestions
+      const suggestions = await suggestLinks(relativeNotePath, expandedNotesDir, {
+        minConfidence,
+        maxSuggestions,
+      });
+
+      // Transform to API response format (full LinkSuggestion schema)
+      const response: SuggestLinksAPIResponse = {
+        success: true,
+        suggestions: suggestions.map((s: LinkSuggestion) => ({
+          anchor: s.anchor,
+          anchorRange: s.anchorRange,
+          suggestedTarget: s.suggestedTarget,
+          targetTitle: s.targetTitle || path.basename(s.suggestedTarget, ".md"),
+          confidence: s.confidence,
+          reason: s.reason || "",
+          reasonCode: s.reasonCode || "related",
+        })),
+        count: suggestions.length,
+      };
+
+      res.json(response);
+    } catch (error) {
+      console.error("Error suggesting links:", error);
+      res.status(500).json({
+        success: false,
+        error: "Internal server error",
+      } as SuggestLinksAPIErrorResponse);
     }
   });
 
