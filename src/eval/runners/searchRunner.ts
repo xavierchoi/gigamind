@@ -330,6 +330,16 @@ export async function runSearchEval(
     usePersistentStorage: true,
   });
 
+  // Validate index before evaluation
+  const indexStats = await ragService.getStats();
+  console.log(`[SearchRunner] Index loaded: ${indexStats.documentCount} documents, ${indexStats.noteCount} notes`);
+
+  if (indexStats.documentCount === 0) {
+    throw new Error(
+      "Cannot run evaluation: Vector index is empty. Please run indexing first with 'gigamind index' command."
+    );
+  }
+
   // Load dataset
   const { queries, errors: loadErrors } = await loadDataset(mergedConfig.dataset);
 

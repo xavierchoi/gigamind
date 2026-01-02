@@ -268,6 +268,17 @@ export async function runLinksEval(
       notesDir: mergedConfig.notesDir,
       usePersistentStorage: true,
     });
+
+    // Validate index before evaluation
+    const indexStats = await ragService.getStats();
+    console.log(`[LinksRunner] Index loaded: ${indexStats.documentCount} documents, ${indexStats.noteCount} notes`);
+
+    if (indexStats.documentCount === 0) {
+      console.warn(
+        "[LinksRunner] Warning: Vector index is empty. Link suggestions may be less accurate. " +
+        "Run 'gigamind index' to build the index."
+      );
+    }
   } catch (error) {
     console.warn("[LinksRunner] RAG initialization failed, continuing without semantic search:", error);
   }
