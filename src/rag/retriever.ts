@@ -54,7 +54,7 @@ const DEFAULT_CONFIG: RetrievalConfig = {
   graphBoostFactor: 0.2,
   expandContext: true,
   hybridSearch: true,
-  keywordWeight: 0.3,
+  keywordWeight: 0.1,
 };
 
 /**

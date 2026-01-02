@@ -201,7 +201,7 @@ export class RAGService {
     };
 
     const keywordWeight =
-      opts.mode === "keyword" ? 1.0 : opts.mode === "semantic" ? 0 : 0.3;
+      opts.mode === "keyword" ? 1.0 : opts.mode === "semantic" ? 0 : 0.1;
 
     // Retriever 설정에 맞게 변환
     const retrievalConfig = {

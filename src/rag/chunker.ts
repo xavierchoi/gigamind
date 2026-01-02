@@ -37,6 +37,8 @@ export interface ChunkMetadata {
   headerLevel?: number;
   /** 헤더 텍스트 */
   headerText?: string;
+  /** 섹션 내 청크 인덱스 (0-based) */
+  sectionChunkIndex?: number;
   /** 청크가 코드 블록을 포함하는지 여부 */
   hasCodeBlock?: boolean;
   /** 코드 블록 언어 (여러 개일 경우 쉼표로 구분) */
@@ -395,6 +397,7 @@ export class DocumentChunker {
             hasHeader: !!section.header,
             headerLevel: section.header?.level,
             headerText: section.header?.text,
+            sectionChunkIndex: 0,
           },
         },
       ];
@@ -436,10 +439,9 @@ export class DocumentChunker {
           index: chunkIndex,
           metadata: {
             hasHeader: chunkIndex === startIndex && !!section.header,
-            headerLevel:
-              chunkIndex === startIndex ? section.header?.level : undefined,
-            headerText:
-              chunkIndex === startIndex ? section.header?.text : undefined,
+            headerLevel: section.header?.level,
+            headerText: section.header?.text,
+            sectionChunkIndex: chunkIndex - startIndex,
           },
         });
 
@@ -463,10 +465,9 @@ export class DocumentChunker {
         index: chunkIndex,
         metadata: {
           hasHeader: chunkIndex === startIndex && !!section.header,
-          headerLevel:
-            chunkIndex === startIndex ? section.header?.level : undefined,
-          headerText:
-            chunkIndex === startIndex ? section.header?.text : undefined,
+          headerLevel: section.header?.level,
+          headerText: section.header?.text,
+          sectionChunkIndex: chunkIndex - startIndex,
         },
       });
     }
@@ -865,6 +866,7 @@ export class DocumentChunker {
             hasHeader: !!section.header,
             headerLevel: section.header?.level,
             headerText: section.header?.text,
+            sectionChunkIndex: 0,
           },
         },
       ];
@@ -905,10 +907,9 @@ export class DocumentChunker {
           index: chunkIndex,
           metadata: {
             hasHeader: chunkIndex === startIndex && !!section.header,
-            headerLevel:
-              chunkIndex === startIndex ? section.header?.level : undefined,
-            headerText:
-              chunkIndex === startIndex ? section.header?.text : undefined,
+            headerLevel: section.header?.level,
+            headerText: section.header?.text,
+            sectionChunkIndex: chunkIndex - startIndex,
           },
         });
 
@@ -937,10 +938,9 @@ export class DocumentChunker {
         index: chunkIndex,
         metadata: {
           hasHeader: chunkIndex === startIndex && !!section.header,
-          headerLevel:
-            chunkIndex === startIndex ? section.header?.level : undefined,
-          headerText:
-            chunkIndex === startIndex ? section.header?.text : undefined,
+          headerLevel: section.header?.level,
+          headerText: section.header?.text,
+          sectionChunkIndex: chunkIndex - startIndex,
         },
       });
     }

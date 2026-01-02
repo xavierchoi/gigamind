@@ -13,7 +13,7 @@
 | 순서 | Phase | 작업 | 목적 | 상태 |
 |------|-------|------|------|------|
 | **1** | 4.3 | 증분 인덱싱 | 실험 속도 90%↑ | ⏳ 대기 |
-| **2** | 4.1 | 쿼리 확장 | Hit@1 38%→55% | ⏳ 대기 |
+| **2** | 4.1 | 쿼리 확장 | Hit@1 39%→55% | ⏳ 대기 |
 | **3** | 2.1 | 중형 vault (500개) | 확장성 검증 | ⏳ 대기 |
 | **4** | - | GPU 서버 (선택) | 파워유저용 | ⏳ 대기 |
 
@@ -230,20 +230,29 @@ Response (Error):
 - ✅ 자유형 쿼리 데이터셋 확장 (50개→100개)
 
 **Phase 3.2 벤치마크 결과 (자유형 쿼리 100개)**:
-| 메트릭 | Baseline | Header Chunking | 변화 |
-|--------|----------|-----------------|------|
-| Hit@1 | 34% | **38%** | **+11.8%** |
-| MRR | 0.4818 | **0.5618** | **+16.6%** |
-| NDCG@10 | 0.5140 | **0.6045** | **+17.6%** |
-| Recall@10 | 70.5% | **82.5%** | **+17.0%** |
+| 메트릭 | Baseline | Header Chunking | Codex Optimized | 총 변화 |
+|--------|----------|-----------------|-----------------|---------|
+| Hit@1 | 34% | 38% | **39%** | **+14.7%** |
+| MRR | 0.4818 | 0.5618 | **0.5682** | **+17.9%** |
+| NDCG@10 | 0.5140 | 0.6045 | **0.6112** | **+18.9%** |
+| Recall@10 | 70.5% | 82.5% | **83%** | **+17.7%** |
 
-**구현 상세**:
+**구현 상세 (Codex 최적화 포함)**:
 ```typescript
-// src/rag/indexer.ts - processNote()
-// 큰 섹션이 여러 청크로 분할될 때, 섹션 헤더를 각 청크에 prepend
-if (chunk.metadata.headerText && !chunk.content.trim().startsWith("#")) {
-  const headerPrefix = "#".repeat(chunk.metadata.headerLevel || 2);
-  contentWithContext = `${headerPrefix} ${chunk.metadata.headerText}\n\n${chunk.content}`;
+// src/rag/indexer.ts - 최적화된 헤더 prepend 로직
+const MAX_HEADER_CONTEXT_CHUNKS = 2;  // 섹션당 처음 2개 청크만
+const MAX_HEADER_CONTEXT_LEVEL = 3;   // H3까지만
+const MAX_TITLE_CONTEXT_LENGTH = 80;  // 제목 길이 제한
+
+// HEADER_STOPLIST: 의미 없는 헤더 제외
+// 영어: overview, introduction, summary, conclusion...
+// 한국어: 개요, 서론, 요약, 결론, 정리...
+// 일본어/중국어 지원
+
+if (shouldPrependHeaderContext(chunk, title)) {
+  const headerLevel = Math.min(chunk.metadata.headerLevel || 2, MAX_HEADER_CONTEXT_LEVEL);
+  const headerLine = truncateContextText(chunk.metadata.headerText, MAX_HEADER_CONTEXT_LENGTH);
+  contentWithContext = `${"#".repeat(headerLevel)} ${headerLine}\n\n${chunk.content}`;
 }
 ```
 
@@ -307,7 +316,7 @@ async function indexNote(note: Note) {
 ---
 
 #### 4.1 쿼리 확장 🔥 (다음 작업 #2)
-**목표**: 검색 품질 향상 (Hit@1 38% → 55%)
+**목표**: 검색 품질 향상 (Hit@1 39% → 55%)
 **우선순위**: 🟠 높음 - Hit@1 목표 달성의 핵심
 
 **현재 실패 패턴**:
@@ -372,9 +381,9 @@ const variants = await llm.complete(`
 ### 🎯 현재 메트릭 (자유형 쿼리 100개)
 | 메트릭 | 값 | 목표 |
 |--------|-----|------|
-| Hit@1 | 38% | 55% |
-| MRR | 0.56 | 0.65 |
-| Recall@10 | 82.5% | 90% |
+| Hit@1 | 39% | 55% |
+| MRR | 0.57 | 0.65 |
+| Recall@10 | 83% | 90% |
 
 ### ⏳ 다음 작업 (순서대로)
 1. **Phase 4.3**: 증분 인덱싱 → 실험 속도 ↑
@@ -468,7 +477,7 @@ async function shouldReindex(notePath: string, content: string): Promise<boolean
 GigaMind Phase 4.1 쿼리 확장을 구현해주세요.
 
 ## 목표
-Hit@1 38% → 55% 달성
+Hit@1 39% → 55% 달성
 
 ## 현재 실패 패턴
 - "SF에서 자율주행차 탔어?" → 테슬라 로보택시 못 찾음

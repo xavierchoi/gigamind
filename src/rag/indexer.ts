@@ -19,6 +19,111 @@ import { InMemoryVectorStore } from "./vectorStore.js";
 import { EmbeddingService as ActualEmbeddingService } from "./embeddings/index.js";
 import { DocumentChunker as ActualDocumentChunker, type Chunk } from "./chunker.js";
 
+const MAX_TITLE_CONTEXT_LENGTH = 80;
+const MAX_HEADER_CONTEXT_LENGTH = 80;
+const MAX_HEADER_CONTEXT_LEVEL = 3;
+const MAX_HEADER_CONTEXT_CHUNKS = 2;
+
+const HEADER_STOPLIST = new Set([
+  "overview",
+  "summary",
+  "notes",
+  "note",
+  "todo",
+  "todos",
+  "appendix",
+  "references",
+  "reference",
+  "intro",
+  "introduction",
+  "background",
+  "conclusion",
+  "misc",
+  "miscellaneous",
+  "개요",
+  "서론",
+  "소개",
+  "배경",
+  "요약",
+  "정리",
+  "결론",
+  "참고",
+  "참고문헌",
+  "부록",
+  "메모",
+  "노트",
+  "목차",
+  "할 일",
+  "할일",
+  "概要",
+  "はじめに",
+  "まとめ",
+  "結論",
+  "参考",
+  "参考文献",
+  "付録",
+  "メモ",
+  "概述",
+  "简介",
+  "引言",
+  "背景",
+  "总结",
+  "结论",
+  "参考文献",
+  "附录",
+  "备注",
+  "笔记",
+  "待办",
+]);
+
+function normalizeContextText(value: string): string {
+  return value.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function truncateContextText(value: string, maxLength: number): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+  if (maxLength <= 3) {
+    return normalized.slice(0, maxLength);
+  }
+  return `${normalized.slice(0, maxLength - 3)}...`;
+}
+
+function shouldPrependHeaderContext(chunk: Chunk, title: string): boolean {
+  const headerText = chunk.metadata.headerText?.trim();
+  if (!headerText) {
+    return false;
+  }
+  if (headerText.length < 2) {
+    return false;
+  }
+  if (chunk.content.trim().startsWith("#")) {
+    return false;
+  }
+
+  const sectionChunkIndex = chunk.metadata.sectionChunkIndex;
+  if (sectionChunkIndex !== undefined && sectionChunkIndex >= MAX_HEADER_CONTEXT_CHUNKS) {
+    return false;
+  }
+
+  const normalizedHeader = normalizeContextText(headerText);
+  if (!normalizedHeader) {
+    return false;
+  }
+  if (HEADER_STOPLIST.has(normalizedHeader)) {
+    return false;
+  }
+
+  const normalizedTitle = normalizeContextText(title);
+  if (normalizedHeader === normalizedTitle) {
+    return false;
+  }
+
+  return true;
+}
+
 /**
  * Progress information for indexing operations
  */
@@ -647,23 +752,44 @@ export class RAGIndexer {
     }
 
     // Create vector documents
-    // Prepend note title to each chunk for improved retrieval (helps Hit@1)
-    const documents: VectorDocument[] = chunks.map((chunk) => ({
-      id: `${noteId}_chunk_${chunk.index}`,
-      noteId,
-      notePath,
-      chunkIndex: chunk.index,
-      content: `# ${title}\n\n${chunk.content}`,
-      embedding: [], // Will be filled by embedding service
-      metadata: {
-        title,
-        type,
-        tags,
-        created: parsed.created || stat.birthtime.toISOString(),
-        modified: parsed.modified || stat.mtime.toISOString(),
-        connectionCount,
-      },
-    }));
+    // Prepend note title and section headers for improved retrieval context
+    const documents: VectorDocument[] = chunks.map((chunk) => {
+      // Build content with hierarchical header context
+      let contentWithContext = chunk.content;
+
+      // Prepend section header context for early chunks in a section
+      if (shouldPrependHeaderContext(chunk, title)) {
+        const rawHeaderLevel = chunk.metadata.headerLevel ?? 2;
+        const headerLevel = Math.min(Math.max(rawHeaderLevel, 2), MAX_HEADER_CONTEXT_LEVEL);
+        const headerPrefix = "#".repeat(headerLevel);
+        const headerLine = truncateContextText(
+          chunk.metadata.headerText ?? "",
+          MAX_HEADER_CONTEXT_LENGTH
+        );
+        contentWithContext = `${headerPrefix} ${headerLine}\n\n${contentWithContext}`;
+      }
+
+      // Always prepend note title as top-level context
+      const titleLine = truncateContextText(title, MAX_TITLE_CONTEXT_LENGTH);
+      contentWithContext = `# ${titleLine}\n\n${contentWithContext}`;
+
+      return {
+        id: `${noteId}_chunk_${chunk.index}`,
+        noteId,
+        notePath,
+        chunkIndex: chunk.index,
+        content: contentWithContext,
+        embedding: [], // Will be filled by embedding service
+        metadata: {
+          title,
+          type,
+          tags,
+          created: parsed.created || stat.birthtime.toISOString(),
+          modified: parsed.modified || stat.mtime.toISOString(),
+          connectionCount,
+        },
+      };
+    });
 
     return documents;
   }
