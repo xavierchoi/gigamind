@@ -30,7 +30,7 @@ export interface IEmbeddingService {
 export interface RetrievalConfig {
   /** Number of top results to return. Default: 10 */
   topK: number;
-  /** Minimum relevance score threshold. Default: 0.5 */
+  /** Minimum relevance score threshold. Default: 0.3 */
   minScore: number;
   /** Whether to apply graph-based re-ranking. Default: true */
   useGraphReranking: boolean;
@@ -49,7 +49,7 @@ export interface RetrievalConfig {
  */
 const DEFAULT_CONFIG: RetrievalConfig = {
   topK: 10,
-  minScore: 0.5,
+  minScore: 0.3,
   useGraphReranking: true,
   graphBoostFactor: 0.2,
   expandContext: true,
