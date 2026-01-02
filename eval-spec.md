@@ -456,12 +456,40 @@ interface RAGSearchResult {
 
 ## 5. 평가 파이프라인
 
-1) **검증**: dataset 스키마 + notesDir 유효성 체크  
-2) **인덱싱**: RAG 인덱스 준비 (cold-start 옵션 제공)  
-3) **워밍업**: 캐시/임베딩 로딩을 위한 N회 사전 실행  
-4) **평가 실행**: 병렬 실행 + 타임아웃  
-5) **메트릭 계산**: 전체/하위 태그/난이도별 집계  
-6) **리포트 생성**: JSON + Markdown
+1) **검증**: dataset 스키마 + notesDir 유효성 체크
+2) **인덱싱**: RAG 인덱스 준비 (cold-start 옵션 제공)
+3) **인덱스 검증**: 인덱스 상태 확인 (레이스 컨디션 방지)
+4) **워밍업**: 캐시/임베딩 로딩을 위한 N회 사전 실행
+5) **평가 실행**: 병렬 실행 + 타임아웃
+6) **메트릭 계산**: 전체/하위 태그/난이도별 집계
+7) **리포트 생성**: JSON + Markdown
+
+### 5.1 인덱스 검증 (Index Validation)
+
+평가 실행 전 인덱스 상태를 검증하여 레이스 컨디션을 방지합니다:
+
+```typescript
+// 인덱스 검증 로직
+async function validateIndex(ragService: RAGService): Promise<void> {
+  const indexStats = await ragService.getIndexStats();
+
+  if (indexStats.totalChunks === 0) {
+    throw new Error('Index is empty. Run indexing first.');
+  }
+
+  console.log(`Index validated: ${indexStats.totalChunks} chunks, ${indexStats.totalNotes} notes`);
+}
+```
+
+**검증 항목**:
+- 인덱스가 비어있지 않은지 확인
+- 예상 노트 수와 실제 인덱스된 노트 수 비교
+- 인덱싱 완료 여부 확인
+
+**오류 처리**:
+- 빈 인덱스: 에러 출력 및 exit code 2 반환
+- 노트 수 불일치: 경고 출력 후 계속 진행
+- 인덱싱 미완료: 인덱싱 완료 대기 또는 에러
 
 Deterministic 모드:
 - temperature=0
