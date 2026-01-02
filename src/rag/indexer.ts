@@ -647,12 +647,13 @@ export class RAGIndexer {
     }
 
     // Create vector documents
+    // Prepend note title to each chunk for improved retrieval (helps Hit@1)
     const documents: VectorDocument[] = chunks.map((chunk) => ({
       id: `${noteId}_chunk_${chunk.index}`,
       noteId,
       notePath,
       chunkIndex: chunk.index,
-      content: chunk.content,
+      content: `# ${title}\n\n${chunk.content}`,
       embedding: [], // Will be filled by embedding service
       metadata: {
         title,
