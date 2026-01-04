@@ -173,8 +173,10 @@ export interface ValidationResult {
 
 /**
  * Metadata stored for each indexed note (for change detection)
+ * Keyed by notePath (absolute path) to avoid noteId collisions
  */
 interface IndexedNoteMetadata {
+  noteId: string;
   notePath: string;
   contentHash: string;
   modifiedTime: number;
@@ -222,6 +224,32 @@ class EmbeddingServiceAdapter implements EmbeddingServiceInterface {
 }
 
 /**
+ * Persisted index metadata schema (stored in index-meta.json)
+ * Notes are keyed by notePath (absolute path) to avoid noteId collisions
+ */
+interface IndexMetaFile {
+  version: number;
+  lastIndexedAt: string;
+  /** Map of notePath -> metadata (changed from noteId in v2) */
+  notes: Record<string, IndexedNoteMetadata>;
+}
+
+/** Version 2: Changed key from noteId to notePath for collision safety */
+const INDEX_META_VERSION = 2;
+
+/**
+ * Result of loading metadata
+ */
+export interface MetadataLoadResult {
+  /** Whether metadata was loaded successfully */
+  loaded: boolean;
+  /** Number of notes in metadata */
+  noteCount: number;
+  /** Reason if not loaded */
+  reason?: "file_not_found" | "version_mismatch" | "parse_error";
+}
+
+/**
  * Configuration for RAGIndexer
  */
 export interface RAGIndexerConfig {
@@ -229,6 +257,8 @@ export interface RAGIndexerConfig {
   notesDir: string;
   /** Path to store the vector database (optional, used when vectorStore not provided) */
   dbPath?: string;
+  /** Path to store index metadata (optional, defaults to .gigamind/index-meta.json) */
+  metaPath?: string;
   /** Custom embedding service (optional, uses local model by default) */
   embeddingService?: EmbeddingServiceInterface;
   /** Custom document chunker (optional, uses default Korean/English chunker) */
@@ -268,15 +298,89 @@ export class RAGIndexer {
   private chunker: DocumentChunkerInterface;
   private notesDir: string;
   private dbPath: string;
+  private metaPath: string;
   private vectorStore: IVectorStore;
   private noteMetadata: Map<string, IndexedNoteMetadata> = new Map();
+  private metadataLoaded: boolean = false;
 
   constructor(config: RAGIndexerConfig) {
     this.notesDir = expandPath(config.notesDir);
     this.dbPath = config.dbPath || "";
+    this.metaPath = config.metaPath || path.join(this.notesDir, ".gigamind", "index-meta.json");
     this.embeddingService = config.embeddingService || new EmbeddingServiceAdapter();
     this.chunker = config.chunker || new ActualDocumentChunker();
     this.vectorStore = config.vectorStore || new InMemoryVectorStore();
+  }
+
+  /**
+   * Load persisted metadata from disk
+   * Called automatically on first operation if not already loaded
+   *
+   * @returns Result indicating whether metadata was loaded successfully
+   */
+  async loadMetadata(): Promise<MetadataLoadResult> {
+    if (this.metadataLoaded) {
+      return { loaded: this.noteMetadata.size > 0, noteCount: this.noteMetadata.size };
+    }
+
+    try {
+      const content = await fs.readFile(this.metaPath, "utf-8");
+      const data: IndexMetaFile = JSON.parse(content);
+
+      // Version check
+      if (data.version !== INDEX_META_VERSION) {
+        console.log(`[RAGIndexer] 메타데이터 버전 불일치 (${data.version} → ${INDEX_META_VERSION}), 재인덱싱 필요`);
+        this.noteMetadata.clear();
+        this.metadataLoaded = true;
+        return { loaded: false, noteCount: 0, reason: "version_mismatch" };
+      }
+
+      // Load notes metadata (keyed by notePath)
+      this.noteMetadata.clear();
+      for (const [notePath, meta] of Object.entries(data.notes)) {
+        this.noteMetadata.set(notePath, meta);
+      }
+
+      console.log(`[RAGIndexer] 메타데이터 로드 완료: ${this.noteMetadata.size}개 노트`);
+      this.metadataLoaded = true;
+      return { loaded: true, noteCount: this.noteMetadata.size };
+    } catch (err) {
+      // File doesn't exist or is invalid - start fresh
+      const isNotFound = (err as NodeJS.ErrnoException).code === "ENOENT";
+      if (!isNotFound) {
+        console.debug("[RAGIndexer] 메타데이터 파일 읽기 실패:", err);
+      }
+      this.noteMetadata.clear();
+      this.metadataLoaded = true;
+      return {
+        loaded: false,
+        noteCount: 0,
+        reason: isNotFound ? "file_not_found" : "parse_error",
+      };
+    }
+  }
+
+  /**
+   * Save metadata to disk
+   *
+   * NOTE: 현재 구현은 단일 프로세스 접근을 가정합니다.
+   * 여러 프로세스가 동시에 인덱싱하면 메타데이터 손상 가능.
+   * 필요시 파일 락킹 구현 권장.
+   */
+  private async saveMetadata(): Promise<void> {
+    const data: IndexMetaFile = {
+      version: INDEX_META_VERSION,
+      lastIndexedAt: new Date().toISOString(),
+      notes: Object.fromEntries(this.noteMetadata),
+    };
+
+    // Ensure directory exists
+    await fs.mkdir(path.dirname(this.metaPath), { recursive: true });
+
+    // Atomic save: write to temp file then rename
+    const tempPath = `${this.metaPath}.tmp`;
+    await fs.writeFile(tempPath, JSON.stringify(data, null, 2), "utf-8");
+    await fs.rename(tempPath, this.metaPath);
   }
 
   /**
@@ -344,10 +448,11 @@ export class RAGIndexer {
             // Store documents
             await this.vectorStore.add(documents);
 
-            // Store note metadata for incremental indexing
+            // Store note metadata for incremental indexing (keyed by notePath)
             const content = await fs.readFile(filePath, "utf-8");
             const stat = await fs.stat(filePath);
-            this.noteMetadata.set(documents[0].noteId, {
+            this.noteMetadata.set(filePath, {
+              noteId: documents[0].noteId,
               notePath: filePath,
               contentHash: this.hashContent(content),
               modifiedTime: stat.mtimeMs,
@@ -361,6 +466,9 @@ export class RAGIndexer {
           errors.push(`${relativePath}: ${errorMsg}`);
         }
       }
+
+      // Save metadata to disk for incremental indexing
+      await this.saveMetadata();
 
       onProgress?.({
         total,
@@ -396,6 +504,9 @@ export class RAGIndexer {
   async indexIncremental(
     onProgress?: (p: IndexingProgress) => void
   ): Promise<IndexIncrementalResult> {
+    // Load persisted metadata first
+    await this.loadMetadata();
+
     let added = 0;
     let updated = 0;
     let removed = 0;
@@ -408,24 +519,44 @@ export class RAGIndexer {
       // Get indexed notes (use internal noteMetadata)
       const indexedNotes = this.noteMetadata;
 
+      // Detect changes to determine if graph cache can be used
+      // First pass: count removed files
+      let removedCount = 0;
+      for (const notePath of indexedNotes.keys()) {
+        if (!currentFilesSet.has(notePath)) {
+          removedCount++;
+        }
+      }
+
+      // Second pass: count added files
+      let addedCount = 0;
+      for (const filePath of currentFiles) {
+        if (!indexedNotes.has(filePath)) {
+          addedCount++;
+        }
+      }
+
       // Get graph data for connection counts
-      const graphStats = await analyzeNoteGraph(this.notesDir, { useCache: false });
+      // Use cache only when no files were added or removed (only content changes)
+      const graphStats = await analyzeNoteGraph(this.notesDir, {
+        useCache: addedCount === 0 && removedCount === 0,
+      });
 
       const total = currentFiles.length + indexedNotes.size;
       let processed = 0;
 
-      // Check for removed files
-      for (const [noteId, metadata] of indexedNotes) {
-        if (!currentFilesSet.has(metadata.notePath)) {
+      // Check for removed files (metadata is now keyed by notePath)
+      for (const [notePath, metadata] of indexedNotes) {
+        if (!currentFilesSet.has(notePath)) {
           onProgress?.({
             total,
             processed,
-            currentFile: path.relative(this.notesDir, metadata.notePath),
+            currentFile: path.relative(this.notesDir, notePath),
             status: "indexing",
           });
 
-          await this.vectorStore.deleteByNotePath(metadata.notePath);
-          this.noteMetadata.delete(noteId);
+          await this.vectorStore.deleteByNotePath(notePath);
+          this.noteMetadata.delete(notePath);
           removed++;
           processed++;
         }
@@ -447,16 +578,8 @@ export class RAGIndexer {
           const stat = await fs.stat(filePath);
           const currentHash = this.hashContent(content);
 
-          // Find existing metadata by path
-          let existingMetadata: IndexedNoteMetadata | undefined;
-          let existingNoteId: string | undefined;
-          for (const [noteId, meta] of indexedNotes) {
-            if (meta.notePath === filePath) {
-              existingMetadata = meta;
-              existingNoteId = noteId;
-              break;
-            }
-          }
+          // Look up existing metadata directly by filePath (no iteration needed)
+          const existingMetadata = indexedNotes.get(filePath);
 
           const needsReindex =
             !existingMetadata ||
@@ -465,9 +588,9 @@ export class RAGIndexer {
 
           if (needsReindex) {
             // Remove old documents if they exist
-            if (existingNoteId && existingMetadata) {
-              await this.vectorStore.deleteByNotePath(existingMetadata.notePath);
-              this.noteMetadata.delete(existingNoteId);
+            if (existingMetadata) {
+              await this.vectorStore.deleteByNotePath(filePath);
+              this.noteMetadata.delete(filePath);
             }
 
             onProgress?.({
@@ -496,7 +619,8 @@ export class RAGIndexer {
               });
 
               await this.vectorStore.add(documents);
-              this.noteMetadata.set(documents[0].noteId, {
+              this.noteMetadata.set(filePath, {
+                noteId: documents[0].noteId,
                 notePath: filePath,
                 contentHash: currentHash,
                 modifiedTime: stat.mtimeMs,
@@ -516,6 +640,11 @@ export class RAGIndexer {
         }
 
         processed++;
+      }
+
+      // Save metadata to disk
+      if (added > 0 || updated > 0 || removed > 0) {
+        await this.saveMetadata();
       }
 
       onProgress?.({
@@ -546,6 +675,9 @@ export class RAGIndexer {
    * @param notePath - Path to the note (absolute or relative to notesDir)
    */
   async indexNote(notePath: string): Promise<void> {
+    // Load persisted metadata first
+    await this.loadMetadata();
+
     const expandedPath = path.isAbsolute(notePath)
       ? notePath
       : path.join(this.notesDir, notePath);
@@ -553,15 +685,9 @@ export class RAGIndexer {
     // Get graph data for connection counts
     const graphStats = await analyzeNoteGraph(this.notesDir, { useCache: false });
 
-    // Remove existing documents for this note and update metadata
+    // Remove existing documents for this note and update metadata (keyed by notePath)
     await this.vectorStore.deleteByNotePath(expandedPath);
-    // Remove metadata by path
-    for (const [noteId, meta] of this.noteMetadata) {
-      if (meta.notePath === expandedPath) {
-        this.noteMetadata.delete(noteId);
-        break;
-      }
-    }
+    this.noteMetadata.delete(expandedPath);
 
     // Process the note
     const documents = await this.processNote(expandedPath, graphStats);
@@ -578,15 +704,19 @@ export class RAGIndexer {
       // Store documents
       await this.vectorStore.add(documents);
 
-      // Update metadata
+      // Update metadata (keyed by notePath)
       const content = await fs.readFile(expandedPath, "utf-8");
       const stat = await fs.stat(expandedPath);
-      this.noteMetadata.set(documents[0].noteId, {
+      this.noteMetadata.set(expandedPath, {
+        noteId: documents[0].noteId,
         notePath: expandedPath,
         contentHash: this.hashContent(content),
         modifiedTime: stat.mtimeMs,
         chunkCount: documents.length,
       });
+
+      // Save metadata to disk
+      await this.saveMetadata();
     }
   }
 
@@ -596,11 +726,24 @@ export class RAGIndexer {
    * @param noteId - ID of the note to remove
    */
   async removeNote(noteId: string): Promise<void> {
-    // Find the notePath from metadata
-    const metadata = this.noteMetadata.get(noteId);
-    if (metadata) {
-      await this.vectorStore.deleteByNotePath(metadata.notePath);
-      this.noteMetadata.delete(noteId);
+    // Load persisted metadata first
+    await this.loadMetadata();
+
+    // Find the notePath from metadata (now keyed by notePath, search by noteId)
+    let foundPath: string | undefined;
+    for (const [notePath, meta] of this.noteMetadata) {
+      if (meta.noteId === noteId) {
+        foundPath = notePath;
+        break;
+      }
+    }
+
+    if (foundPath) {
+      await this.vectorStore.deleteByNotePath(foundPath);
+      this.noteMetadata.delete(foundPath);
+
+      // Save metadata to disk
+      await this.saveMetadata();
     }
   }
 
@@ -632,6 +775,9 @@ export class RAGIndexer {
    * @returns Validation result object with details about any issues found
    */
   async validateIndex(): Promise<ValidationResult> {
+    // Load persisted metadata first
+    await this.loadMetadata();
+
     const errors: string[] = [];
     const orphanedChunks: string[] = [];
     const missingChunks: string[] = [];
@@ -643,36 +789,36 @@ export class RAGIndexer {
     const totalDocuments = documents.length;
     const totalMetadata = metadata.size;
 
-    // Build a map of noteId -> documents for efficient lookup
-    const documentsByNoteId = new Map<string, VectorDocument[]>();
+    // Build a map of notePath -> documents for efficient lookup
+    const documentsByPath = new Map<string, VectorDocument[]>();
     for (const doc of documents) {
-      const existing = documentsByNoteId.get(doc.noteId) || [];
+      const existing = documentsByPath.get(doc.notePath) || [];
       existing.push(doc);
-      documentsByNoteId.set(doc.noteId, existing);
+      documentsByPath.set(doc.notePath, existing);
     }
 
-    // Build a set of noteIds that have metadata
-    const noteIdsWithMetadata = new Set<string>(metadata.keys());
+    // Metadata is now keyed by notePath
+    const notePathsWithMetadata = new Set<string>(metadata.keys());
 
     // Check for orphaned chunks (documents without metadata)
-    for (const [noteId, docs] of documentsByNoteId) {
-      if (!noteIdsWithMetadata.has(noteId)) {
+    for (const [notePath, docs] of documentsByPath) {
+      if (!notePathsWithMetadata.has(notePath)) {
         for (const doc of docs) {
           orphanedChunks.push(doc.id);
         }
-        errors.push(`Orphaned chunks found for noteId "${noteId}": no metadata exists`);
+        errors.push(`Orphaned chunks found for note "${notePath}": no metadata exists`);
       }
     }
 
     // Check for missing chunks and chunk count mismatches
-    for (const [noteId, meta] of metadata) {
-      const docs = documentsByNoteId.get(noteId);
+    for (const [notePath, meta] of metadata) {
+      const docs = documentsByPath.get(notePath);
 
       if (!docs || docs.length === 0) {
-        missingChunks.push(meta.notePath);
-        errors.push(`Missing chunks for note "${meta.notePath}": metadata indicates ${meta.chunkCount} chunks but none found`);
+        missingChunks.push(notePath);
+        errors.push(`Missing chunks for note "${notePath}": metadata indicates ${meta.chunkCount} chunks but none found`);
       } else if (docs.length !== meta.chunkCount) {
-        errors.push(`Chunk count mismatch for note "${meta.notePath}": metadata indicates ${meta.chunkCount} chunks but found ${docs.length}`);
+        errors.push(`Chunk count mismatch for note "${notePath}": metadata indicates ${meta.chunkCount} chunks but found ${docs.length}`);
       }
     }
 

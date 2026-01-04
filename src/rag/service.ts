@@ -131,11 +131,12 @@ export class RAGService {
       await this.embeddingService.initialize();
       console.log(`[RAGService] 임베딩 서비스 초기화 완료 (모델: ${this.embeddingService.modelId})`);
 
-      // RAGIndexer 초기화 - vectorStore 주입
+      // RAGIndexer 초기화 - vectorStore와 embeddingService 주입
       this.indexer = new RAGIndexer({
         notesDir: this.notesDir,
         dbPath: path.join(this.notesDir, ".gigamind", "vectors"),
         vectorStore: this.vectorStore,
+        embeddingService: this.embeddingService,
       });
 
       // RAGRetriever 초기화
@@ -165,11 +166,38 @@ export class RAGService {
           await this.vectorStore.clear();
           await this.reindex();
         } else {
+          // 증분 인덱싱: 변경된 노트만 업데이트
           console.log(
             `[RAGService] 기존 인덱스 로드: ${existingDocs.length}개 문서 (차원: ${existingDimension})`
           );
-          this.documents = existingDocs;
-          await this.retriever.loadIndex(existingDocs);
+
+          // 메타데이터 로드 시도
+          const metaResult = await this.indexer.loadMetadata();
+
+          if (!metaResult.loaded) {
+            // 메타데이터 없음/손상 + 벡터 존재 = 전체 재인덱싱 필요
+            console.log(
+              `[RAGService] 메타데이터 ${metaResult.reason === "file_not_found" ? "없음" : "손상"}, 전체 재인덱싱 시작...`
+            );
+            await this.vectorStore.clear();
+            await this.reindex();
+          } else {
+            console.log("[RAGService] 증분 인덱싱 시작...");
+            const incrementalResult = await this.indexer.indexIncremental();
+
+            if (incrementalResult.added > 0 || incrementalResult.updated > 0 || incrementalResult.removed > 0) {
+              console.log(
+                `[RAGService] 증분 인덱싱 완료: 추가 ${incrementalResult.added}, 수정 ${incrementalResult.updated}, 삭제 ${incrementalResult.removed}`
+              );
+              // 변경이 있으면 문서 다시 로드
+              this.documents = await this.indexer.getAllDocuments();
+            } else {
+              console.log("[RAGService] 변경된 노트 없음");
+              this.documents = existingDocs;
+            }
+
+            await this.retriever.loadIndex(this.documents);
+          }
         }
       }
 

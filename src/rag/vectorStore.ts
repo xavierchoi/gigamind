@@ -126,6 +126,12 @@ export class LanceDBVectorStore implements IVectorStore {
     await this.table.delete(`notePath = '${sanitizedPath}'`);
   }
 
+  async deleteByNoteId(noteId: string): Promise<void> {
+    if (!this.table) return;
+    const sanitizedId = noteId.replace(/'/g, "''");
+    await this.table.delete(`noteId = '${sanitizedId}'`);
+  }
+
   async clear(): Promise<void> {
     if (!this.db) return;
 
@@ -214,6 +220,14 @@ export class InMemoryVectorStore implements IVectorStore {
   async deleteByNotePath(notePath: string): Promise<void> {
     for (const [id, doc] of this.documents) {
       if (doc.notePath === notePath) {
+        this.documents.delete(id);
+      }
+    }
+  }
+
+  async deleteByNoteId(noteId: string): Promise<void> {
+    for (const [id, doc] of this.documents) {
+      if (doc.noteId === noteId) {
         this.documents.delete(id);
       }
     }

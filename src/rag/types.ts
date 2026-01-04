@@ -238,6 +238,9 @@ export interface IVectorStore {
   /** 노트 경로로 삭제 */
   deleteByNotePath(notePath: string): Promise<void>;
 
+  /** 노트 ID로 삭제 */
+  deleteByNoteId(noteId: string): Promise<void>;
+
   /** 전체 삭제 */
   clear(): Promise<void>;
 
