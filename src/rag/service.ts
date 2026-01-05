@@ -10,6 +10,7 @@ import { EmbeddingService, type ProviderOptions } from "./embeddings/index.js";
 import type { RetrievalResult, VectorDocument, IVectorStore } from "./types.js";
 import { LanceDBVectorStore, InMemoryVectorStore } from "./vectorStore.js";
 import { expandPath } from "../utils/config.js";
+import type { QueryExpansionConfig } from "./queryExpander.js";
 
 /**
  * RAG 검색 옵션
@@ -23,6 +24,8 @@ export interface RAGSearchOptions {
   minScore?: number;
   /** 그래프 기반 리랭킹 사용 */
   useGraphReranking?: boolean;
+  /** 쿼리 확장 설정 (기본: enabled) */
+  queryExpansion?: Partial<QueryExpansionConfig>;
 }
 
 /**
@@ -226,6 +229,8 @@ export class RAGService {
       topK: options?.topK ?? 10,
       minScore: options?.minScore ?? 0.3,
       useGraphReranking: options?.useGraphReranking !== false,
+      // Query expansion is enabled by default (optimized in v0.5.2)
+      queryExpansion: options?.queryExpansion ?? { enabled: true },
     };
 
     const keywordWeight =
@@ -238,6 +243,7 @@ export class RAGService {
       useGraphReranking: opts.useGraphReranking,
       hybridSearch: opts.mode === "hybrid",
       keywordWeight,
+      queryExpansion: opts.queryExpansion,
     };
 
     const results = await this.retriever!.retrieve(query, retrievalConfig);

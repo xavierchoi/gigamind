@@ -74,6 +74,7 @@ export interface SearchOptions extends CommonOptions {
   topk: number;
   minScore: number;
   graphRerank: boolean;
+  queryExpansion: boolean;
   coldStart: boolean;
   warmup: number;
   // Snapshot options
@@ -139,6 +140,7 @@ function parseArgs(
     topkProvided: false,
     minScore: 0.3,     // Spec default: 0.3
     graphRerank: false, // Default false for accurate unanswerable detection
+    queryExpansion: false, // Default false for performance
     coldStart: false,  // Spec: reset RAG cache before evaluation
     warmup: 10,        // Spec default: 10 warmup queries
     // Snapshot options (aligned with eval-spec.md)
@@ -177,6 +179,8 @@ function parseArgs(
       }
     } else if (arg === "--graph-rerank") {
       options.graphRerank = true;
+    } else if (arg === "--query-expansion") {
+      options.queryExpansion = true;
     } else if (arg === "--seed" && args[i + 1]) {
       options.seed = parseInt(args[++i], 10);
     } else if (arg === "--mode" && args[i + 1]) {
@@ -265,6 +269,7 @@ Search Options:
   --topk <number>    Number of results to retrieve (default: 10)
   --min-score <num>  Minimum score threshold (default: 0.3)
   --graph-rerank     Enable graph-based reranking (default: off)
+  --query-expansion  Enable query expansion for keyword search (default: off)
   --cold-start       Reset RAG cache before evaluation (default: off)
   --warmup <number>  Number of warmup queries before evaluation (default: 10)
 
@@ -410,6 +415,7 @@ async function runSearch(options: SearchOptions): Promise<number> {
       topK,
       minScore: options.minScore,
       useGraphReranking: options.graphRerank, // Default false for accurate unanswerable detection
+      queryExpansion: options.queryExpansion ? { enabled: true } : { enabled: false },
       coldStart: options.coldStart, // Reset RAG cache before evaluation
       warmup: options.warmup, // Warmup queries from CLI (default: 10)
       timeoutMs: 30000,

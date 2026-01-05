@@ -10,6 +10,7 @@
 import path from "node:path";
 import pLimit from "p-limit";
 import { RAGService, type RAGSearchOptions } from "../../rag/service.js";
+import type { QueryExpansionConfig } from "../../rag/queryExpander.js";
 import { SearchQuerySchema, type SearchQuery } from "../dataset/searchSchema.js";
 import { loadDatasetStream } from "../dataset/loader.js";
 import { isSystemAnswerable } from "../metrics/unanswerableMetrics.js";
@@ -35,6 +36,8 @@ export interface SearchRunnerConfig {
   minScore: number;
   /** Enable graph-based reranking */
   useGraphReranking: boolean;
+  /** Query expansion configuration */
+  queryExpansion?: Partial<QueryExpansionConfig>;
   /** Reset RAG cache before evaluation (cold start) */
   coldStart: boolean;
   /** Number of warmup queries to run before evaluation */
@@ -368,6 +371,7 @@ export async function runSearchEval(
     topK: mergedConfig.topK,
     minScore: mergedConfig.minScore,
     useGraphReranking: mergedConfig.useGraphReranking,
+    queryExpansion: mergedConfig.queryExpansion,
   };
 
   // Run warmup
