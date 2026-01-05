@@ -50,6 +50,10 @@ export interface RetrievalConfig {
   keywordWeight: number;
   /** Query expansion configuration */
   queryExpansion?: Partial<QueryExpansionConfig>;
+  /** Whether to use fast path for high-confidence results. Default: true */
+  useFastPath?: boolean;
+  /** Minimum score threshold for fast path (skips keyword boosting and graph reranking). Default: 0.85 */
+  fastPathThreshold?: number;
 }
 
 /**
@@ -63,6 +67,8 @@ const DEFAULT_CONFIG: RetrievalConfig = {
   expandContext: true,
   hybridSearch: true,
   keywordWeight: 0.1,
+  useFastPath: true,
+  fastPathThreshold: 0.85,
 };
 
 /**
@@ -174,18 +180,55 @@ export class RAGRetriever {
       ...config.queryExpansion,
     };
 
+    // Fast Path configuration
+    const useFastPath = config.useFastPath !== false;
+    const fastPathThreshold = config.fastPathThreshold ?? 0.85;
+
+    // Vector search first for fast path check
+    const vectorFetchLimit = Math.max(config.topK * 5, 50);
+    const queryVector = await this.embeddingService.embedQuery(query);
+    const vectorResults = await this.vectorSearch(queryVector, vectorFetchLimit);
+
+    // Fast Path: skip keyword boosting and graph reranking for high-confidence results
+    if (useFastPath && vectorResults.length > 0 && vectorResults[0].score > fastPathThreshold) {
+      console.debug(
+        `[FastPath] top1 score ${vectorResults[0].score.toFixed(3)} > ${fastPathThreshold}, skipping reranking`
+      );
+
+      // Convert vector results directly to retrieval results
+      let results = this.convertVectorResultsToRetrievalResults(vectorResults, config);
+
+      // Expand context if requested (fast operation, keep it)
+      if (config.expandContext) {
+        results = await Promise.all(
+          results.map((result) => this.expandContext(result))
+        );
+      }
+
+      // Filter by minimum score and limit to topK
+      return results
+        .filter((r) => r.baseScore >= config.minScore)
+        .sort((a, b) => b.finalScore - a.finalScore)
+        .slice(0, config.topK);
+    }
+
+    // Normal path: full hybrid search with keyword boosting and graph reranking
     let results: RetrievalResult[];
     const fetchLimit = config.topK * 3;
 
     if (config.hybridSearch) {
       // Use augmented hybrid search with query expansion
-      results = await this.hybridSearchWithExpansion(query, config, expansionConfig);
+      // Pass pre-computed vector results to avoid redundant embedding
+      results = await this.hybridSearchWithExpansionAndVectorResults(
+        query,
+        vectorResults,
+        config,
+        expansionConfig
+      );
     } else if (config.keywordWeight >= 1) {
       const keywordResults = await this.keywordSearch(query, fetchLimit);
       results = this.aggregateResults([], keywordResults, config);
     } else {
-      const queryVector = await this.embeddingService.embedQuery(query);
-      const vectorResults = await this.vectorSearch(queryVector, fetchLimit);
       results = this.aggregateResults(vectorResults, [], config);
     }
 
@@ -208,6 +251,63 @@ export class RAGRetriever {
       .slice(0, config.topK);
 
     return results;
+  }
+
+  /**
+   * Convert vector search results directly to retrieval results (for fast path)
+   * Skips keyword boosting for high-confidence vector matches
+   */
+  private convertVectorResultsToRetrievalResults(
+    vectorResults: SearchResult[],
+    config: RetrievalConfig
+  ): RetrievalResult[] {
+    const noteAggregates = new Map<string, NoteResultAggregate>();
+
+    for (const result of vectorResults) {
+      const normalizedScore = Math.min(1, Math.max(0, result.score));
+      const existing = noteAggregates.get(result.document.noteId);
+
+      if (existing) {
+        existing.chunks.push({
+          content: result.document.content,
+          score: normalizedScore,
+          chunkIndex: result.document.chunkIndex,
+        });
+        existing.vectorScore = Math.max(existing.vectorScore, normalizedScore);
+      } else {
+        noteAggregates.set(result.document.noteId, {
+          noteId: result.document.noteId,
+          notePath: result.document.notePath,
+          noteTitle: result.document.metadata.title,
+          chunks: [
+            {
+              content: result.document.content,
+              score: normalizedScore,
+              chunkIndex: result.document.chunkIndex,
+            },
+          ],
+          vectorScore: normalizedScore,
+          keywordScore: 0,
+          graphCentrality: this.centralityCache.get(result.document.noteId) || 0,
+        });
+      }
+    }
+
+    const results: RetrievalResult[] = [];
+    for (const agg of noteAggregates.values()) {
+      results.push({
+        noteId: agg.noteId,
+        notePath: agg.notePath,
+        noteTitle: agg.noteTitle,
+        chunks: agg.chunks.sort((a, b) => b.score - a.score),
+        baseScore: agg.vectorScore,
+        finalScore: agg.vectorScore,
+        confidence: this.calculateConfidence(agg.vectorScore, 0, agg.graphCentrality),
+        graphCentrality: agg.graphCentrality,
+      });
+    }
+
+    return results.sort((a, b) => b.finalScore - a.finalScore);
   }
 
   /**
@@ -235,6 +335,33 @@ export class RAGRetriever {
     // Perform vector search with original query (no expansion)
     const queryVector = await this.embeddingService.embedQuery(query);
     const vectorResults = await this.vectorSearch(queryVector, vectorFetchLimit);
+
+    // Apply keyword boosting only to vector results (O(top-K) instead of O(n))
+    // This avoids the expensive full-index keyword search while preserving keyword signal
+    return this.applyKeywordBoostingToVectorResults(
+      query,
+      expandedKeywords,
+      vectorResults,
+      config
+    );
+  }
+
+  /**
+   * Hybrid search with pre-computed vector results
+   * Used when vector search was already performed for fast path check
+   */
+  private async hybridSearchWithExpansionAndVectorResults(
+    query: string,
+    vectorResults: SearchResult[],
+    config: RetrievalConfig,
+    expansionConfig: QueryExpansionConfig
+  ): Promise<RetrievalResult[]> {
+    // Get expanded keywords if expansion is enabled
+    let expandedKeywords: string[] = [];
+    if (expansionConfig.enabled) {
+      const expanded = await this.queryExpander.expand(query, expansionConfig);
+      expandedKeywords = expanded.keywords;
+    }
 
     // Apply keyword boosting only to vector results (O(top-K) instead of O(n))
     // This avoids the expensive full-index keyword search while preserving keyword signal
@@ -314,7 +441,7 @@ export class RAGRetriever {
       if (!noteTermSets.has(noteId)) {
         noteTermSets.set(noteId, new Set());
       }
-      const docTerms = this.tokenize(result.document.content);
+      const docTerms = this.getTokens(result.document);
       for (const term of docTerms) {
         noteTermSets.get(noteId)!.add(term);
       }
@@ -340,7 +467,7 @@ export class RAGRetriever {
     // Calculate keyword scores for each chunk in vector results
     for (const result of vectorResults) {
       const doc = result.document;
-      const docTerms = this.tokenize(doc.content);
+      const docTerms = this.getTokens(doc);
       const termFrequency = new Map<string, number>();
       for (const term of docTerms) {
         termFrequency.set(term, (termFrequency.get(term) || 0) + 1);
@@ -452,7 +579,7 @@ export class RAGRetriever {
     // Count document frequency for each term
     const noteTermCounts = new Map<string, Set<string>>();
     for (const doc of this.vectorIndex) {
-      const docTerms = new Set(this.tokenize(doc.content));
+      const docTerms = new Set(this.getTokens(doc));
       if (!noteTermCounts.has(doc.noteId)) {
         noteTermCounts.set(doc.noteId, new Set());
       }
@@ -480,7 +607,7 @@ export class RAGRetriever {
     const expansionWeight = 0.3;
 
     for (const doc of this.vectorIndex) {
-      const docTerms = this.tokenize(doc.content);
+      const docTerms = this.getTokens(doc);
       const termFrequency = new Map<string, number>();
       for (const term of docTerms) {
         termFrequency.set(term, (termFrequency.get(term) || 0) + 1);
@@ -590,7 +717,7 @@ export class RAGRetriever {
     // Count document frequency for each term
     const noteTermCounts = new Map<string, Set<string>>();
     for (const doc of this.vectorIndex) {
-      const docTerms = new Set(this.tokenize(doc.content));
+      const docTerms = new Set(this.getTokens(doc));
       if (!noteTermCounts.has(doc.noteId)) {
         noteTermCounts.set(doc.noteId, new Set());
       }
@@ -613,7 +740,7 @@ export class RAGRetriever {
     const noteScores = new Map<string, NoteResultAggregate>();
 
     for (const doc of this.vectorIndex) {
-      const docTerms = this.tokenize(doc.content);
+      const docTerms = this.getTokens(doc);
       const termFrequency = new Map<string, number>();
       for (const term of docTerms) {
         termFrequency.set(term, (termFrequency.get(term) || 0) + 1);
@@ -938,5 +1065,18 @@ export class RAGRetriever {
       .replace(/[^\p{L}\p{N}\s]/gu, " ")
       .split(/\s+/)
       .filter((token) => token.length > 1); // Allow 2-char tokens for CJK
+  }
+
+  /**
+   * Get tokens for a document (use pre-computed if available)
+   * Falls back to runtime tokenization for old indices without precomputed tokens
+   */
+  private getTokens(doc: VectorDocument): string[] {
+    // Use precomputed tokens if available
+    if (doc.metadata.tokens && doc.metadata.tokens.length > 0) {
+      return doc.metadata.tokens;
+    }
+    // Fallback for old indices: compute at runtime
+    return this.tokenize(doc.content);
   }
 }

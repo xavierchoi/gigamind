@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.4] - 2026-01-05
+
+### Added
+- Query embedding LRU cache (`src/rag/embeddings/cache.ts`) with SHA-256 key hashing
+- Fast Path early termination for high-confidence results (>0.85 threshold)
+- Model warm-up on initialization to prevent cold start latency
+- BM25 token pre-calculation during indexing
+
+### Changed
+- Vector normalization (L2) for faster dot product similarity
+- Keyword search now uses pre-calculated tokens from metadata
+
+### Performance
+- **P95 Latency**: 918ms → 286ms (-69%) 🎉
+- **P50 Latency**: 485ms → 217ms (-55%)
+- Quality metrics maintained (Hit@1 39%, Recall@10 84%)
+- ~11% of queries use Fast Path (skip reranking)
+
 ## [0.5.3] - 2026-01-05
 
 ### Added

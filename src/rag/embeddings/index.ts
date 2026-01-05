@@ -19,6 +19,7 @@
 import type { IEmbeddingProvider } from './provider.js';
 import type { EmbeddingResult, ProgressCallback } from './types.js';
 import { createEmbeddingProvider, type ProviderOptions } from './factory.js';
+import { EmbeddingCache, type CacheStats } from './cache.js';
 
 // ============================================================================
 // EmbeddingService Class
@@ -32,17 +33,18 @@ import { createEmbeddingProvider, type ProviderOptions } from './factory.js';
  */
 export class EmbeddingService {
   private provider: IEmbeddingProvider;
-  private cache: Map<string, number[]>;
+  private cache: EmbeddingCache;
   private initialized = false;
 
   /**
    * EmbeddingService 생성자
    *
    * @param options - 프로바이더 생성 옵션
+   * @param cacheSize - LRU 캐시 최대 크기 (기본값: 100)
    */
-  constructor(options?: ProviderOptions) {
+  constructor(options?: ProviderOptions, cacheSize: number = 100) {
     this.provider = createEmbeddingProvider(options);
-    this.cache = new Map();
+    this.cache = new EmbeddingCache(cacheSize);
   }
 
   // ==========================================================================
@@ -50,14 +52,19 @@ export class EmbeddingService {
   // ==========================================================================
 
   /**
-   * 서비스 초기화 (모델 로드)
+   * 서비스 초기화 (모델 로드 + Warm-up)
    *
    * 모델이 아직 다운로드되지 않았다면 다운로드를 시작합니다.
+   * 초기화 후 dummy 추론으로 모델을 warm-up하여 첫 쿼리 레이턴시를 개선합니다.
    * initialize()는 여러 번 호출해도 안전합니다.
    */
   async initialize(): Promise<void> {
     if (this.initialized) return;
     await this.provider.initialize();
+
+    // Warm-up: 첫 쿼리 콜드 스타트 방지
+    await this.provider.embed("warmup");
+
     this.initialized = true;
   }
 
@@ -115,7 +122,7 @@ export class EmbeddingService {
     const uncachedTexts: string[] = [];
     const uncachedIndices: number[] = [];
 
-    // 캐시 확인
+    // 캐시 확인 (LRU 캐시는 cache key를 내부에서 해시하므로 getCacheKey 사용)
     for (let i = 0; i < texts.length; i++) {
       const cacheKey = this.getCacheKey(texts[i]);
       const cached = this.cache.get(cacheKey);
@@ -178,20 +185,10 @@ export class EmbeddingService {
   /**
    * 캐시 통계
    *
-   * @returns 캐시 크기와 예상 메모리 사용량
+   * @returns 캐시 크기, 히트율, 예상 메모리 사용량
    */
-  getCacheStats(): { size: number; memoryEstimate: number } {
-    let memoryEstimate = 0;
-
-    for (const [key, vector] of this.cache) {
-      // 키 문자열 (UTF-16: 2 bytes per char) + 벡터 (Float64: 8 bytes per number)
-      memoryEstimate += key.length * 2 + vector.length * 8;
-    }
-
-    return {
-      size: this.cache.size,
-      memoryEstimate,
-    };
+  getCacheStats(): CacheStats {
+    return this.cache.getStats();
   }
 
   // ==========================================================================
@@ -269,6 +266,9 @@ export class EmbeddingService {
 // ============================================================================
 // Re-exports
 // ============================================================================
+
+// Cache
+export { EmbeddingCache, type CacheStats } from './cache.js';
 
 // Factory
 export { createEmbeddingProvider, createLocalProvider, type ProviderOptions, type ProviderType } from './factory.js';

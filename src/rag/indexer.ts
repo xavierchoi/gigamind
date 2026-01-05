@@ -919,6 +919,9 @@ export class RAGIndexer {
       const titleLine = truncateContextText(title, MAX_TITLE_CONTEXT_LENGTH);
       contentWithContext = `# ${titleLine}\n\n${contentWithContext}`;
 
+      // Precompute BM25 tokens for faster search
+      const tokens = this.tokenize(contentWithContext);
+
       return {
         id: `${noteId}_chunk_${chunk.index}`,
         noteId,
@@ -933,6 +936,7 @@ export class RAGIndexer {
           created: parsed.created || stat.birthtime.toISOString(),
           modified: parsed.modified || stat.mtime.toISOString(),
           connectionCount,
+          tokens, // Precomputed BM25 tokens
         },
       };
     });
@@ -982,5 +986,18 @@ export class RAGIndexer {
    */
   private hashContent(content: string): string {
     return crypto.createHash("sha256").update(content).digest("hex");
+  }
+
+  /**
+   * Tokenize text for BM25
+   * Unicode-aware tokenizer that preserves Korean/CJK characters
+   * Must match the tokenizer in retriever.ts for consistency
+   */
+  private tokenize(text: string): string[] {
+    return text
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\s]/gu, " ")
+      .split(/\s+/)
+      .filter((token) => token.length > 1);
   }
 }

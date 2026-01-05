@@ -36,6 +36,7 @@ export const VectorDocumentMetadataSchema = z.object({
   created: z.string(),
   modified: z.string(),
   connectionCount: z.number().nonnegative(),
+  tokens: z.array(z.string()).optional(), // BM25용 사전 계산 토큰
 });
 
 /**
@@ -173,6 +174,7 @@ export interface VectorDocument {
     created: string;
     modified: string;
     connectionCount: number;
+    tokens?: string[]; // BM25용 사전 계산 토큰 (선택적)
   };
 }
 
@@ -216,6 +218,7 @@ export interface VectorStoreSearchResult {
     created: string;
     modified: string;
     connectionCount: number;
+    tokens?: string[]; // BM25용 사전 계산 토큰 (선택적)
   };
 }
 
