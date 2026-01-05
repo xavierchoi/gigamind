@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.3] - 2026-01-05
+
+### Added
+- Multilingual synthetic note generator (`scripts/generate-multilingual-notes.ts`)
+- 415 synthetic notes in 4 languages (ko:155, en:120, ja:80, zh:60)
+- Cross-lingual evaluation dataset (80 queries)
+- Medium vault benchmark (505 notes)
+
+### Benchmark Results (Medium Vault)
+- **Regression test**: No regression, Hit@1 maintained at 40%
+- **Multilingual**: Hit@1 51.3%, Recall@10 77% across 4 languages
+- **Cross-lingual**: Hit@1 95%, Recall@10 100% (BGE-M3 multilingual capability)
+- **Latency**: P95 918ms (increased from 437ms due to 5.6x vault size)
+
+### Validated
+- BGE-M3 cross-lingual retrieval: ko→ja 95%, ko→en 85% Hit@1
+
 ## [0.5.2] - 2026-01-04
 
 ### Added
