@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.5] - 2026-01-06
+
+### Added
+- PageRank algorithm (`src/utils/graph/pagerank.ts`) with Power Iteration
+- Query-Context Link Scoring for top-3 result relationship analysis
+- PageRank caching with 5-minute TTL and auto-invalidation on graph update
+- Frontmatter title matching support in graph analysis
+
+### Changed
+- Improved `reRankWithGraph` combining three signals:
+  - Degree Centrality (0.4 weight)
+  - PageRank (0.4 weight)
+  - Context Link Score (0.2 weight)
+- Normalized note title matching (case/hyphen/underscore insensitive)
+
+### Performance
+- **P95 Latency**: 286ms → 258ms (-10%)
+- Hit@1: 39% (unchanged due to low graph density in test vault)
+- Test vault graph density: 0.25 links/note, 5.7% notes with backlinks
+
+### Note
+Graph reranking is most effective in well-connected vaults. Current test vault has sparse wikilinks, limiting observable improvement.
+
 ## [0.5.4] - 2026-01-05
 
 ### Added

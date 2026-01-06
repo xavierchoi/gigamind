@@ -7,8 +7,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import matter from "gray-matter";
 import { expandPath } from "../utils/config.js";
-import { analyzeNoteGraph, normalizeNoteTitle } from "../utils/graph/index.js";
-import type { NoteGraphStats } from "../utils/graph/types.js";
+import { analyzeNoteGraph, normalizeNoteTitle, calculatePageRank } from "../utils/graph/index.js";
+import type { NoteGraphStats, BacklinkEntry, NoteMetadata } from "../utils/graph/types.js";
 import type {
   VectorDocument,
   SearchResult,
@@ -54,6 +54,15 @@ export interface RetrievalConfig {
   useFastPath?: boolean;
   /** Minimum score threshold for fast path (skips keyword boosting and graph reranking). Default: 0.85 */
   fastPathThreshold?: number;
+  /** Graph boost component weights (must sum to 1.0) */
+  graphBoostWeights?: {
+    /** Weight for degree centrality boost. Default: 0.4 */
+    centrality?: number;
+    /** Weight for PageRank boost. Default: 0.4 */
+    pageRank?: number;
+    /** Weight for query-context link boost. Default: 0.2 */
+    contextLink?: number;
+  };
 }
 
 /**
@@ -94,6 +103,12 @@ export class RAGRetriever {
   private graphStats: NoteGraphStats | null = null;
   private centralityCache: Map<string, number> = new Map();
   private queryExpander: QueryExpander;
+  private noteMetadataByPath: Map<string, NoteMetadata> = new Map();
+
+  // PageRank caching
+  private pageRankCache: Map<string, number> | null = null;
+  private pageRankCacheTime: number = 0;
+  private readonly PAGERANK_CACHE_TTL = 5 * 60 * 1000; // 5분
 
   constructor(config: { embeddingService: IEmbeddingService; notesDir: string }) {
     this.embeddingService = config.embeddingService;
@@ -117,9 +132,19 @@ export class RAGRetriever {
   private async refreshGraphStats(): Promise<void> {
     try {
       this.graphStats = await analyzeNoteGraph(this.notesDir, { useCache: true });
+      // Invalidate PageRank cache when graph stats change
+      this.pageRankCache = null;
+      this.noteMetadataByPath.clear();
+      if (this.graphStats?.noteMetadata) {
+        for (const metadata of this.graphStats.noteMetadata) {
+          this.noteMetadataByPath.set(metadata.path, metadata);
+        }
+      }
     } catch (error) {
       console.warn("[RAGRetriever] Failed to load graph stats:", error);
       this.graphStats = null;
+      this.pageRankCache = null;
+      this.noteMetadataByPath.clear();
     }
   }
 
@@ -234,7 +259,11 @@ export class RAGRetriever {
 
     // Apply graph-based re-ranking
     if (config.useGraphReranking && this.graphStats) {
-      results = await this.reRankWithGraph(results, config.graphBoostFactor);
+      results = await this.reRankWithGraph(
+        results,
+        config.graphBoostFactor,
+        config.graphBoostWeights
+      );
     }
 
     // Expand context if requested
@@ -931,25 +960,179 @@ export class RAGRetriever {
   }
 
   /**
-   * Re-rank results using graph structure (centrality boost)
+   * Get cached PageRank scores or compute new ones
+   */
+  private getPageRankScores(): Map<string, number> {
+    const now = Date.now();
+
+    // Return cached if still valid
+    if (
+      this.pageRankCache &&
+      now - this.pageRankCacheTime < this.PAGERANK_CACHE_TTL
+    ) {
+      return this.pageRankCache;
+    }
+
+    // Compute PageRank
+    if (this.graphStats) {
+      const result = calculatePageRank(
+        this.graphStats.forwardLinks,
+        this.graphStats.backlinks,
+        { damping: 0.85, iterations: 20 },
+        this.noteMetadataByPath.size > 0 ? this.noteMetadataByPath : undefined
+      );
+      this.pageRankCache = result.scores;
+      this.pageRankCacheTime = now;
+      return result.scores;
+    }
+
+    return new Map();
+  }
+
+  /**
+   * Get backlinks for a specific note by its title
+   */
+  private getBacklinksFor(noteTitle: string): BacklinkEntry[] {
+    if (!this.graphStats) {
+      return [];
+    }
+
+    // Try exact match first
+    const directMatch = this.graphStats.backlinks.get(noteTitle);
+    if (directMatch) {
+      return directMatch;
+    }
+
+    // Try normalized match
+    const normalizedTarget = normalizeNoteTitle(noteTitle);
+    for (const [key, entries] of this.graphStats.backlinks) {
+      if (normalizeNoteTitle(key) === normalizedTarget) {
+        return entries;
+      }
+    }
+
+    return [];
+  }
+
+  /**
+   * Get normalized identifiers for a note (title, basename, ID)
+   */
+  private getNormalizedNoteIdentifiers(notePath: string, noteTitle: string): string[] {
+    const identifiers = new Set<string>();
+    const metadata = this.noteMetadataByPath.get(notePath);
+
+    if (metadata) {
+      identifiers.add(normalizeNoteTitle(metadata.title));
+      identifiers.add(normalizeNoteTitle(metadata.basename));
+      identifiers.add(normalizeNoteTitle(metadata.id));
+    }
+
+    identifiers.add(normalizeNoteTitle(noteTitle));
+    identifiers.add(normalizeNoteTitle(path.basename(notePath, ".md")));
+
+    return Array.from(identifiers);
+  }
+
+  /**
+   * Calculate query-context link score
+   * Boosts results that are linked to/from top results
+   *
+   * The intuition: if a result is linked to the top-ranked results,
+   * it's likely to be contextually relevant to the query.
+   */
+  private calculateQueryContextScore(
+    result: RetrievalResult,
+    topResults: RetrievalResult[]
+  ): number {
+    if (!this.graphStats) {
+      return 0;
+    }
+
+    let score = 0;
+
+    // Get this result's links
+    const resultLinks = this.graphStats.forwardLinks.get(result.notePath) || [];
+    const normalizedResultLinks = new Set(
+      resultLinks.map((link) => normalizeNoteTitle(link))
+    );
+    const resultBacklinks = this.getBacklinksFor(result.noteTitle);
+
+    // Check connections to top 3 results
+    const topN = Math.min(3, topResults.length);
+    for (let i = 0; i < topN; i++) {
+      const topResult = topResults[i];
+      if (topResult.notePath === result.notePath) {
+        continue;
+      }
+
+      // Weight decreases for lower-ranked top results
+      const weight = 0.1 * (3 - i); // top1: 0.3, top2: 0.2, top3: 0.1
+
+      // Forward link: this result links to top result (normalize title/basename/ID)
+      const topIdentifiers = this.getNormalizedNoteIdentifiers(
+        topResult.notePath,
+        topResult.noteTitle
+      );
+      const hasForwardLink = topIdentifiers.some((id) =>
+        normalizedResultLinks.has(id)
+      );
+      if (hasForwardLink) {
+        score += weight;
+      }
+
+      // Backward link: top result links to this result
+      if (resultBacklinks.some((bl) => bl.notePath === topResult.notePath)) {
+        score += weight;
+      }
+    }
+
+    return score;
+  }
+
+  /**
+   * Re-rank results using enhanced graph structure
+   * Combines: degree centrality, PageRank, and query-context link scoring
    * baseScore는 유지하고 finalScore만 업데이트
    */
   private async reRankWithGraph(
     results: RetrievalResult[],
-    boostFactor: number = 0.2
+    boostFactor: number = 0.2,
+    weights?: { centrality?: number; pageRank?: number; contextLink?: number }
   ): Promise<RetrievalResult[]> {
-    if (!this.graphStats) {
+    if (!this.graphStats || results.length === 0) {
       return results;
     }
 
+    // Default weights
+    const centralityWeight = weights?.centrality ?? 0.4;
+    const pageRankWeight = weights?.pageRank ?? 0.4;
+    const contextLinkWeight = weights?.contextLink ?? 0.2;
+
+    // Get PageRank scores (cached)
+    const pageRankScores = this.getPageRankScores();
+
+    // Get top results before reranking (for context link calculation)
+    const topResults = results.slice(0, 3);
+
     return results.map((result) => {
-      const centralityBoost = result.graphCentrality * boostFactor;
-      const boostedScore = result.baseScore * (1 + centralityBoost);
+      // 1. Degree centrality boost (original)
+      const centralityBoost = result.graphCentrality * boostFactor * centralityWeight;
+
+      // 2. PageRank boost
+      const pageRank = pageRankScores.get(result.notePath) || 0;
+      const pageRankBoost = pageRank * boostFactor * pageRankWeight;
+
+      // 3. Query-context link boost
+      const contextLinkScore = this.calculateQueryContextScore(result, topResults);
+      const contextBoost = contextLinkScore * boostFactor * contextLinkWeight;
+
+      // Total boost
+      const totalBoost = centralityBoost + pageRankBoost + contextBoost;
+      const boostedScore = result.baseScore * (1 + totalBoost);
 
       return {
         ...result,
-        // baseScore는 유지 (spread 연산자로 이미 복사됨)
-        finalScore: boostedScore,  // finalScore만 업데이트
+        finalScore: boostedScore,
         confidence: this.calculateConfidence(
           result.baseScore,
           0,

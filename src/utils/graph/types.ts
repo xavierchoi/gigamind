@@ -96,6 +96,20 @@ export const BacklinkEntrySchema = z.object({
 });
 
 /**
+ * 노트 메타데이터 스키마
+ */
+export const NoteMetadataSchema = z.object({
+  /** 노트 ID */
+  id: z.string(),
+  /** 노트 제목 */
+  title: z.string(),
+  /** 파일 경로 */
+  path: z.string(),
+  /** 파일명 (확장자 제외) */
+  basename: z.string(),
+});
+
+/**
  * 노트 그래프 전체 통계 스키마
  * Note: Map 타입은 직렬화/역직렬화 시 Record로 변환 필요
  */
@@ -114,6 +128,8 @@ export const NoteGraphStatsSchema = z.object({
   backlinks: z.record(z.string(), z.array(BacklinkEntrySchema)),
   /** Forward Links: 노트 경로 -> 해당 노트가 참조하는 노트 제목들 (직렬화 시 Record 사용) */
   forwardLinks: z.record(z.string(), z.array(z.string())),
+  /** 노트 메타데이터 목록 (경로/제목/ID 매핑용) */
+  noteMetadata: z.array(NoteMetadataSchema).optional(),
 });
 
 /**
@@ -149,19 +165,6 @@ export const AnalyzeOptionsSchema = z.object({
   subdir: z.string().optional(),
 });
 
-/**
- * 노트 메타데이터 스키마
- */
-export const NoteMetadataSchema = z.object({
-  /** 노트 ID */
-  id: z.string(),
-  /** 노트 제목 */
-  title: z.string(),
-  /** 파일 경로 */
-  path: z.string(),
-  /** 파일명 (확장자 제외) */
-  basename: z.string(),
-});
 
 /**
  * 캐시 항목 스키마
@@ -411,6 +414,8 @@ export interface NoteGraphStats {
   backlinks: Map<string, BacklinkEntry[]>;
   /** Forward Links 맵: 노트 경로 -> 해당 노트가 참조하는 노트 제목들 */
   forwardLinks: Map<string, string[]>;
+  /** 노트 메타데이터 목록 (경로/제목/ID 매핑용) */
+  noteMetadata?: NoteMetadata[];
 }
 
 /**

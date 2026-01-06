@@ -310,6 +310,7 @@ export async function analyzeNoteGraph(
     orphanNotes,
     backlinks,
     forwardLinks,
+    noteMetadata: noteMetadataList,
   };
 
   // 캐시 저장

@@ -499,6 +499,44 @@ export { getCacheStats } from "./cache.js";
 export { isCacheValid } from "./cache.js";
 
 // ============================================================================
+// PageRank Algorithm
+// ============================================================================
+
+/**
+ * PageRank 계산 옵션 타입
+ * @see {@link calculatePageRank} for using these options
+ */
+export type { PageRankOptions } from "./pagerank.js";
+
+/**
+ * PageRank 계산 결과 타입
+ * 점수 맵, 반복 횟수, 수렴 여부를 포함
+ */
+export type { PageRankResult } from "./pagerank.js";
+
+/**
+ * Calculate PageRank scores for notes based on link structure.
+ *
+ * PageRank measures the relative importance of notes based on their
+ * link structure. Notes that are referenced often and by important
+ * notes receive higher scores.
+ *
+ * @param forwardLinks - Map of note path → referenced note titles
+ * @param backlinks - Map of note title → notes referencing it
+ * @param options - PageRank options (damping, iterations, tolerance)
+ * @returns PageRank scores normalized to 0-1 range
+ *
+ * @example
+ * ```typescript
+ * const result = calculatePageRank(stats.forwardLinks, stats.backlinks);
+ * const importantNotes = [...result.scores.entries()]
+ *   .sort((a, b) => b[1] - a[1])
+ *   .slice(0, 10);
+ * ```
+ */
+export { calculatePageRank, getPageRankScore } from "./pagerank.js";
+
+// ============================================================================
 // Incremental Cache System
 // ============================================================================
 
