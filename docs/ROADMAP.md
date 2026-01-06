@@ -2,7 +2,7 @@
 
 > 이 문서는 eval 도구와 로컬 임베딩 구현 이후의 다음 단계를 정의합니다.
 > **저장 위치**: `docs/ROADMAP.md`
-> **마지막 업데이트**: 2026-01-05
+> **마지막 업데이트**: 2026-01-07
 
 ---
 
@@ -17,7 +17,8 @@
 | ~~3~~ | 2.1 | 중형 vault (505개) | 확장성/다국어 검증 | ✅ 완료 |
 | ~~4~~ | L1+L2 | 레이턴시 최적화 | P95 918ms→286ms (-69%) | ✅ 완료 |
 | ~~5~~ | 4.2 | 그래프 리랭킹 | PageRank + Context Link | ✅ 완료 |
-| **1** | - | GPU 서버 (선택) | 파워유저용 | ⏳ 대기 |
+| **1** | 5 | Import 시스템 개선 | Hub node 문제 해결 | ⏳ 대기 |
+| **2** | - | GPU 서버 (선택) | 파워유저용 | ⏳ 대기 |
 
 ### 왜 이 순서인가?
 
@@ -363,6 +364,23 @@ async function indexNote(note: Note) {
 **구현 파일**:
 - `src/utils/graph/pagerank.ts` - PageRank 알고리즘
 - `src/rag/retriever.ts` - 개선된 reRankWithGraph
+
+---
+
+### Phase 5: Import System Improvements ⏳
+
+> **상세 내용**: [import_improve.md](./import_improve.md) 참조
+
+**배경**: Phase 4.2 그래프 리랭킹 효과 검증 중 발견된 문제
+- Import된 90개 노트에서 1개 노트("Claude")가 75% backlink 독점
+- 원인: `autoGenerateWikilinks()`의 과도한 자동 링크 생성
+
+| Phase | 작업 | 목적 | 상태 |
+|-------|------|------|------|
+| 5.1 | Auto-Link Quality Fix | Hub node 문제 해결 | ⏳ 대기 |
+| 5.2 | Alias 보존 및 해석 | 기존 vault 별칭 유지 | ⏳ 대기 |
+| 5.3 | Import Health Check | Import 품질 자동 검증 | ⏳ 대기 |
+| 5.4 | Link Repair Tool | 기존 vault 링크 수정 | ⏳ 대기 |
 
 ---
 
