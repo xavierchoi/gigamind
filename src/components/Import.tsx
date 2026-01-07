@@ -14,6 +14,7 @@ import {
 } from "../utils/folderDialog/index.js";
 import { generateNoteId } from "../utils/frontmatter.js";
 import { t } from "../i18n/index.js";
+import { SmartLinker, type LinkCandidate } from "../utils/import/index.js";
 
 type ImportStep =
   | "source"
@@ -242,6 +243,169 @@ function autoGenerateWikilinks(
   });
 
   return result;
+}
+
+// Escape special regex characters
+function escapeRegExp(string: string): string {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Smart wikilink generation using LLM (Phase 5.1)
+ * Replaces simple string matching with context-aware link evaluation
+ */
+async function autoGenerateWikilinksWithLLM(
+  content: string,
+  wikilinkMapping: Map<string, WikilinkMapping>,
+  currentNoteTitle: string,
+  smartLinker: SmartLinker
+): Promise<string> {
+  // 1. Extract link candidates
+  const candidates: LinkCandidate[] = [];
+  const availableNotesSet = new Set<string>();
+
+  // Protected regions (existing wikilinks, code blocks)
+  const protectedRanges: Array<{ start: number; end: number }> = [];
+
+  // Protect existing wikilinks
+  const wikilinkRegex = /\[\[[^\]]+\]\]/g;
+  let match;
+  while ((match = wikilinkRegex.exec(content)) !== null) {
+    protectedRanges.push({ start: match.index, end: match.index + match[0].length });
+  }
+
+  // Protect code blocks
+  const codeBlockRegex = /```[\s\S]*?```|`[^`]+`/g;
+  while ((match = codeBlockRegex.exec(content)) !== null) {
+    protectedRanges.push({ start: match.index, end: match.index + match[0].length });
+  }
+
+  // Check if position is in a protected region
+  const isProtected = (pos: number, len: number): boolean => {
+    return protectedRanges.some(
+      (range) =>
+        (pos >= range.start && pos < range.end) ||
+        (pos + len > range.start && pos + len <= range.end)
+    );
+  };
+
+  // Collect note titles and find matches
+  for (const [key, mapping] of wikilinkMapping) {
+    if (key === mapping.originalTitle) {
+      availableNotesSet.add(key);
+    }
+
+    // Only use original titles, skip filename variants
+    // Minimum 3 characters, exclude self-linking
+    if (
+      key === mapping.originalTitle &&
+      key.length >= MIN_TITLE_LENGTH_FOR_AUTO_LINK &&
+      key.toLowerCase() !== currentNoteTitle.toLowerCase()
+    ) {
+      const regex = new RegExp(escapeRegExp(key), "gi");
+
+      while ((match = regex.exec(content)) !== null) {
+        // Skip if in protected region
+        if (isProtected(match.index, key.length)) {
+          continue;
+        }
+
+        // Extract surrounding context (50 chars before and after)
+        const start = Math.max(0, match.index - 50);
+        const end = Math.min(content.length, match.index + key.length + 50);
+        const context = content.slice(start, end);
+
+        candidates.push({
+          matchedText: match[0],
+          targetNoteTitle: key,
+          targetNoteId: mapping.newFileName.replace(/\.md$/, ""),
+          context,
+          position: match.index,
+        });
+      }
+    }
+  }
+
+  // No candidates = return original content
+  if (candidates.length === 0) {
+    return content;
+  }
+
+  console.log(`[SmartLinker] ${currentNoteTitle}: evaluating ${candidates.length} candidates...`);
+
+  // 2. LLM evaluation
+  const evaluations = await smartLinker.evaluateCandidates(
+    candidates,
+    Array.from(availableNotesSet)
+  );
+
+  // 3. Apply approved links (from end to start to preserve positions)
+  let result = content;
+
+  // Sort approved links by position descending
+  const approvedLinks = evaluations
+    .filter((e) => e.shouldLink)
+    .sort((a, b) => b.candidate.position - a.candidate.position);
+
+  // Track applied positions to avoid duplicates
+  const appliedPositions = new Set<number>();
+
+  for (const evaluation of approvedLinks) {
+    const { candidate, suggestedTarget } = evaluation;
+
+    // Skip if already applied at this position
+    if (appliedPositions.has(candidate.position)) {
+      continue;
+    }
+
+    // Use suggested target if provided
+    let targetId = candidate.targetNoteId;
+
+    if (suggestedTarget) {
+      const suggested = wikilinkMapping.get(suggestedTarget);
+      if (suggested) {
+        targetId = suggested.newFileName.replace(/\.md$/, "");
+      }
+    }
+
+    // Insert link
+    const before = result.slice(0, candidate.position);
+    const after = result.slice(candidate.position + candidate.matchedText.length);
+    result = `${before}[[${targetId}|${candidate.matchedText}]]${after}`;
+
+    appliedPositions.add(candidate.position);
+  }
+
+  return result;
+}
+
+/**
+ * Smart linking with fallback to basic linking
+ * Used when LLM is unavailable or fails
+ */
+async function autoGenerateWikilinksWithFallback(
+  content: string,
+  wikilinkMapping: Map<string, WikilinkMapping>,
+  currentNoteTitle: string,
+  smartLinker: SmartLinker | null
+): Promise<string> {
+  // If no SmartLinker, use basic linking
+  if (!smartLinker) {
+    console.log("[Import] SmartLinker not available, using basic linking");
+    return autoGenerateWikilinks(content, wikilinkMapping, currentNoteTitle);
+  }
+
+  try {
+    return await autoGenerateWikilinksWithLLM(
+      content,
+      wikilinkMapping,
+      currentNoteTitle,
+      smartLinker
+    );
+  } catch (error) {
+    console.warn("[Import] Smart linking failed, using fallback:", error);
+    return autoGenerateWikilinks(content, wikilinkMapping, currentNoteTitle);
+  }
 }
 
 // Update image paths in content
@@ -555,6 +719,20 @@ export function Import({ notesDir, onComplete, onCancel }: ImportProps) {
       }
 
       // ============================================
+      // Initialize SmartLinker for LLM-based linking (Phase 5.1)
+      // ============================================
+      let smartLinker: SmartLinker | null = null;
+      try {
+        smartLinker = new SmartLinker({
+          model: "claude-haiku-4-5-20251001",
+          batchSize: 20,
+        });
+        console.log("[Import] SmartLinker initialized for LLM-based linking");
+      } catch (error) {
+        console.warn("[Import] Failed to initialize SmartLinker, using basic linking:", error);
+      }
+
+      // ============================================
       // PASS 2: Process each markdown file
       // ============================================
       let importedCount = 0;
@@ -618,11 +796,12 @@ export function Import({ notesDir, onComplete, onCancel }: ImportProps) {
           // Update wikilinks with aliases
           let updatedBodyContent = updateWikilinksWithAliases(bodyContent, wikilinkMapping);
 
-          // Auto-generate wikilinks for text matching other note titles
-          updatedBodyContent = autoGenerateWikilinks(
+          // Auto-generate wikilinks for text matching other note titles (Phase 5.1: LLM-based)
+          updatedBodyContent = await autoGenerateWikilinksWithFallback(
             updatedBodyContent,
             wikilinkMapping,
-            originalTitle
+            originalTitle,
+            smartLinker
           );
 
           // Update image paths relative to target folder
@@ -647,6 +826,16 @@ export function Import({ notesDir, onComplete, onCancel }: ImportProps) {
           // Skip files that can't be processed
           console.error(`Failed to import ${originalTitle}:`, fileError);
         }
+      }
+
+      // Log smart linking statistics
+      if (smartLinker) {
+        const linkingStats = smartLinker.getStats();
+        console.log("[Import] Smart Linking Statistics:");
+        console.log(`  - Total candidates: ${linkingStats.totalCandidates}`);
+        console.log(`  - Approved: ${linkingStats.approved}`);
+        console.log(`  - Rejected: ${linkingStats.rejected}`);
+        console.log(`  - Redirected: ${linkingStats.redirected}`);
       }
 
       const importResult: ImportResult = {
