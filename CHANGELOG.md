@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.6] - 2026-01-07
+
+### Added
+- Phase 5.1: LLM Smart Linking implementation
+- Claude Haiku 4.5-based contextual link generation (`SmartLinker` class)
+- Parallel batch processing with `p-limit` (concurrency: 3)
+- Evaluation caching based on 60-character context key
+- Multilingual support: Korean, English, Japanese, Chinese
+- Graceful fallback to existing logic on API failure
+
+### Test Results
+- **Xavier Vault**: Hub concentration 75.6% → 63.2% (-12.5%)
+- **SmartLinker approval rate**: 16.4% (false positive prevention)
+- All 18 SmartLinker tests passing
+
+### Implementation Files
+- `src/utils/import/smartLinker.ts` - SmartLinker class
+- `src/utils/import/types.ts` - Type definitions
+- `src/components/Import.tsx` - SmartLinker integration
+- `tests/utils/import/smartLinker.test.ts` - Test suite
+
 ## [0.5.5] - 2026-01-06
 
 ### Added

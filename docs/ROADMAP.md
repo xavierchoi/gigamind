@@ -377,7 +377,7 @@ async function indexNote(note: Note) {
 
 | Phase | 작업 | 목적 | 상태 |
 |-------|------|------|------|
-| 5.1 | Auto-Link Quality Fix | Hub node 문제 해결 | ⏳ 대기 |
+| 5.1 | LLM Smart Linking | Hub node 문제 해결 | ✅ 완료 |
 | 5.2 | Alias 보존 및 해석 | 기존 vault 별칭 유지 | ⏳ 대기 |
 | 5.3 | Import Health Check | Import 품질 자동 검증 | ⏳ 대기 |
 | 5.4 | Link Repair Tool | 기존 vault 링크 수정 | ⏳ 대기 |
@@ -397,6 +397,7 @@ async function indexNote(note: Note) {
 - Phase 2.1: 중형 vault 벤치마크 (505개, 다국어)
 - Phase L1+L2: 레이턴시 최적화 (캐시, Fast Path, 벡터 정규화, 토큰 사전계산)
 - Phase 4.2: 그래프 리랭킹 개선 (PageRank, Context Link, 캐싱)
+- Phase 5.1: LLM Smart Linking (Claude Haiku 4.5, Hub 집중도 -12.5%)
 
 ### 🎯 현재 메트릭 (자유형 쿼리 100개, v0.5.5)
 | 메트릭 | 값 | v0.5.4 | 변화 |
