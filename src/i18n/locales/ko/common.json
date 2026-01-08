@@ -336,7 +336,8 @@
       "copying_images": "이미지 파일 복사 중...",
       "processing_note": "노트 처리 중: {{title}}",
       "cancelling": "취소 중...",
-      "rolling_back": "롤백 중..."
+      "rolling_back": "롤백 중...",
+      "analyzing_health": "가져오기 건강도 분석 중..."
     },
     "error": {
       "path_not_found": "경로를 찾을 수 없습니다: {{path}}",
@@ -381,6 +382,11 @@
     },
     "actions": {
       "retry": "Enter: 다시 시도 | ESC: 취소"
+    },
+    "health": {
+      "summary": "건강도 점수: {{score}}/100 | {{notes}}개 노트 | {{resolved}}/{{total}} 링크 해결됨",
+      "recommendations_hint": "{{count}}개 권장사항 - 콘솔에서 상세 내용 확인",
+      "analysis_failed": "건강도 분석 실패"
     }
   }
 }

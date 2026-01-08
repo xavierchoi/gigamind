@@ -336,7 +336,8 @@
       "copying_images": "Copying image files...",
       "processing_note": "Processing note: {{title}}",
       "cancelling": "Cancelling...",
-      "rolling_back": "Rolling back..."
+      "rolling_back": "Rolling back...",
+      "analyzing_health": "Analyzing import health..."
     },
     "error": {
       "path_not_found": "Path not found: {{path}}",
@@ -381,6 +382,11 @@
     },
     "actions": {
       "retry": "Enter: Retry | ESC: Cancel"
+    },
+    "health": {
+      "summary": "Health Score: {{score}}/100 | {{notes}} notes | {{resolved}}/{{total}} links resolved",
+      "recommendations_hint": "{{count}} recommendation(s) - see console for details",
+      "analysis_failed": "Health analysis unavailable"
     }
   }
 }

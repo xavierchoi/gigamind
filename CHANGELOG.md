@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.8] - 2026-01-08
+
+### Added
+- Phase 5.3: Import Health Check system for post-import graph analysis
+- `analyzeImportHealth()` function for comprehensive graph health analysis
+- `calculateHealthScore()` for 0-100 health score calculation with weighted metrics
+- `printHealthReport()` for formatted console output with colored ASCII box
+- `getHealthSummary()` for short one-line health status summary
+- Hub node detection (>20% backlink concentration warning)
+- Suspicious auto-link detection (>10 occurrences of same title)
+- Isolated/orphan note detection with configurable thresholds
+- Actionable recommendations generated based on detected anomalies
+- Health status categorization: healthy (75+), warning (50-74), critical (<50)
+- Health report displayed in Import completion UI
+- i18n support for health analysis status (en/ko)
+
+### Health Thresholds
+- Hub concentration: 20% warning, 50% critical
+- Isolated notes (no backlinks): 50% warning, 80% critical
+- No outlinks: 30% warning, 60% critical
+- Orphan notes: 10% warning, 30% critical
+- Suspicious auto-link threshold: 10+ occurrences
+
+### Test Results
+- 31 new tests in `healthCheck.test.ts`
+- All 355 tests passing (was 324)
+
+### Implementation Files
+- `src/utils/import/healthCheck.ts` - Main health check module
+- `src/utils/import/index.ts` - Exports
+- `src/components/Import.tsx` - Integration with import flow
+- `src/i18n/locales/en/common.json` - English strings
+- `src/i18n/locales/ko/common.json` - Korean strings
+- `tests/utils/import/healthCheck.test.ts` - Test suite
+
 ## [0.5.7] - 2026-01-08
 
 ### Added

@@ -14,7 +14,13 @@ import {
 } from "../utils/folderDialog/index.js";
 import { generateNoteId, extractAliases } from "../utils/frontmatter.js";
 import { t } from "../i18n/index.js";
-import { SmartLinker, type LinkCandidate } from "../utils/import/index.js";
+import {
+  SmartLinker,
+  type LinkCandidate,
+  analyzeImportHealth,
+  printHealthReport,
+  type ImportHealthReport,
+} from "../utils/import/index.js";
 
 type ImportStep =
   | "source"
@@ -480,6 +486,7 @@ export function Import({ notesDir, onComplete, onCancel }: ImportProps) {
   } | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [error, setError] = useState<string>("");
+  const [healthReport, setHealthReport] = useState<ImportHealthReport | null>(null);
 
   // Cancellation support
   const cancelledRef = useRef(false);
@@ -846,6 +853,21 @@ export function Import({ notesDir, onComplete, onCancel }: ImportProps) {
         console.log(`  - Redirected: ${linkingStats.redirected}`);
       }
 
+      // Phase 5.3: Run health check analysis
+      setImportStatus(t("import.status.analyzing_health"));
+      try {
+        const healthCheckReport = await analyzeImportHealth(expandedNotesDir);
+        setHealthReport(healthCheckReport);
+        printHealthReport(healthCheckReport);
+
+        if (healthCheckReport.healthScore < 50) {
+          console.warn("[Import] ⚠️  Import completed with health issues. Review recommendations above.");
+        }
+      } catch (healthErr) {
+        console.warn("[Import] Health check failed:", healthErr);
+        // Continue with import completion even if health check fails
+      }
+
       const importResult: ImportResult = {
         success: true,
         filesImported: importedCount,
@@ -1001,6 +1023,15 @@ export function Import({ notesDir, onComplete, onCancel }: ImportProps) {
   }
 
   if (step === "complete" && result) {
+    // Determine health status color
+    const healthColor = healthReport
+      ? healthReport.status === "healthy"
+        ? "green"
+        : healthReport.status === "warning"
+          ? "yellow"
+          : "red"
+      : "gray";
+
     return (
       <Box flexDirection="column" padding={1}>
         <Box
@@ -1019,6 +1050,26 @@ export function Import({ notesDir, onComplete, onCancel }: ImportProps) {
             <Text>{t("import.complete.images_imported", { count: result.imagesImported })}</Text>
           )}
           <Newline />
+          {/* Health Check Summary (Phase 5.3) */}
+          {healthReport && (
+            <>
+              <Text color={healthColor} bold>
+                {healthReport.status === "healthy" ? "✅ " : healthReport.status === "warning" ? "⚠️ " : "❌ "}
+                {t("import.health.summary", {
+                  score: healthReport.healthScore,
+                  notes: healthReport.totalNotes,
+                  resolved: healthReport.resolvedLinks,
+                  total: healthReport.totalWikilinks,
+                })}
+              </Text>
+              {healthReport.recommendations.length > 0 && (
+                <Text color="gray" dimColor>
+                  {"💡 "}{t("import.health.recommendations_hint", { count: healthReport.recommendations.length })}
+                </Text>
+              )}
+              <Newline />
+            </>
+          )}
           <Text color="gray">{t("import.complete.source", { path: result.sourcePath })}</Text>
           <Text color="gray">{t("import.complete.notes_location", { path: expandPath(notesDir) })}</Text>
           {result.imagesImported > 0 && (

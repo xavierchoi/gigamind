@@ -379,7 +379,7 @@ async function indexNote(note: Note) {
 |-------|------|------|------|
 | 5.1 | LLM Smart Linking | Hub node 문제 해결 | ✅ 완료 |
 | 5.2 | Alias 보존 및 해석 | 기존 vault 별칭 유지 | ✅ 완료 |
-| 5.3 | Import Health Check | Import 품질 자동 검증 | ⏳ 대기 |
+| 5.3 | Import Health Check | Import 품질 자동 검증 | ✅ 완료 |
 | 5.4 | Link Repair Tool | 기존 vault 링크 수정 | ⏳ 대기 |
 
 ---
@@ -399,8 +399,9 @@ async function indexNote(note: Note) {
 - Phase 4.2: 그래프 리랭킹 개선 (PageRank, Context Link, 캐싱)
 - Phase 5.1: LLM Smart Linking (Claude Haiku 4.5, Hub 집중도 -12.5%)
 - Phase 5.2: Alias 보존 및 해석 (aliases/alias frontmatter 지원, 그래프 해석 정확도 향상)
+- Phase 5.3: Import Health Check (Hub 탐지, 고립 노트 비율, 건강도 점수 0-100, 권장사항 생성)
 
-### 🎯 현재 메트릭 (자유형 쿼리 100개, v0.5.7)
+### 🎯 현재 메트릭 (자유형 쿼리 100개, v0.5.8)
 | 메트릭 | 값 | v0.5.4 | 변화 |
 |--------|-----|--------|------|
 | Hit@1 | 39% | 39% | 0% |
