@@ -367,6 +367,249 @@ describe("Graph Analyzer", () => {
     });
   });
 
+  describe("alias resolution (Phase 5.2)", () => {
+    it("should resolve wikilinks using aliases", async () => {
+      // Note with alias
+      await fs.writeFile(
+        path.join(testDir, "bestpractices.md"),
+        `---
+title: Claude Code Best Practices
+aliases:
+  - Claude Tips
+  - CC Tips
+---
+Best practices content`
+      );
+      // Note linking via alias
+      await fs.writeFile(
+        path.join(testDir, "note1.md"),
+        "---\ntitle: Note 1\n---\n[[Claude Tips]]"
+      );
+
+      invalidateGraphCache(testDir);
+      const stats = await analyzeNoteGraph(testDir, { useCache: false });
+
+      // Should NOT be a dangling link because alias resolves to bestpractices.md
+      expect(stats.danglingLinks).toHaveLength(0);
+      expect(stats.uniqueConnections).toBe(1);
+
+      // Should have backlink from Note 1
+      const backlinks = stats.backlinks.get("Claude Code Best Practices");
+      expect(backlinks).toBeDefined();
+      expect(backlinks).toHaveLength(1);
+      expect(backlinks?.[0].noteTitle).toBe("Note 1");
+    });
+
+    it("should resolve wikilinks using single alias (alias field)", async () => {
+      await fs.writeFile(
+        path.join(testDir, "project.md"),
+        `---
+title: Project Alpha
+alias: PA
+---
+Project content`
+      );
+      await fs.writeFile(
+        path.join(testDir, "ref.md"),
+        "---\ntitle: Reference\n---\n[[PA]]"
+      );
+
+      invalidateGraphCache(testDir);
+      const stats = await analyzeNoteGraph(testDir, { useCache: false });
+
+      expect(stats.danglingLinks).toHaveLength(0);
+      expect(stats.uniqueConnections).toBe(1);
+    });
+
+    it("should include aliases in note metadata", async () => {
+      await fs.writeFile(
+        path.join(testDir, "note.md"),
+        `---
+title: Full Note
+aliases:
+  - Alias A
+  - Alias B
+---
+Content`
+      );
+
+      invalidateGraphCache(testDir);
+      const stats = await analyzeNoteGraph(testDir, { useCache: false });
+
+      expect(stats.noteMetadata).toBeDefined();
+      const metadata = stats.noteMetadata?.find(m => m.title === "Full Note");
+      expect(metadata).toBeDefined();
+      expect(metadata?.aliases).toEqual(["Alias A", "Alias B"]);
+    });
+
+    it("should resolve multiple aliases to the same note", async () => {
+      await fs.writeFile(
+        path.join(testDir, "main.md"),
+        `---
+title: Main Note
+aliases:
+  - Shortcut
+  - 별칭
+---
+Main content`
+      );
+      await fs.writeFile(
+        path.join(testDir, "ref1.md"),
+        "---\ntitle: Ref 1\n---\n[[Shortcut]]"
+      );
+      await fs.writeFile(
+        path.join(testDir, "ref2.md"),
+        "---\ntitle: Ref 2\n---\n[[별칭]]"
+      );
+
+      invalidateGraphCache(testDir);
+      const stats = await analyzeNoteGraph(testDir, { useCache: false });
+
+      expect(stats.danglingLinks).toHaveLength(0);
+      expect(stats.uniqueConnections).toBe(2); // Two unique connections to main.md
+
+      const backlinks = stats.backlinks.get("Main Note");
+      expect(backlinks).toBeDefined();
+      expect(backlinks).toHaveLength(2);
+    });
+
+    it("should handle case-insensitive alias matching", async () => {
+      // Note with alias "MyAlias"
+      await fs.writeFile(
+        path.join(testDir, "target.md"),
+        `---
+title: Target Note
+aliases:
+  - MyAlias
+---
+Target content`
+      );
+      // Note linking via lowercase alias
+      await fs.writeFile(
+        path.join(testDir, "linker.md"),
+        "---\ntitle: Linker\n---\n[[myalias]]"
+      );
+
+      invalidateGraphCache(testDir);
+      const stats = await analyzeNoteGraph(testDir, { useCache: false });
+
+      // [[myalias]] should resolve to note with alias "MyAlias" (case-insensitive)
+      expect(stats.danglingLinks).toHaveLength(0);
+      expect(stats.uniqueConnections).toBe(1);
+
+      const backlinks = stats.backlinks.get("Target Note");
+      expect(backlinks).toBeDefined();
+      expect(backlinks).toHaveLength(1);
+      expect(backlinks?.[0].noteTitle).toBe("Linker");
+    });
+
+    it("should handle alias collision with warning", async () => {
+      // Two notes with the same alias - last one registered wins
+      await fs.writeFile(
+        path.join(testDir, "note_a.md"),
+        `---
+title: Note A
+aliases:
+  - CommonAlias
+---
+Content A`
+      );
+      await fs.writeFile(
+        path.join(testDir, "note_b.md"),
+        `---
+title: Note B
+aliases:
+  - CommonAlias
+---
+Content B`
+      );
+      await fs.writeFile(
+        path.join(testDir, "linker.md"),
+        "---\ntitle: Linker\n---\n[[CommonAlias]]"
+      );
+
+      invalidateGraphCache(testDir);
+      // Should not throw - the collision is handled gracefully (last wins)
+      const stats = await analyzeNoteGraph(testDir, { useCache: false });
+
+      // Should resolve to one of the notes (not be dangling)
+      expect(stats.danglingLinks).toHaveLength(0);
+      expect(stats.uniqueConnections).toBe(1);
+    });
+
+    it("should prefer title over alias when both match", async () => {
+      // Note A has alias "Note B"
+      await fs.writeFile(
+        path.join(testDir, "note_a.md"),
+        `---
+title: Note A
+aliases:
+  - Note B
+---
+Content A`
+      );
+      // Note B exists with title "Note B"
+      await fs.writeFile(
+        path.join(testDir, "note_b.md"),
+        `---
+title: Note B
+---
+Content B`
+      );
+      // Link to "Note B" - should resolve to Note B (title), not Note A (alias)
+      await fs.writeFile(
+        path.join(testDir, "linker.md"),
+        "---\ntitle: Linker\n---\n[[Note B]]"
+      );
+
+      invalidateGraphCache(testDir);
+      const stats = await analyzeNoteGraph(testDir, { useCache: false });
+
+      expect(stats.danglingLinks).toHaveLength(0);
+      expect(stats.uniqueConnections).toBe(1);
+
+      // Backlinks should be on "Note B" (the actual title), not "Note A"
+      const backlinksB = stats.backlinks.get("Note B");
+      expect(backlinksB).toBeDefined();
+      expect(backlinksB).toHaveLength(1);
+      expect(backlinksB?.[0].noteTitle).toBe("Linker");
+
+      // Note A should not have backlinks from the linker
+      const backlinksA = stats.backlinks.get("Note A");
+      expect(backlinksA).toBeUndefined();
+    });
+
+    it("should not count alias-linked note as orphan", async () => {
+      // Note that only receives links via its alias
+      await fs.writeFile(
+        path.join(testDir, "target.md"),
+        `---
+title: Hidden Target
+aliases:
+  - Public Name
+---
+No outgoing links here`
+      );
+      // Note linking via alias
+      await fs.writeFile(
+        path.join(testDir, "linker.md"),
+        "---\ntitle: Linker\n---\n[[Public Name]]"
+      );
+
+      invalidateGraphCache(testDir);
+      const stats = await analyzeNoteGraph(testDir, { useCache: false });
+
+      // The target note should NOT be an orphan because it has incoming links via alias
+      expect(stats.orphanNotes).toHaveLength(0);
+      expect(stats.danglingLinks).toHaveLength(0);
+
+      // Verify backlink was registered
+      const backlinks = stats.backlinks.get("Hidden Target");
+      expect(backlinks).toBeDefined();
+      expect(backlinks).toHaveLength(1);
+    });
+  });
+
   describe("caching", () => {
     it("should use cache on second call", async () => {
       await fs.writeFile(

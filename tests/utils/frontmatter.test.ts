@@ -574,6 +574,118 @@ Content.`;
   });
 });
 
+describe("parseNote with aliases", () => {
+  it("should extract aliases array", () => {
+    const content = `---
+title: Test
+aliases:
+  - Alias1
+  - Alias2
+---
+Content`;
+    const result = parseNote(content);
+    expect(result.aliases).toEqual(["Alias1", "Alias2"]);
+  });
+
+  it("should handle single alias string", () => {
+    const content = `---
+title: Test
+alias: SingleAlias
+---
+Content`;
+    const result = parseNote(content);
+    expect(result.aliases).toEqual(["SingleAlias"]);
+  });
+
+  it("should handle missing aliases", () => {
+    const content = `---
+title: Test
+---
+Content`;
+    const result = parseNote(content);
+    expect(result.aliases).toBeUndefined();
+  });
+
+  it("should handle empty aliases array", () => {
+    const content = `---
+title: Test
+aliases: []
+---
+Content`;
+    const result = parseNote(content);
+    expect(result.aliases).toBeUndefined();
+  });
+
+  it("should filter out empty strings from aliases", () => {
+    const content = `---
+title: Test
+aliases:
+  - Valid Alias
+  - ""
+  - Another Alias
+---
+Content`;
+    const result = parseNote(content);
+    expect(result.aliases).toEqual(["Valid Alias", "Another Alias"]);
+  });
+
+  it("should handle Korean aliases", () => {
+    const content = `---
+title: Claude Code Best Practices
+aliases:
+  - 클로드 코드 팁
+  - CC 팁
+---
+Content`;
+    const result = parseNote(content);
+    expect(result.aliases).toEqual(["클로드 코드 팁", "CC 팁"]);
+  });
+
+  it("should prefer aliases over alias when both present", () => {
+    const content = `---
+title: Test
+aliases:
+  - FromAliases
+alias: FromAlias
+---
+Content`;
+    const result = parseNote(content);
+    // "aliases" takes precedence
+    expect(result.aliases).toEqual(["FromAliases"]);
+  });
+
+  it("should filter out non-string values from aliases array", () => {
+    const content = `---
+title: Test
+aliases:
+  - Valid Alias
+  - 123
+  - true
+  - null
+  - Another Valid
+---
+Content`;
+    const result = parseNote(content);
+    // Numbers, booleans, and null should be filtered out
+    expect(result.aliases).toEqual(["Valid Alias", "Another Valid"]);
+  });
+
+  it("should handle whitespace-only strings in aliases", () => {
+    const content = `---
+title: Test
+aliases:
+  - "   "
+  - Valid Alias
+  - "  \t  "
+---
+Content`;
+    const result = parseNote(content);
+    // Current implementation keeps whitespace-only strings (they pass typeof === 'string' && length > 0)
+    // This documents the current behavior
+    expect(result.aliases).toEqual(["   ", "Valid Alias", "  \t  "]);
+  });
+});
+
 describe("hasFrontmatter", () => {
   it("should return true for content with frontmatter", () => {
     const content = `---

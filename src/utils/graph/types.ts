@@ -107,6 +107,8 @@ export const NoteMetadataSchema = z.object({
   path: z.string(),
   /** 파일명 (확장자 제외) */
   basename: z.string(),
+  /** 노트의 별칭들 (대체 제목) */
+  aliases: z.array(z.string()).optional(),
 });
 
 /**
@@ -459,6 +461,8 @@ export interface NoteMetadata {
   path: string;
   /** 파일명 (확장자 제외) */
   basename: string;
+  /** 노트의 별칭들 (대체 제목) */
+  aliases?: string[];
 }
 
 /**

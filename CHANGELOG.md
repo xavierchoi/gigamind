@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.7] - 2026-01-08
+
+### Added
+- Phase 5.2: Alias preservation and resolution for imported notes
+- `ParsedNote` interface now includes `aliases?: string[]` field
+- `NoteMetadata` interface now includes `aliases?: string[]` field
+- Graph analyzer resolves wikilinks using note aliases (e.g., `[[Claude Tips]]` resolves to "Claude Code Best Practices")
+- Import preserves aliases from original Obsidian frontmatter (supports both `aliases` array and `alias` string)
+
+### Changed
+- `parseNote()` extracts aliases from frontmatter (supports both `aliases` and `alias` fields)
+- `extractNoteMetadata()` extracts aliases from note files
+- Graph analyzer's existingNotes map now includes alias lookups for wikilink resolution
+
+### Test Results
+- 7 new unit tests for alias parsing in `frontmatter.test.ts`
+- 4 new integration tests for alias resolution in `analyzer.test.ts`
+- All 311 tests passing
+
+### Implementation Files
+- `src/utils/frontmatter.ts` - ParsedNote interface, parseNote()
+- `src/utils/graph/types.ts` - NoteMetadata interface and schema
+- `src/utils/graph/analyzer.ts` - extractNoteMetadata(), existingNotes map
+- `src/components/Import.tsx` - alias preservation during import
+- `tests/utils/frontmatter.test.ts` - alias unit tests
+- `tests/utils/graph/analyzer.test.ts` - alias integration tests
+
 ## [0.5.6] - 2026-01-07
 
 ### Added

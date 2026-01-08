@@ -12,7 +12,7 @@ import {
   openFolderDialog,
   isFolderDialogSupported,
 } from "../utils/folderDialog/index.js";
-import { generateNoteId } from "../utils/frontmatter.js";
+import { generateNoteId, extractAliases } from "../utils/frontmatter.js";
 import { t } from "../i18n/index.js";
 import { SmartLinker, type LinkCandidate } from "../utils/import/index.js";
 
@@ -778,7 +778,10 @@ export function Import({ notesDir, onComplete, onCancel }: ImportProps) {
             ? existingFrontmatter.tags.filter((t: unknown) => typeof t === "string")
             : [];
 
-          const newFrontmatter = {
+          // Preserve aliases from original frontmatter (Phase 5.2)
+          const aliases = extractAliases(existingFrontmatter);
+
+          const newFrontmatter: Record<string, unknown> = {
             id,
             title: originalTitle,
             type: "note" as const,
@@ -792,6 +795,11 @@ export function Import({ notesDir, onComplete, onCancel }: ImportProps) {
               imported: now.toISOString(),
             },
           };
+
+          // Only add aliases if they exist
+          if (aliases && aliases.length > 0) {
+            newFrontmatter.aliases = aliases;
+          }
 
           // Update wikilinks with aliases
           let updatedBodyContent = updateWikilinksWithAliases(bodyContent, wikilinkMapping);

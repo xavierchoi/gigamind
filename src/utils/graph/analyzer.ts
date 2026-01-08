@@ -7,6 +7,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import matter from "gray-matter";
 import { expandPath } from "../config.js";
+import { extractAliases } from "../frontmatter.js";
 import {
   extractWikilinks,
   parseWikilinks,
@@ -114,11 +115,15 @@ async function extractNoteMetadata(filePath: string): Promise<NoteMetadata> {
     const id = (data.id as string) || basename;
     const title = (data.title as string) || basename;
 
+    // Extract aliases using shared helper
+    const aliases = extractAliases(data);
+
     return {
       id,
       title,
       path: filePath,
       basename,
+      aliases,
     };
   } catch (err) {
     // 파일을 읽을 수 없으면 파일명으로 대체
@@ -179,6 +184,20 @@ export async function analyzeNoteGraph(
     existingNotes.set(normalizeNoteTitle(metadata.basename), metadata);
     if (metadata.id !== metadata.basename) {
       existingNotes.set(normalizeNoteTitle(metadata.id), metadata);
+    }
+
+    // Register aliases for wikilink resolution (Phase 5.2)
+    if (metadata.aliases) {
+      for (const alias of metadata.aliases) {
+        const normalizedAlias = normalizeNoteTitle(alias);
+        const existing = existingNotes.get(normalizedAlias);
+        if (existing && existing.path !== metadata.path) {
+          console.debug(
+            `[analyzer] Alias collision: "${alias}" from "${metadata.title}" overwrites "${existing.title}"`
+          );
+        }
+        existingNotes.set(normalizedAlias, metadata);
+      }
     }
   }
 

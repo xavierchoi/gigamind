@@ -59,6 +59,30 @@ export function generateFrontmatter(options: FrontmatterOptions): string {
 }
 
 /**
+ * Extract aliases from frontmatter data
+ * Supports both "aliases" (array) and "alias" (string) formats
+ * @param data - Raw frontmatter data object
+ * @returns Array of valid alias strings or undefined
+ */
+export function extractAliases(data: Record<string, unknown>): string[] | undefined {
+  const rawAliases = data.aliases || data.alias;
+  if (!rawAliases) {
+    return undefined;
+  }
+
+  let aliases: string[] | undefined;
+  if (Array.isArray(rawAliases)) {
+    aliases = rawAliases.filter(
+      (a): a is string => typeof a === "string" && a.length > 0
+    );
+  } else if (typeof rawAliases === "string" && rawAliases.length > 0) {
+    aliases = [rawAliases];
+  }
+
+  return aliases && aliases.length > 0 ? aliases : undefined;
+}
+
+/**
  * Parsed note structure
  */
 export interface ParsedNote {
@@ -68,6 +92,8 @@ export interface ParsedNote {
   created?: string;
   modified?: string;
   tags?: string[];
+  /** Aliases for the note (alternative titles) */
+  aliases?: string[];
   source?: {
     type?: string;
     title?: string;
@@ -86,6 +112,9 @@ export interface ParsedNote {
 export function parseNote(content: string): ParsedNote {
   const { data, content: bodyContent } = matter(content);
 
+  // Extract aliases using shared helper
+  const aliases = extractAliases(data);
+
   return {
     id: data.id as string | undefined,
     title: data.title as string | undefined,
@@ -93,6 +122,7 @@ export function parseNote(content: string): ParsedNote {
     created: data.created as string | undefined,
     modified: data.modified as string | undefined,
     tags: Array.isArray(data.tags) ? data.tags : undefined,
+    aliases,
     source: data.source as ParsedNote["source"] | undefined,
     content: bodyContent.trim(),
     rawFrontmatter: data,
