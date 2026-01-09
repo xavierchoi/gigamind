@@ -138,6 +138,26 @@
       "related": "Related to \"{{noteTitle}}\""
     }
   },
+  "repair_links": {
+    "description": "Detect and repair broken links in vault",
+    "title": "Link Repair Report",
+    "analyzing": "Analyzing links...",
+    "applying_fixes": "Applying fixes...",
+    "no_notes_dir": "Notes directory not configured.",
+    "scanned_notes": "Scanned {{count}} notes",
+    "no_issues": "No link issues found. Your vault is healthy!",
+    "issues_found": "Issues found",
+    "dangling_links": "{{count}} dangling link(s)",
+    "hub_concentration": "{{count}} hub concentration warning(s)",
+    "duplicate_links": "{{count}} duplicate link(s)",
+    "safe_fixes_available": "{{count}} safe auto-fix(es) available.",
+    "auto_fix_hint": "Run with `--auto-fix` to apply them.",
+    "fixes_applied": "Applied {{count}} fix(es).",
+    "files_modified": "Modified {{count}} file(s).",
+    "no_safe_fixes": "No safe fixes were available to apply.",
+    "errors_occurred": "{{count}} error(s) occurred during repair.",
+    "error": "Error during link repair: {{error}}"
+  },
   "welcome_message": {
     "setup_complete": "Setup complete!",
     "setup_complete_with_name": "Setup complete, {{name}}!",

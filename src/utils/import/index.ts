@@ -26,3 +26,27 @@ export type {
   GraphAnomalies,
   HubNode,
 } from "./healthCheck.js";
+
+// Phase 5.4: Link Repair Tool
+export {
+  analyzeLinkIssues,
+  applyRepairs,
+  printLinkRepairReport,
+  findSimilarNotes,
+  levenshteinDistance,
+  calculateSimilarity,
+  isSafeToAutoFix,
+  DEFAULT_SIMILARITY_THRESHOLD,
+  AUTO_FIX_CONFIDENCE_THRESHOLD,
+} from "./linkRepair.js";
+export type {
+  LinkRepairReport,
+  LinkIssue,
+  RepairSuggestion,
+  ApplyResult,
+  SimilarNote,
+  DanglingLinkDetails,
+  HubConcentrationDetails,
+  DuplicateLinkDetails,
+  SourceNote,
+} from "./linkRepair.js";

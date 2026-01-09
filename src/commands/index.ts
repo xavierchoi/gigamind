@@ -23,6 +23,7 @@ export { SearchCommand, searchCommand } from "./SearchCommand.js";
 export { ClearCommand, clearCommand } from "./ClearCommand.js";
 export { SimilarLinksCommand, similarLinksCommand } from "./SimilarLinksCommand.js";
 export { SuggestLinksCommand, suggestLinksCommand } from "./SuggestLinksCommand.js";
+export { RepairLinksCommand, repairLinksCommand } from "./RepairLinksCommand.js";
 
 /**
  * CommandRegistry manages all registered commands and routes execution.

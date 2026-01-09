@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.9] - 2026-01-09
+
+### Added
+- Phase 5.4: Link Repair Tool for detecting and fixing broken links
+- `/repair-links` command with `--auto-fix`, `--dry-run`, and `--target` options
+- Levenshtein distance-based similar note finding for dangling link suggestions
+- Dangling link detection with similar note suggestions
+- Hub concentration issue detection with split recommendations
+- Duplicate link detection within individual notes
+- Auto-fix for high-confidence repairs (>80% confidence threshold)
+- Console report with colored output showing issues and suggestions
+- i18n support for repair-links command (en/ko)
+
+### Implementation Details
+- `levenshteinDistance()`: Wagner-Fischer algorithm for string distance
+- `calculateSimilarity()`: Normalized Levenshtein-based similarity (0-1)
+- `findSimilarNotes()`: Find existing notes similar to dangling link targets
+- `analyzeLinkIssues()`: Comprehensive link issue detection
+- `applyRepairs()`: Apply repair suggestions with dry-run support
+- `isSafeToAutoFix()`: Safety check for auto-fix eligibility
+
+### Test Results
+- 59 new tests in `linkRepair.test.ts`
+- 17 new tests in `RepairLinksCommand.test.ts`
+- All 445 tests passing (was 369)
+
+### Implementation Files
+- `src/utils/import/linkRepair.ts` - Main link repair module (~600 lines)
+- `src/commands/RepairLinksCommand.ts` - /repair-links command
+- `src/commands/index.ts` - Command registration
+- `src/utils/import/index.ts` - Exports
+- `src/i18n/locales/en/commands.json` - English strings
+- `src/i18n/locales/ko/commands.json` - Korean strings
+- `tests/utils/import/linkRepair.test.ts` - Utility tests
+- `tests/commands/RepairLinksCommand.test.ts` - Command tests
+
 ## [0.5.8] - 2026-01-08
 
 ### Added

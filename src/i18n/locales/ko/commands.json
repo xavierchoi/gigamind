@@ -138,6 +138,26 @@
       "related": "\"{{noteTitle}}\"와 관련"
     }
   },
+  "repair_links": {
+    "description": "끊어진 링크 탐지 및 수정",
+    "title": "링크 수정 보고서",
+    "analyzing": "링크를 분석하고 있습니다...",
+    "applying_fixes": "수정 사항을 적용하고 있습니다...",
+    "no_notes_dir": "노트 디렉토리가 설정되지 않았습니다.",
+    "scanned_notes": "{{count}}개 노트 스캔 완료",
+    "no_issues": "링크 문제가 발견되지 않았습니다. 모든 것이 정상입니다!",
+    "issues_found": "발견된 문제",
+    "dangling_links": "{{count}}개의 끊어진 링크",
+    "hub_concentration": "{{count}}개의 허브 집중 경고",
+    "duplicate_links": "{{count}}개의 중복 링크",
+    "safe_fixes_available": "{{count}}개의 안전한 자동 수정이 가능합니다.",
+    "auto_fix_hint": "`--auto-fix` 옵션으로 실행하여 적용하세요.",
+    "fixes_applied": "{{count}}개의 수정을 적용했습니다.",
+    "files_modified": "{{count}}개의 파일을 수정했습니다.",
+    "no_safe_fixes": "적용할 수 있는 안전한 수정이 없습니다.",
+    "errors_occurred": "수정 중 {{count}}개의 오류가 발생했습니다.",
+    "error": "링크 수정 중 오류 발생: {{error}}"
+  },
   "welcome_message": {
     "setup_complete": "설정이 완료되었습니다!",
     "setup_complete_with_name": "설정이 완료되었습니다, {{name}}님!",
