@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-01-09
+
+### Added
+- Phase 6: LLM-based Search Reranking for improved Hit@1 accuracy
+- `LLMReranker` class using Claude Haiku 4.5 for semantic relevance scoring
+- `--llm-rerank` option in eval CLI for comparison testing
+- `useLLMReranking` option in RAGSearchOptions and RetrievalConfig
+- Dependency injection pattern for testable LLM client
+
+### Implementation Details
+- `LLMReranker`: Evaluates top-K candidates with 0-10 relevance scoring
+- Score combination: 70% LLM score + 30% original vector score
+- Lazy initialization of LLM reranker in RAGRetriever
+- Integration with eval CLI for A/B testing (`--llm-rerank` flag)
+
+### Test Results
+- 13 new tests in `llmReranker.test.ts`
+- All 456 tests passing (was 445)
+
+### Implementation Files
+- `src/rag/llmReranker.ts` - LLM reranking module (~360 lines)
+- `src/rag/retriever.ts` - LLM reranking integration
+- `src/rag/service.ts` - useLLMReranking option
+- `src/eval/cli.ts` - --llm-rerank CLI option
+- `src/eval/runners/searchRunner.ts` - Runner config update
+- `tests/rag/llmReranker.test.ts` - Test suite
+
 ## [0.5.9] - 2026-01-09
 
 ### Added

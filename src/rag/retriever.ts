@@ -14,6 +14,7 @@ import type {
   SearchResult,
   RetrievalResult,
 } from "./types.js";
+import { LLMReranker, type LLMRerankerOptions } from "./llmReranker.js";
 import {
   QueryExpander,
   type QueryExpansionConfig,
@@ -63,6 +64,10 @@ export interface RetrievalConfig {
     /** Weight for query-context link boost. Default: 0.2 */
     contextLink?: number;
   };
+  /** Whether to use LLM-based reranking. Default: false */
+  useLLMReranking?: boolean;
+  /** LLM reranker options */
+  llmRerankerOptions?: LLMRerankerOptions;
 }
 
 /**
@@ -110,10 +115,27 @@ export class RAGRetriever {
   private pageRankCacheTime: number = 0;
   private readonly PAGERANK_CACHE_TTL = 5 * 60 * 1000; // 5분
 
+  // LLM Reranker (lazy initialization)
+  private llmReranker: LLMReranker | null = null;
+  private llmRerankerOptionsKey: string = '';
+
   constructor(config: { embeddingService: IEmbeddingService; notesDir: string }) {
     this.embeddingService = config.embeddingService;
     this.notesDir = expandPath(config.notesDir);
     this.queryExpander = new QueryExpander();
+  }
+
+  /**
+   * Get or create LLM reranker instance (lazy initialization)
+   * Recreates instance if options change
+   */
+  private getLLMReranker(options?: LLMRerankerOptions): LLMReranker {
+    const optionsKey = JSON.stringify(options || {});
+    if (!this.llmReranker || this.llmRerankerOptionsKey !== optionsKey) {
+      this.llmReranker = new LLMReranker(options);
+      this.llmRerankerOptionsKey = optionsKey;
+    }
+    return this.llmReranker;
   }
 
   /**
@@ -264,6 +286,13 @@ export class RAGRetriever {
         config.graphBoostFactor,
         config.graphBoostWeights
       );
+    }
+
+    // Apply LLM-based re-ranking (Phase 6)
+    if (config.useLLMReranking) {
+      const reranker = this.getLLMReranker(config.llmRerankerOptions);
+      const reranked = await reranker.rerank(query, results);
+      results = reranker.toRetrievalResults(reranked);
     }
 
     // Expand context if requested

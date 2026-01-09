@@ -26,6 +26,8 @@ export interface RAGSearchOptions {
   useGraphReranking?: boolean;
   /** 쿼리 확장 설정 (기본: enabled) */
   queryExpansion?: Partial<QueryExpansionConfig>;
+  /** LLM 기반 리랭킹 사용 (Phase 6) */
+  useLLMReranking?: boolean;
 }
 
 /**
@@ -231,6 +233,8 @@ export class RAGService {
       useGraphReranking: options?.useGraphReranking !== false,
       // Query expansion is enabled by default (optimized in v0.5.2)
       queryExpansion: options?.queryExpansion ?? { enabled: true },
+      // LLM reranking is disabled by default (Phase 6)
+      useLLMReranking: options?.useLLMReranking ?? false,
     };
 
     const keywordWeight =
@@ -244,6 +248,7 @@ export class RAGService {
       hybridSearch: opts.mode === "hybrid",
       keywordWeight,
       queryExpansion: opts.queryExpansion,
+      useLLMReranking: opts.useLLMReranking,
     };
 
     const results = await this.retriever!.retrieve(query, retrievalConfig);

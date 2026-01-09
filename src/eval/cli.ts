@@ -75,6 +75,7 @@ export interface SearchOptions extends CommonOptions {
   minScore: number;
   graphRerank: boolean;
   queryExpansion: boolean;
+  llmRerank: boolean;
   coldStart: boolean;
   warmup: number;
   // Snapshot options
@@ -141,6 +142,7 @@ function parseArgs(
     minScore: 0.3,     // Spec default: 0.3
     graphRerank: false, // Default false for accurate unanswerable detection
     queryExpansion: false, // Default false for performance
+    llmRerank: false, // Default false (Phase 6: LLM-based reranking)
     coldStart: false,  // Spec: reset RAG cache before evaluation
     warmup: 10,        // Spec default: 10 warmup queries
     // Snapshot options (aligned with eval-spec.md)
@@ -181,6 +183,8 @@ function parseArgs(
       options.graphRerank = true;
     } else if (arg === "--query-expansion") {
       options.queryExpansion = true;
+    } else if (arg === "--llm-rerank") {
+      options.llmRerank = true;
     } else if (arg === "--seed" && args[i + 1]) {
       options.seed = parseInt(args[++i], 10);
     } else if (arg === "--mode" && args[i + 1]) {
@@ -270,6 +274,7 @@ Search Options:
   --min-score <num>  Minimum score threshold (default: 0.3)
   --graph-rerank     Enable graph-based reranking (default: off)
   --query-expansion  Enable query expansion for keyword search (default: off)
+  --llm-rerank       Enable LLM-based reranking (Phase 6, default: off)
   --cold-start       Reset RAG cache before evaluation (default: off)
   --warmup <number>  Number of warmup queries before evaluation (default: 10)
 
@@ -416,6 +421,7 @@ async function runSearch(options: SearchOptions): Promise<number> {
       minScore: options.minScore,
       useGraphReranking: options.graphRerank, // Default false for accurate unanswerable detection
       queryExpansion: options.queryExpansion ? { enabled: true } : { enabled: false },
+      useLLMReranking: options.llmRerank, // Phase 6: LLM-based reranking
       coldStart: options.coldStart, // Reset RAG cache before evaluation
       warmup: options.warmup, // Warmup queries from CLI (default: 10)
       timeoutMs: 30000,

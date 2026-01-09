@@ -38,6 +38,8 @@ export interface SearchRunnerConfig {
   useGraphReranking: boolean;
   /** Query expansion configuration */
   queryExpansion?: Partial<QueryExpansionConfig>;
+  /** Enable LLM-based reranking (Phase 6) */
+  useLLMReranking?: boolean;
   /** Reset RAG cache before evaluation (cold start) */
   coldStart: boolean;
   /** Number of warmup queries to run before evaluation */
@@ -372,6 +374,7 @@ export async function runSearchEval(
     minScore: mergedConfig.minScore,
     useGraphReranking: mergedConfig.useGraphReranking,
     queryExpansion: mergedConfig.queryExpansion,
+    useLLMReranking: mergedConfig.useLLMReranking,
   };
 
   // Run warmup
