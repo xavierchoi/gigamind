@@ -513,7 +513,7 @@ async function runSearch(options: SearchOptions): Promise<number> {
         query: r.query,
         expected_notes: r.expectedNotes,
         retrieved_notes: r.retrievedNotes,
-        hit_at_1: r.hit,
+        hit_at_1: r.rank === 1,
         reciprocal_rank: individual.find((i) => i.queryId === r.queryId)?.mrr ?? 0,
         latency_ms: r.latencyMs,
         base_score: r.baseScores[0] ?? null,
